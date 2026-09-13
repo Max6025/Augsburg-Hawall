@@ -1,7 +1,7 @@
 {
   "name": "italien-wall-display",
   "productName": "Italien Wall Display",
-  "version": "1.37.0",
+  "version": "1.38.0",
   "description": "Wall Display fuer Home Assistant, dessen Anzeige ueber Kalendereintraege gesteuert wird: laeuft ein passender Termin, zeigt das Geraet das Dashboard, sonst ist das Panel wirklich aus",
   "main": "main.js",
   "author": "Max",
