@@ -64,6 +64,11 @@ const KARTEN = [
   ['sensor.t2',    'sensor',   Z('vor 3 min', { friendly_name: 'Letzter Abruf', icon: 'mdi:cloud-download' }), 1, 1],
   ['sensor.t3',    'sensor',   Z('bereit', { friendly_name: 'Zustand' }), 1, 1],
   ['sensor.t4',    'sensor',   Z('offen',  { friendly_name: 'Fenster Bad', icon: 'mdi:window-open' }), 1, 1],
+  ['cover.tor_zu',   'fluegeltor', Z('closed',  { friendly_name: 'Einfahrt', device_class: 'gate' }), 1, 1],
+  ['cover.tor_auf',  'fluegeltor', Z('open',    { friendly_name: 'Einfahrt offen', device_class: 'gate' }), 1, 1],
+  ['cover.tor_oef',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt faehrt auf', device_class: 'gate' }), 1, 1],
+  ['cover.tor_schl', 'fluegeltor', Z('closing', { friendly_name: 'Einfahrt faehrt zu', device_class: 'gate' }), 1, 1],
+  ['cover.tor_unb',  'fluegeltor', Z('unavailable', { friendly_name: 'Einfahrt unbekannt', device_class: 'gate' }), 1, 1],
   ['nav.kueche',   'navigate', null, 1, 1],
   ['nav.bad',      'navigate', null, 2, 1]
 ];

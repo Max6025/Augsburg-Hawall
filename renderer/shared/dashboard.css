@@ -213,6 +213,62 @@ body { background: var(--page-bg-image, none) center/cover fixed, var(--bg); }
 .card.type-pressure    { --kachel-akzent: #bd9cf5; }
 .card.type-temperature { --kachel-akzent: #ff9d7a; }
 .card.type-humidity    { --kachel-akzent: #7fc7e6; }
+/* --- Fluegeltor --------------------------------------------------------------------------
+   Zwei Fluegel in der Draufsicht, angeschlagen an den Pfosten. Der Zustand steht als Wort
+   daneben; die Stellung der Fluegel sagt dasselbe noch einmal, nur aus fuenf Metern lesbar.
+
+   Gedreht wird ueber transform mit transform-box: view-box -- damit rechnet der Browser die
+   Drehpunkte in den Koordinaten des viewBox (0..24) statt in Pixeln des Elements. Ohne diese
+   Zeile schwenken die Fluegel um irgendeinen Punkt ausserhalb des Bildes.
+
+   Die Dauer (3.2s) steht auch in TOR_TAKT in dashboard-render.js: Der negative Startversatz
+   wird dort gerechnet, damit die Bewegung einen Neuaufbau der Karte ueberlebt. Wer eine der
+   beiden Zahlen aendert, bekommt keinen Fehler, sondern einen Sprung. */
+.card.type-fluegeltor { justify-content: space-between; }
+.card.type-fluegeltor .tor-bild { display: flex; align-items: center; justify-content: center;
+  flex: 1; min-height: 0; }
+.card.type-fluegeltor .tor-bild svg { width: 100%; height: 100%; max-height: 46cqmin;
+  min-height: 5vh; color: var(--kachel-akzent); }
+.card.type-fluegeltor .row .icon { display: none; }   /* das Bild darunter ist das Symbol */
+
+.tor-fluegel { transform-box: view-box; transition: transform 0.6s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.tor-links  { transform-origin: 2.6px 12px; }
+.tor-rechts { transform-origin: 21.4px 12px; }
+
+/* Zu: beide Fluegel liegen in der Flucht und stossen in der Mitte zusammen. */
+.card.tor-zu .tor-links, .card.tor-zu .tor-rechts { transform: rotate(0deg); }
+
+/* Offen: nach aussen aufgeschwenkt. Nicht ganz 90 Grad -- ein Tor, das exakt anliegt, sieht
+   aus wie ein Zeichenfehler. */
+.card.tor-auf .tor-links  { transform: rotate(-72deg); }
+.card.tor-auf .tor-rechts { transform: rotate(72deg); }
+
+/* Faehrt gerade: Die Bewegung laeuft in eine Richtung und faengt von vorne an -- wie ein
+   Fortschrittsbalken. Hin und her zu schwenken saehe aus wie ein klemmendes Tor. */
+.card.tor-oeffnet .tor-links,
+.card.tor-schliesst .tor-links {
+  animation: tor-links 3.2s ease-in-out infinite;
+  animation-delay: var(--ph-tor, 0s);
+}
+.card.tor-oeffnet .tor-rechts,
+.card.tor-schliesst .tor-rechts {
+  animation: tor-rechts 3.2s ease-in-out infinite;
+  animation-delay: var(--ph-tor, 0s);
+}
+.card.tor-schliesst .tor-links, .card.tor-schliesst .tor-rechts { animation-direction: reverse; }
+
+@keyframes tor-links  { 0% { transform: rotate(0deg); }   72% { transform: rotate(-72deg); } 100% { transform: rotate(-72deg); } }
+@keyframes tor-rechts { 0% { transform: rotate(0deg); }   72% { transform: rotate(72deg); }  100% { transform: rotate(72deg); } }
+
+/* Unbekannt: die Fluegel stehen halb -- sichtbar anders als "zu" und als "auf", damit niemand
+   einen unbekannten Zustand fuer eine Aussage haelt. */
+.card.tor-unbekannt .tor-links  { transform: rotate(-34deg); opacity: 0.5; }
+.card.tor-unbekannt .tor-rechts { transform: rotate(34deg); opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card.type-fluegeltor .tor-fluegel { animation: none; transition: none; }
+}
+
 /* Sonneneinstrahlung: ein warmes Gelb, das sonst nirgends vorkommt -- Lampe (#ffc061) liegt
    deutlich weiter im Orange, und die Sonne soll nicht wie ein eingeschaltetes Licht aussehen. */
 .card.type-solar       { --kachel-akzent: #f2d867; }

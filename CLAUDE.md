@@ -370,6 +370,14 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Deckkraft. Auf einer Karte ist das genau richtig; in einem Dialog stand das Dashboard durch
   den Text hindurch, und man las zwei Oberflächen übereinander. `.modal` und `.picker` legen
   deshalb `--bg` darunter.
+- **Die Flügeltor-Karte schaltet NICHT.** Ein Tor, das aufgeht, weil jemand im Vorbeigehen die
+  Wand berührt hat, ist genau das, was auf einem Wandpanel nicht passieren darf. Sie zeigt nur,
+  was das Tor gerade tut; zum Öffnen gibt es die Tor-Karte mit ihren Knöpfen. Und
+  **„unbekannt" ist nicht „geschlossen"**: Eine Karte, die „Geschlossen" behauptet, während das
+  Tor offen steht, ist schlimmer als eine, die zugibt, dass sie es nicht weiß — deshalb stehen
+  die Flügel dort halb offen und blass. Die Dauer der Bewegung steht in `TOR_TAKT` **und** in
+  `dashboard.css`; ein Test vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt,
+  sondern einen Sprung beim Neuaufbau.
 - **Ein Knopf muss erkennbar sein, nicht lesbar.** Aus fünf Metern liest niemand „Tor" und
   „Garage" auseinander — ein Tor und eine Garage schon. Deshalb trägt jeder Tor-Knopf ein
   wählbares Symbol, groß, mit dem Text als Bestätigung darunter. Ein Symbol, das man suchen
@@ -507,7 +515,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-351 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+361 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 

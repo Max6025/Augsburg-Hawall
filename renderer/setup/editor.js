@@ -594,7 +594,7 @@ function settingsFieldsForType(type) {
   const mitZahl = ['gauge', 'graph', 'wind', 'rain', 'temperature', 'sensor', 'pressure', 'humidity', 'solar'];
   // Karten ohne eigenes Symbol (Uhr, Foto, Kacheln, Energiefluss, Media Player) haben nichts
   // zu tauschen -- ein Auswahlfeld dort waere eine Einstellung ohne Wirkung.
-  const ohneSymbol = ['clock', 'photo', 'quicktiles', 'energy', 'media_player', 'navigate', 'gate', 'light', 'switch', 'climate', 'cover', 'lock', 'alarm'];
+  const ohneSymbol = ['clock', 'photo', 'quicktiles', 'energy', 'media_player', 'navigate', 'gate', 'light', 'switch', 'climate', 'cover', 'lock', 'alarm', 'fluegeltor'];
   // Karten ohne Home-Assistant-Entitaet (Uhr, Energiefluss, Foto, Kacheln, Wechsel-Karte)
   // haben nichts zu tauschen -- sie tragen eine selbst vergebene Kennung.
   const ohneEntitaet = ['clock', 'energy', 'photo', 'quicktiles', 'navigate'];

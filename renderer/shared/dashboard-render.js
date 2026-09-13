@@ -25,6 +25,13 @@
     navigate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5h4.5A2 2 0 0 1 20.5 5.5v13a2 2 0 0 1-2 2H14"/><path d="M3.5 12h10"/><path d="m9.5 8 4 4-4 4"/></svg>',
     // Sonne mit Strahlen -- und zwar geschlossen gezeichnet, damit sie auch auf 1x1 noch als
     // Sonne lesbar ist und nicht als Zahnrad.
+    // Zwei Flügel in der Draufsicht, angeschlagen an den Pfosten links und rechts. Nur die
+    // beiden Flügel tragen eine eigene Klasse -- sie sind das, was sich bewegt.
+    fluegeltor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+      + '<path d="M2.6 5.5v13M21.4 5.5v13" opacity="0.55"/>'
+      + '<path class="tor-fluegel tor-links" d="M2.6 12h9"/>'
+      + '<path class="tor-fluegel tor-rechts" d="M21.4 12h-9"/>'
+      + '</svg>',
     solar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7"/></svg>',
     pfeilRechts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
     forecast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a4 4 0 0 1 .5-7.97A5.5 5.5 0 0 1 18 11.5 3.5 3.5 0 0 1 17.5 18H7z"/><path d="M8 21l1-2M12 21l1-2M16 21l1-2"/></svg>',
@@ -99,6 +106,7 @@
     clock:  { label: 'Uhr',            defaultSize: 'md' },
     pressure: { label: 'Luftdruck',    defaultSize: 'lg' },
     solar:  { label: 'Sonneneinstrahlung', defaultSize: 'lg' },
+    fluegeltor: { label: 'Flügeltor', defaultSize: 'md' },
     select: { label: 'Auswahl',        defaultSize: 'md' },
     navigate: { label: 'Dashboard wechseln', defaultSize: 'sm' },
     forecast: { label: 'Wettervorhersage', defaultSize: 'xl' },
@@ -124,7 +132,7 @@
       case 'switch': return ['switch', 'input_boolean', 'fan', 'light', 'binary_sensor'];
       case 'button': return ['button', 'input_button', 'scene', 'script'];
       case 'climate': return ['climate'];
-      case 'cover': return ['cover'];
+      case 'cover': case 'fluegeltor': return ['cover'];
       case 'radar': return ['camera', 'image'];
       case 'gauge': case 'graph': case 'temperature': case 'wind': case 'rain': case 'pressure': case 'humidity':
       case 'solar':
@@ -267,7 +275,10 @@
     const domain = domainOf(entity_id);
     const attrs = (state && state.attributes) || {};
     if (domain === 'climate') return 'climate';
-    if (domain === 'cover') return 'cover';
+    // Ein Tor ist kein Rollladen. Home Assistant sagt das selbst ueber die device_class --
+    // und wer ein Tor auf die Wand legt, will sehen, ob es offen ist, nicht auf wie viel
+    // Prozent es steht.
+    if (domain === 'cover') return attrs.device_class === 'gate' ? 'fluegeltor' : 'cover';
     if (domain === 'camera' || domain === 'image') return 'radar';
     if (domain === 'weather') return 'forecast';
     if (domain === 'media_player') return 'media_player';
@@ -296,7 +307,9 @@
     const domain = domainOf(entity_id);
     const attrs = (state && state.attributes) || {};
     if (domain === 'climate') return ['climate'];
-    if (domain === 'cover') return ['cover'];
+    if (domain === 'cover') {
+      return attrs.device_class === 'gate' ? ['fluegeltor', 'cover'] : ['cover', 'fluegeltor'];
+    }
     if (domain === 'camera' || domain === 'image') return ['radar'];
     if (domain === 'weather') return ['forecast'];
     if (domain === 'media_player') return ['media_player'];
@@ -600,6 +613,39 @@
     return NICHTS_ANZUZEIGEN.includes(text.toLowerCase()) ? '' : text;
   }
 
+  // --- Flügeltor: die Karte zeigt, was das Tor gerade TUT ---------------------------------------
+  //
+  // Ein Rollladen wird in Prozent gemessen, ein Tor nicht: Es ist zu, es geht auf, es ist auf,
+  // es geht zu. Aus fünf Metern liest niemand "73 %" -- aber zwei Flügel, die offen stehen,
+  // erkennt man sofort.
+  //
+  // Die Bewegung ist deshalb auch keine Verzierung. Ob ein Tor OFFEN ist oder gerade AUFGEHT,
+  // ist der Unterschied zwischen "ich kann losfahren" und "ich muss noch warten" -- und dieser
+  // Unterschied steht auf der Karte sonst nirgends.
+  //
+  // Die Karte SCHALTET NICHT. Ein Tor, das aus Versehen aufgeht, weil jemand im Vorbeigehen die
+  // Wand berührt hat, ist genau das, was auf einem Wandpanel nicht passieren darf. Zum Öffnen
+  // gibt es die Tor-Karte mit ihren Knöpfen (Kartentyp "Tor öffnen").
+  const TOR_ZUSTAENDE = {
+    closed:  { text: 'Geschlossen', klasse: 'tor-zu',       akzent: null },
+    open:    { text: 'Offen',       klasse: 'tor-auf',      akzent: '#6fd6a0' },
+    opening: { text: 'Öffnet …',    klasse: 'tor-oeffnet',  akzent: '#ffc061' },
+    closing: { text: 'Schließt …',  klasse: 'tor-schliesst', akzent: '#ffc061' }
+  };
+
+  /**
+   * Wie das Tor gerade dasteht.
+   *
+   * `unavailable` und Unbekanntes werden ausdrücklich NICHT als "geschlossen" gelesen: Ein Tor,
+   * das offen steht, während die Karte "Geschlossen" behauptet, ist schlimmer als eine Karte,
+   * die zugibt, dass sie es nicht weiß.
+   */
+  function torDarstellung(zustand) {
+    const z = String(zustand || '').toLowerCase();
+    if (TOR_ZUSTAENDE[z]) return Object.assign({ zustand: z }, TOR_ZUSTAENDE[z]);
+    return { zustand: z, text: 'Unbekannt', klasse: 'tor-unbekannt', akzent: null };
+  }
+
   // --- Klimaanlage: das Symbol zeigt, WAS die Anlage tut -----------------------------------------
   //
   // Vorher trug die Karte immer dasselbe Symbol -- auch im ausgeschalteten Zustand stand dort
@@ -649,6 +695,10 @@
   // Schwachstelle dieser Loesung: Wer dort eine Dauer aendert und hier nicht, bekommt keinen
   // Fehler, sondern einen Sprung beim Neuaufbau -- also genau das, was das hier verhindern
   // soll. Deshalb tragen beide Seiten denselben Namen.
+  // Wie lange eine Runde "Tor faehrt" dauert. Steht auch in dashboard.css -- wer eine der
+  // beiden Zahlen aendert, bekommt keinen Fehler, sondern einen Sprung beim Neuaufbau.
+  const TOR_TAKT = 3.2;
+
   const HVAC_ANIMATIONEN = [
     ['zucken', 1.1, true],
     ['atmen', 2.3, true],
@@ -1275,6 +1325,17 @@
           });
         }
       }
+    } else if (type === 'fluegeltor') {
+      const tor = torDarstellung(state ? state.state : '');
+      // Die Bewegung haengt an der Uhr, nicht am Alter des Elements -- sonst faengt sie nach
+      // jedem Neuaufbau der Karte von vorne an. Dieselbe Rechnung wie bei der Klimaanlage.
+      const phase = animationsPhase(TOR_TAKT, false);
+      if (tor.akzent) card.style.setProperty('--kachel-akzent', tor.akzent);
+      card.classList.add(tor.klasse);
+      card.innerHTML = `
+        <div class="row"><span class="icon"></span><span class="badge">${esc(tor.text)}</span></div>
+        <div class="tor-bild" style="--ph-tor:${phase}">${ICONS.fluegeltor}</div>
+        <div class="name">${name}</div>`;
     } else if (type === 'cover') {
       const pos = attrs.current_position;
       // Nur anbieten, was das Geraet wirklich kann -- ein Schieber, der ins Leere greift, ist
@@ -2243,7 +2304,8 @@
     defaultCardType, allowedCardTypes, defaultSize, buildCard,
     sizeToSpan, minSpanFor, clampSpan, resolveSpan, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
-    mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen, canOverlayOnPhoto, applyCustomTheme, esc,
+    mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
+    torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, zahlFormatieren, symbolFuer, symbolNamen,
     quickTileAktion, quickTileAktiv, quickTileText,
