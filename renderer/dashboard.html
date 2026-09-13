@@ -174,6 +174,7 @@ async function loadConfig() {
   testmodusTaktAnpassen();
   rueckkehrTaktAnpassen();
   namenLaden();
+  torZeitenLaden();
   abwesenheitAnwenden();
   helligkeitAnpassen();
   await loadDashboardOrder();
@@ -676,6 +677,16 @@ async function render() {
     .map(e => e.entity_id);
   const sensorFarben = DashboardRender.sensorAkzente(sensorIds, document.body.classList.contains('light-theme'));
 
+  // Steht ein Tor auf dem Dashboard, dessen Fahrzeit noch nicht gemessen ist, oefter nachfragen:
+  // Nach dem ersten Durchlauf soll die Animation gleich passen und nicht erst nach einem
+  // Neustart der Anzeige.
+  const tore = layout.filter(e => (e.card_type || defaultCardType(e.entity_id, statesById[e.entity_id])) === 'fluegeltor');
+  if (tore.length) {
+    const fehltMessung = tore.some(e => !torZeiten[e.entity_id]);
+    const abstand = fehltMessung ? 60000 : 10 * 60000;
+    if (Date.now() - torZeitenGeholt > abstand) await torZeitenLaden();
+  }
+
   // Symbole aus Home Assistant erst nachladen, wenn eine Karte wirklich eines braucht.
   if (layout.some(e => DashboardRender.brauchtMdi(
       e.card_type || defaultCardType(e.entity_id, statesById[e.entity_id]),
@@ -713,6 +724,7 @@ async function render() {
       onPhoto: !!findOverlappingPhotoInLayout(entry, layout),
       statesById,
       namen: haNamen,
+      torZeiten: torZeiten[entry.entity_id],
       akzent: sensorFarben[entry.entity_id],
       settings: entry.settings || {},
       callbacks: dashboardRueckrufe()
@@ -1678,6 +1690,19 @@ function mdiPfadeLaden() {
 // Steht sie nicht -- kein Administratorzugang, Home Assistant gerade weg --, bleibt es bei
 // friendly_name, so wie es vorher war. Eine Karte ohne Namen waere der schlechtere Tausch.
 let haNamen = {};
+
+// Die gemessenen Fahrzeiten der Tore. Ohne sie laeuft die Toranimation in einer Schleife --
+// mit ihnen so lange wie das Tor wirklich braucht, und der Fluegel steht dort, wo er steht.
+let torZeiten = {};
+let torZeitenGeholt = 0;
+
+async function torZeitenLaden() {
+  try {
+    const d = await fetch(`${API}/api/tor-zeiten`).then(r => r.json());
+    if (d && d.ok && d.zeiten) torZeiten = d.zeiten;
+    torZeitenGeholt = Date.now();
+  } catch (e) { /* dann eben die Schleife */ }
+}
 
 async function namenLaden() {
   try {

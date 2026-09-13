@@ -28,6 +28,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `renderer/shared/mdi-pfade.js` | **Erzeugt.** Alle Material-Design-Symbole; wird nur bei Bedarf nachgeladen |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
+| `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
 | `renderer/shared/akku.js` | Wie dringend die Akkuwarnung ist: Stufe, Abstand, Lautstärke, Stummschalten |
 | `server/setup-server.js` | Express auf Port 8788, HA-Proxy, Zugangscode |
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
@@ -370,6 +371,21 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Deckkraft. Auf einer Karte ist das genau richtig; in einem Dialog stand das Dashboard durch
   den Text hindurch, und man las zwei Oberflächen übereinander. `.modal` und `.picker` legen
   deshalb `--bg` darunter.
+- **Die Torzeiten werden im SERVER gemessen, nicht in der Anzeige.** Der Server hält die
+  WebSocket-Verbindung dauerhaft offen; die Anzeige nicht — nachts ist das Panel aus, und genau
+  dann fährt ein Hoftor am ehesten. Eine Messung, die nur zustande käme, wenn jemand hinsieht,
+  käme nie zustande. Zwei Fallen stecken darin: Ein Zustand, der **unverändert** noch einmal
+  gemeldet wird (Home Assistant meldet auch bei reinen Attributänderungen, bei einem fahrenden
+  Tor ständig), darf die Uhr **nicht** zurücksetzen — sonst misst man den Abstand zwischen zwei
+  Positionsmeldungen statt die Fahrt. Und unplausible Werte werden verworfen: Ein Tor, das laut
+  Messung vier Stunden braucht, hat das nicht — da ist eine Meldung verloren gegangen, und der
+  Wert würde die Animation für immer unbrauchbar machen.
+- **Mit Messung zeigt die Toranimation die echte Stellung, nicht „irgendwas bewegt sich".**
+  Dauer = gemessene Fahrzeit, Startversatz = `last_changed` aus Home Assistant, einmalig mit
+  `forwards`. Dauert die Fahrt **länger** als gemessen (ein Drittel Toleranz, mindestens drei
+  Sekunden), wird die Karte rot und behält ihren Zustand — eine Karte, die hier einfach
+  weiterläuft, behauptet, alles sei in Ordnung. Die rote Farbe wird **direkt am Element**
+  gesetzt: Ein Akzent aus einer CSS-Klasse käme gegen das Inline-`--kachel-akzent` nicht an.
 - **Die Flügeltor-Karte schaltet NICHT.** Ein Tor, das aufgeht, weil jemand im Vorbeigehen die
   Wand berührt hat, ist genau das, was auf einem Wandpanel nicht passieren darf. Sie zeigt nur,
   was das Tor gerade tut; zum Öffnen gibt es die Tor-Karte mit ihren Knöpfen. Und
@@ -515,7 +531,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-361 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+378 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 

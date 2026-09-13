@@ -633,6 +633,64 @@
     closing: { text: 'Schließt …',  klasse: 'tor-schliesst', akzent: '#ffc061' }
   };
 
+  // Wie viel laenger eine Fahrt dauern darf, bevor sie als ueberfaellig gilt: ein Drittel
+  // mehr, mindestens aber drei Sekunden Luft. Ein Torantrieb faehrt nicht jeden Tag gleich
+  // schnell -- bei Frost, gegen den Wind, mit einem Ast im Weg. Zu knapp gesetzt waere die
+  // Warnung jeden zweiten Tag rot und damit wertlos.
+  // Rot heisst hier: Die Fahrt dauert laenger als gemessen. Derselbe Ton wie bei der
+  // kritischen Akkuwarnung -- auf dieser Wand soll Rot immer dasselbe bedeuten.
+  const TOR_ROT = '#ff4444';
+
+  const TOR_TOLERANZ = 1.34;
+  const TOR_TOLERANZ_SEKUNDEN = 3;
+
+  /**
+   * Dauer, Startversatz und Ueberfaelligkeit der Torbewegung.
+   *
+   * Ohne Messung bleibt es bei einer Schleife: Sie sagt "es bewegt sich", mehr nicht. MIT
+   * Messung laeuft die Animation genau so lange wie das Tor und faengt dort an, wo die Fahrt
+   * gerade steht -- Home Assistant sagt mit `last_changed`, wann sie begann. Dann zeigt der
+   * Fluegel nicht "irgendwas bewegt sich", sondern "halb offen".
+   *
+   * Dauert es laenger als gemessen, stimmt etwas nicht: Das Tor klemmt, etwas steht im Weg,
+   * oder die Meldung "offen" ist verloren gegangen. Die Karte wird dann rot und behaelt den
+   * Zustand -- eine Karte, die in diesem Fall einfach weiterlaeuft, behauptet, alles sei in
+   * Ordnung.
+   *
+   * @param {string} zustand      'opening' | 'closing' | ...
+   * @param {object} zeiten       gemessene Zeiten { oeffnen, schliessen } in Sekunden
+   * @param {string} seitIso      last_changed aus Home Assistant
+   * @param {number} jetztMs
+   */
+  function torAnimation(zustand, zeiten, seitIso, jetztMs) {
+    const z = String(zustand || '').toLowerCase();
+    const faehrt = z === 'opening' || z === 'closing';
+    if (!faehrt) return { faehrt: false, dauer: 0, versatz: '0s', echtzeit: false, ueberfaellig: false };
+
+    const gemessen = Number(zeiten && (z === 'opening' ? zeiten.oeffnen : zeiten.schliessen));
+    const jetzt = jetztMs === undefined ? Date.now() : jetztMs;
+    const seit = Date.parse(seitIso || '');
+    const laeuftSeit = Number.isFinite(seit) ? (jetzt - seit) / 1000 : NaN;
+
+    // Ohne Messung oder ohne brauchbaren Startzeitpunkt: die alte Schleife.
+    if (!(gemessen > 0) || !Number.isFinite(laeuftSeit) || laeuftSeit < 0) {
+      return {
+        faehrt: true, dauer: TOR_TAKT, echtzeit: false, ueberfaellig: false,
+        versatz: animationsPhase(TOR_TAKT, false, jetztMs)
+      };
+    }
+
+    const grenze = Math.max(gemessen * TOR_TOLERANZ, gemessen + TOR_TOLERANZ_SEKUNDEN);
+    return {
+      faehrt: true,
+      dauer: gemessen,
+      echtzeit: true,
+      ueberfaellig: laeuftSeit > grenze,
+      // Negativ: Die Animation faengt dort an, wo die Fahrt gerade steht.
+      versatz: '-' + Math.min(laeuftSeit, gemessen).toFixed(2) + 's'
+    };
+  }
+
   /**
    * Wie das Tor gerade dasteht.
    *
@@ -1328,14 +1386,21 @@
     } else if (type === 'fluegeltor') {
       const tor = torDarstellung(state ? state.state : '');
       // Die Bewegung haengt an der Uhr, nicht am Alter des Elements -- sonst faengt sie nach
-      // jedem Neuaufbau der Karte von vorne an. Dieselbe Rechnung wie bei der Klimaanlage.
-      const phase = animationsPhase(TOR_TAKT, false);
-      if (tor.akzent) card.style.setProperty('--kachel-akzent', tor.akzent);
+      // jedem Neuaufbau der Karte von vorne an. Mit Messung haengt sie sogar am echten
+      // Fahrtbeginn und zeigt damit die wirkliche Stellung des Fluegels.
+      const anim = torAnimation(state ? state.state : '', opts.torZeiten, state ? state.last_changed : '', undefined);
+      // Der Akzent wird DIREKT am Element gesetzt und schlaegt damit jede CSS-Regel -- eine
+      // Klasse "ueberfaellig" mit roter Farbe kaeme dagegen nicht an. Deshalb faellt die
+      // Entscheidung hier, an einer Stelle.
+      const torAkzent = anim.ueberfaellig ? TOR_ROT : tor.akzent;
+      if (torAkzent) card.style.setProperty('--kachel-akzent', torAkzent);
       card.classList.add(tor.klasse);
+      if (anim.echtzeit) card.classList.add('tor-echtzeit');
+      if (anim.ueberfaellig) card.classList.add('tor-ueberfaellig');
       card.innerHTML = `
         <div class="row"><span class="icon"></span><span class="badge">${esc(tor.text)}</span></div>
-        <div class="tor-bild" style="--ph-tor:${phase}">${ICONS.fluegeltor}</div>
-        <div class="name">${name}</div>`;
+        <div class="tor-bild" style="--ph-tor:${anim.versatz}; --tor-dauer:${(anim.dauer || TOR_TAKT)}s">${ICONS.fluegeltor}</div>
+        <div class="name">${name}${anim.ueberfaellig ? ' · dauert länger als sonst' : ''}</div>`;
     } else if (type === 'cover') {
       const pos = attrs.current_position;
       // Nur anbieten, was das Geraet wirklich kann -- ein Schieber, der ins Leere greift, ist
@@ -2305,7 +2370,7 @@
     sizeToSpan, minSpanFor, clampSpan, resolveSpan, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
-    torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, canOverlayOnPhoto, applyCustomTheme, esc,
+    torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, zahlFormatieren, symbolFuer, symbolNamen,
     quickTileAktion, quickTileAktiv, quickTileText,

@@ -248,14 +248,34 @@ body { background: var(--page-bg-image, none) center/cover fixed, var(--bg); }
 .card.tor-oeffnet .tor-links,
 .card.tor-schliesst .tor-links {
   animation: tor-links 3.2s ease-in-out infinite;
+  animation-duration: var(--tor-dauer, 3.2s);
   animation-delay: var(--ph-tor, 0s);
 }
 .card.tor-oeffnet .tor-rechts,
 .card.tor-schliesst .tor-rechts {
   animation: tor-rechts 3.2s ease-in-out infinite;
+  animation-duration: var(--tor-dauer, 3.2s);
   animation-delay: var(--ph-tor, 0s);
 }
 .card.tor-schliesst .tor-links, .card.tor-schliesst .tor-rechts { animation-direction: reverse; }
+
+/* Kalibriert: Die Animation dauert genau so lange wie die echte Fahrt und faengt dort an, wo
+   das Tor gerade steht (der Versatz kommt aus last_changed). Sie laeuft EINMAL und bleibt am
+   Ende stehen -- eine Schleife wuerde behaupten, das Tor faehrt noch, wenn es laengst steht.
+   Gleichmaessig statt ein- und ausschwingend: Ein Torantrieb faehrt mit konstanter Geschwindigkeit. */
+.card.tor-echtzeit .tor-fluegel {
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+  animation-timing-function: linear;
+}
+
+/* Ueberfaellig: Die Fahrt dauert laenger als gemessen -- das Tor klemmt, etwas steht im Weg,
+   oder die Meldung "offen" ist verloren gegangen. Rot, und der Zustand bleibt stehen: Eine
+   Karte, die hier einfach weiterlaeuft, behauptet, alles sei in Ordnung. */
+/* Die Farbe selbst wird direkt am Element gesetzt (siehe TOR_ROT) -- eine Regel hier kaeme
+   dagegen nicht an. Hier steht nur, was sich darueber hinaus aendert. */
+.card.tor-ueberfaellig .tor-bild { animation: tor-mahnen 1.2s ease-in-out infinite alternate; }
+@keyframes tor-mahnen { from { opacity: 0.45; } to { opacity: 1; } }
 
 @keyframes tor-links  { 0% { transform: rotate(0deg); }   72% { transform: rotate(-72deg); } 100% { transform: rotate(-72deg); } }
 @keyframes tor-rechts { 0% { transform: rotate(0deg); }   72% { transform: rotate(72deg); }  100% { transform: rotate(72deg); } }

@@ -28,7 +28,7 @@
      eines braucht -- hier direkt, damit die Vorschau ohne Zusatzlogik auskommt. -->
 <script src="../../renderer/shared/mdi-pfade.js"></script>
 <script>
-const Z = (state, attributes = {}) => ({ state, attributes });
+const Z = (state, attributes = {}, last_changed) => ({ state, attributes, last_changed });
 
 // Ein Querschnitt: bunte Typen, neutrale Typen, an und aus, mit und ohne Bedienelemente.
 const KARTEN = [
@@ -69,6 +69,8 @@ const KARTEN = [
   ['cover.tor_oef',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt faehrt auf', device_class: 'gate' }), 1, 1],
   ['cover.tor_schl', 'fluegeltor', Z('closing', { friendly_name: 'Einfahrt faehrt zu', device_class: 'gate' }), 1, 1],
   ['cover.tor_unb',  'fluegeltor', Z('unavailable', { friendly_name: 'Einfahrt unbekannt', device_class: 'gate' }), 1, 1],
+  ['cover.tor_kal',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt kalibriert' }, new Date(Date.now() - 9000).toISOString()), 1, 1],
+  ['cover.tor_ueb',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt klemmt' }, new Date(Date.now() - 45000).toISOString()), 1, 1],
   ['nav.kueche',   'navigate', null, 1, 1],
   ['nav.bad',      'navigate', null, 2, 1]
 ];
@@ -105,6 +107,8 @@ const nur = new URLSearchParams(location.search).get('nur');
 (nur ? KARTEN.filter(k => k[1] === nur) : KARTEN).forEach(([id, typ, zustand, c, r]) => {
   const el = DashboardRender.buildCard(id, zustand, typ, { cols: c, rows: r }, {
     editable: false, apiBase: '', statesById: {}, history: VERLAEUFE[id], akzent: sensorFarben[id],
+    // Gemessene Fahrzeit fuer die kalibrierten Tore -- 18 Sekunden auf.
+    torZeiten: (id === 'cover.tor_kal' || id === 'cover.tor_ueb') ? { oeffnen: 18, schliessen: 20 } : undefined,
     settings: typ === 'navigate' ? { targetDashboardId: 'db_1', targetDashboardName: id === 'nav.bad' ? 'Badezimmer' : 'Küche' }
       : typ === 'gate' ? { gateButtons: [
       { label: 'Tor', entity: 'switch.a', icon: 'gate' },

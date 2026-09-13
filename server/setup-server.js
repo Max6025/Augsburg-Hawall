@@ -10,6 +10,7 @@ const austausch = require('./dashboard-austausch');
 // zweites Mal zu pflegen und beim naechsten neuen Kartentyp zu vergessen.
 const { CARD_TYPES } = require('../renderer/shared/dashboard-render.js');
 const { HaLive } = require('./ha-live');
+const { TorBeobachter } = require('../control/torzeiten');
 const { ZUHAUSE_VORGABE } = require('../renderer/shared/alarm.js');
 const { SCHWELLE_MINDESTENS } = require('../renderer/shared/akku.js');
 
@@ -975,12 +976,30 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
 
   const liveHoerer = new Set();
 
+  // Wie lange die Tore zum Oeffnen und Schliessen brauchen -- gemessen beim ersten Durchlauf.
+  //
+  // Hier und nicht in der Anzeige: Dieser Server haelt die Verbindung zu Home Assistant
+  // dauerhaft offen, die Anzeige nicht. Nachts ist das Panel aus, und genau dann faehrt ein
+  // Hoftor am ehesten. Eine Messung, die nur zustande kaeme, wenn jemand hinsieht, kaeme nie
+  // zustande.
+  const torBeobachter = new TorBeobachter({
+    laden: () => store.get('torZeiten') || {},
+    speichern: (alle) => store.set('torZeiten', alle)
+  });
+
   const haLive = new HaLive({
     getConfig: () => ({ haUrl: store.get('haUrl'), token: store.get('token') }),
     onAenderung: (aenderung) => {
       // Die Steuerung im Hauptprozess wartet unter Umstaenden genau auf diese eine Entitaet:
       // Stellt jemand die Alarmanlage auf "zu Hause", ist das die Ankunft, und das Panel soll
       // in dem Moment angehen -- nicht erst beim naechsten Abruf zwei Minuten spaeter.
+      // Tore: aus den Zustandswechseln die Fahrzeiten lernen.
+      try {
+        if (torBeobachter.gemeldet(aenderung.entity_id, aenderung.state)) {
+          console.log('[Tor] ' + aenderung.entity_id + ': ' + JSON.stringify((store.get('torZeiten') || {})[aenderung.entity_id]));
+        }
+      } catch (e) { /* eine misslungene Messung darf die Anzeige nicht aufhalten */ }
+
       if (controller && controller.zustandGemeldet) {
         try { controller.zustandGemeldet(aenderung.entity_id, aenderung.state); } catch (e) { /* die Anzeige darf davon nichts merken */ }
       }
@@ -1063,6 +1082,11 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err.message || err) });
     }
+  });
+
+  // Die gemessenen Fahrzeiten. Die Anzeige richtet ihre Animation danach aus.
+  app.get('/api/tor-zeiten', (req, res) => {
+    res.json({ ok: true, zeiten: store.get('torZeiten') || {} });
   });
 
   app.get('/api/ha/namen', (req, res) => {
