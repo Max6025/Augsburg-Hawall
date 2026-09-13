@@ -272,6 +272,15 @@ body { background: var(--page-bg-image, none) center/cover fixed, var(--bg); }
 /* Ueberfaellig: Die Fahrt dauert laenger als gemessen -- das Tor klemmt, etwas steht im Weg,
    oder die Meldung "offen" ist verloren gegangen. Rot, und der Zustand bleibt stehen: Eine
    Karte, die hier einfach weiterlaeuft, behauptet, alles sei in Ordnung. */
+/* Dauer-Auf: Das Tor bleibt mit Absicht offen. Ein ruhiger Hinweis, keine Warnung -- und
+   deshalb auch keine Farbe, die nach Alarm aussieht. */
+.tor-dauerauf-hinweis {
+  align-self: flex-start; font-size: clamp(0.9vh, 9cqmin, 1.3vh); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border-radius: 999px; padding: 0.2vh 0.9vh;
+}
+
 /* Die Farbe selbst wird direkt am Element gesetzt (siehe TOR_ROT) -- eine Regel hier kaeme
    dagegen nicht an. Hier steht nur, was sich darueber hinaus aendert. */
 .card.tor-ueberfaellig .tor-bild { animation: tor-mahnen 1.2s ease-in-out infinite alternate; }

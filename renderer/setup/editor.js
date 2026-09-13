@@ -612,6 +612,7 @@ function settingsFieldsForType(type) {
     navigateTarget: type === 'navigate',
     forecastType: type === 'forecast',
     energyEntities: type === 'energy',
+    torDauerauf: type === 'fluegeltor',
     mediaPlayerOpts: type === 'media_player',
     photoUpload: type === 'photo',
     quickTiles: type === 'quicktiles',
@@ -840,6 +841,17 @@ function openSettings(entityId) {
         Beides erscheint nur, wenn die Wetter-Integration die Werte auch liefert. Beim
         Niederschlag zeigt die Karte Millimeter, falls vorhanden – sonst die
         Wahrscheinlichkeit in Prozent.</p>`;
+  }
+  if (fields.torDauerauf) {
+    html += `
+      <label>Melder für „Dauer-Auf“ (optional)</label>
+      <input type="text" id="setTorDauerauf" list="entityList" value="${settings.torDaueraufEntity || ''}" placeholder="light.tor_dauerhaft_offen">
+      <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
+        Viele Torsteuerungen kennen einen Zustand „bleibt offen“ – für den Umzugswagen, die
+        Gartenparty, den Paketboten. Solange diese Entität <strong>an</strong> ist, warnt die
+        Karte nicht mehr, wenn das Tor länger braucht als sonst: Dass es nicht zufährt, ist dort
+        ja gewollt. Stattdessen steht „Dauer-Auf“ auf der Karte. Je nach Anlage ist das ein
+        Schalter, ein input_boolean oder ein Licht.</p>`;
   }
   if (fields.energyEntities) {
     html += `
@@ -1405,6 +1417,11 @@ $('settingsSave').addEventListener('click', () => {
   const entry = currentLayout.find(l => l.entity_id === settingsEntityId);
   if (!entry) return;
   const settings = { ...(entry.settings || {}) };
+
+  if (settingsFields.torDauerauf && $('setTorDauerauf')) {
+    const melder = $('setTorDauerauf').value.trim();
+    if (melder) settings.torDaueraufEntity = melder; else delete settings.torDaueraufEntity;
+  }
 
   // Entitaet tauschen, falls gewaehlt. Das passiert VOR allem anderen, damit die uebrigen
   // Einstellungen auf dem schon getauschten Eintrag landen.

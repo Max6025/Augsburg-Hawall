@@ -148,3 +148,49 @@ test('Ueberfaellig faerbt die Karte rot -- und zwar dort, wo es ankommt', () => 
   assert.strictEqual(R.TOR_ROT, '#ff4444');
   assert.notStrictEqual(R.TOR_ZUSTAENDE.opening.akzent, R.TOR_ROT);
 });
+
+// --- Dauer-Auf --------------------------------------------------------------------------------
+//
+// Viele Torsteuerungen kennen einen Zustand "bleibt offen". Dass das Tor dann nicht zufaehrt,
+// ist gewollt -- eine Warnung waere dort ein Fehlalarm, und nach dem dritten Fehlalarm glaubt
+// man der Warnung auch dann nicht mehr, wenn wirklich etwas klemmt.
+
+test('Der Dauer-Auf-Melder wird an seinem Zustand erkannt', () => {
+  const an = { 'light.dauerauf': { state: 'on' } };
+  assert.strictEqual(R.torDauerauf({ torDaueraufEntity: 'light.dauerauf' }, an), true);
+  // Manche Entitaeten benennen ihren Zustand anders.
+  assert.strictEqual(R.torDauerauf({ torDaueraufEntity: 'x' }, { x: { state: 'open' } }), true);
+  assert.strictEqual(R.torDauerauf({ torDaueraufEntity: 'x' }, { x: { state: 'off' } }), false);
+});
+
+test('Ohne Melder gibt es kein Dauer-Auf', () => {
+  assert.strictEqual(R.torDauerauf({}, { 'light.x': { state: 'on' } }), false);
+  assert.strictEqual(R.torDauerauf({ torDaueraufEntity: 'light.x' }, {}), false);
+  assert.strictEqual(R.torDauerauf(null, null), false);
+});
+
+test('Ein unerreichbarer Melder schaltet die Warnung NICHT ab', () => {
+  // Sonst genuegte eine kaputte Entitaet, um die Warnung fuer immer stillzulegen -- und
+  // niemand wuesste, warum das Tor nie mehr meldet, dass es klemmt.
+  ['unavailable', 'unknown', ''].forEach(z => {
+    assert.strictEqual(R.torDauerauf({ torDaueraufEntity: 'x' }, { x: { state: z } }), false, z);
+  });
+});
+
+test('Bei Dauer-Auf gibt es keine Ueberfaelligkeit', () => {
+  const jetzt = 1000000;
+  const lange = new Date(jetzt - 120000).toISOString();   // faehrt angeblich seit zwei Minuten
+  assert.strictEqual(R.torAnimation('opening', { oeffnen: 18 }, lange, jetzt, false).ueberfaellig, true);
+  assert.strictEqual(R.torAnimation('opening', { oeffnen: 18 }, lange, jetzt, true).ueberfaellig, false);
+});
+
+test('Dauer-Auf aendert nichts an Dauer und Startversatz', () => {
+  // Faehrt das Tor gerade wirklich, soll die Animation trotzdem stimmen -- nur die Warnung
+  // faellt weg.
+  const jetzt = 1000000;
+  const seit = new Date(jetzt - 9000).toISOString();
+  const ohne = R.torAnimation('opening', { oeffnen: 18 }, seit, jetzt, false);
+  const mit = R.torAnimation('opening', { oeffnen: 18 }, seit, jetzt, true);
+  assert.strictEqual(mit.dauer, ohne.dauer);
+  assert.strictEqual(mit.versatz, ohne.versatz);
+});

@@ -643,6 +643,9 @@ async function render() {
     ['gridEntity', 'gridReturnEntity', 'solarEntity', 'batteryEntity', 'batterySocEntity',
      'welcomeImageEntity'].forEach(f => { if (st[f]) letzteAnzeigeEntitaeten.add(st[f]); });
     (st.gateButtons || []).forEach(b => { if (b.entity) letzteAnzeigeEntitaeten.add(b.entity); });
+    // Der Dauer-Auf-Melder steht auf keiner eigenen Karte -- ohne diese Zeile kaeme sein
+    // Umschalten erst beim naechsten Abruf an, und die Karte warnte in der Zwischenzeit.
+    if (st.torDaueraufEntity) letzteAnzeigeEntitaeten.add(st.torDaueraufEntity);
     (st.tiles || []).forEach(t => {
       if (t.mediaPlayerEntity) letzteAnzeigeEntitaeten.add(t.mediaPlayerEntity);
       if (t.entity) letzteAnzeigeEntitaeten.add(t.entity);

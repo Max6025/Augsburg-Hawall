@@ -71,6 +71,7 @@ const KARTEN = [
   ['cover.tor_unb',  'fluegeltor', Z('unavailable', { friendly_name: 'Einfahrt unbekannt', device_class: 'gate' }), 1, 1],
   ['cover.tor_kal',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt kalibriert' }, new Date(Date.now() - 9000).toISOString()), 1, 1],
   ['cover.tor_ueb',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt klemmt' }, new Date(Date.now() - 45000).toISOString()), 1, 1],
+  ['cover.tor_dau',  'fluegeltor', Z('opening', { friendly_name: 'Einfahrt Dauer-Auf' }, new Date(Date.now() - 90000).toISOString()), 1, 1],
   ['nav.kueche',   'navigate', null, 1, 1],
   ['nav.bad',      'navigate', null, 2, 1]
 ];
@@ -106,10 +107,11 @@ const sensorFarben = DashboardRender.sensorAkzente(KARTEN.filter(k => k[1] === '
 const nur = new URLSearchParams(location.search).get('nur');
 (nur ? KARTEN.filter(k => k[1] === nur) : KARTEN).forEach(([id, typ, zustand, c, r]) => {
   const el = DashboardRender.buildCard(id, zustand, typ, { cols: c, rows: r }, {
-    editable: false, apiBase: '', statesById: {}, history: VERLAEUFE[id], akzent: sensorFarben[id],
+    editable: false, apiBase: '', statesById: { 'light.dauerauf': { state: 'on' } }, history: VERLAEUFE[id], akzent: sensorFarben[id],
     // Gemessene Fahrzeit fuer die kalibrierten Tore -- 18 Sekunden auf.
-    torZeiten: (id === 'cover.tor_kal' || id === 'cover.tor_ueb') ? { oeffnen: 18, schliessen: 20 } : undefined,
-    settings: typ === 'navigate' ? { targetDashboardId: 'db_1', targetDashboardName: id === 'nav.bad' ? 'Badezimmer' : 'Küche' }
+    torZeiten: id.startsWith('cover.tor_') && id !== 'cover.tor_zu' ? { oeffnen: 18, schliessen: 20 } : undefined,
+    settings: id === 'cover.tor_dau' ? { torDaueraufEntity: 'light.dauerauf' }
+      : typ === 'navigate' ? { targetDashboardId: 'db_1', targetDashboardName: id === 'nav.bad' ? 'Badezimmer' : 'Küche' }
       : typ === 'gate' ? { gateButtons: [
       { label: 'Tor', entity: 'switch.a', icon: 'gate' },
       { label: 'Garage', entity: 'switch.b', icon: 'garage' },

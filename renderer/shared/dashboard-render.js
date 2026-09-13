@@ -645,6 +645,30 @@
   const TOR_TOLERANZ_SEKUNDEN = 3;
 
   /**
+   * Steht das Tor auf Dauer-Auf?
+   *
+   * Viele Torsteuerungen kennen einen Zustand "bleibt offen" -- fuer den Umzugswagen, fuer die
+   * Gartenparty, fuer den Paketboten. Das Tor faehrt dann nicht zu, und genau das ist gewollt.
+   * Eine Warnung "dauert laenger als sonst" waere dort falsch: Sie meldet einen Fehler, wo
+   * keiner ist, und nach dem dritten Mal glaubt man ihr auch dann nicht mehr, wenn wirklich
+   * etwas klemmt.
+   *
+   * Welche Entitaet das meldet, weiss nur der Nutzer -- es ist je nach Anlage ein Schalter, ein
+   * input_boolean oder, wie hier, ein Licht.
+   */
+  function torDauerauf(settings, statesById) {
+    const id = settings && settings.torDaueraufEntity;
+    if (!id || !statesById) return false;
+    const s = statesById[id];
+    if (!s) return false;
+    const z = String(s.state || '').toLowerCase();
+    // "on" ist der Normalfall; "open"/"true" fangen Entitaeten ab, die ihren Zustand anders
+    // benennen. Alles andere gilt als aus -- auch "unavailable": Ein Melder, den niemand
+    // erreicht, darf die Warnung nicht dauerhaft abschalten.
+    return z === 'on' || z === 'open' || z === 'true';
+  }
+
+  /**
    * Dauer, Startversatz und Ueberfaelligkeit der Torbewegung.
    *
    * Ohne Messung bleibt es bei einer Schleife: Sie sagt "es bewegt sich", mehr nicht. MIT
@@ -661,8 +685,9 @@
    * @param {object} zeiten       gemessene Zeiten { oeffnen, schliessen } in Sekunden
    * @param {string} seitIso      last_changed aus Home Assistant
    * @param {number} jetztMs
+   * @param {boolean} dauerauf  Dauer-Auf aktiv -- dann gibt es keine Ueberfaelligkeit
    */
-  function torAnimation(zustand, zeiten, seitIso, jetztMs) {
+  function torAnimation(zustand, zeiten, seitIso, jetztMs, dauerauf) {
     const z = String(zustand || '').toLowerCase();
     const faehrt = z === 'opening' || z === 'closing';
     if (!faehrt) return { faehrt: false, dauer: 0, versatz: '0s', echtzeit: false, ueberfaellig: false };
@@ -685,7 +710,8 @@
       faehrt: true,
       dauer: gemessen,
       echtzeit: true,
-      ueberfaellig: laeuftSeit > grenze,
+      // Bei Dauer-Auf gibt es nichts zu warnen: Dass das Tor nicht zufaehrt, ist dort gewollt.
+      ueberfaellig: !dauerauf && laeuftSeit > grenze,
       // Negativ: Die Animation faengt dort an, wo die Fahrt gerade steht.
       versatz: '-' + Math.min(laeuftSeit, gemessen).toFixed(2) + 's'
     };
@@ -1388,7 +1414,9 @@
       // Die Bewegung haengt an der Uhr, nicht am Alter des Elements -- sonst faengt sie nach
       // jedem Neuaufbau der Karte von vorne an. Mit Messung haengt sie sogar am echten
       // Fahrtbeginn und zeigt damit die wirkliche Stellung des Fluegels.
-      const anim = torAnimation(state ? state.state : '', opts.torZeiten, state ? state.last_changed : '', undefined);
+      const dauerauf = torDauerauf(settings, opts.statesById);
+      const anim = torAnimation(state ? state.state : '', opts.torZeiten,
+        state ? state.last_changed : '', undefined, dauerauf);
       // Der Akzent wird DIREKT am Element gesetzt und schlaegt damit jede CSS-Regel -- eine
       // Klasse "ueberfaellig" mit roter Farbe kaeme dagegen nicht an. Deshalb faellt die
       // Entscheidung hier, an einer Stelle.
@@ -1397,9 +1425,11 @@
       card.classList.add(tor.klasse);
       if (anim.echtzeit) card.classList.add('tor-echtzeit');
       if (anim.ueberfaellig) card.classList.add('tor-ueberfaellig');
+      if (dauerauf) card.classList.add('tor-dauerauf');
       card.innerHTML = `
         <div class="row"><span class="icon"></span><span class="badge">${esc(tor.text)}</span></div>
         <div class="tor-bild" style="--ph-tor:${anim.versatz}; --tor-dauer:${(anim.dauer || TOR_TAKT)}s">${ICONS.fluegeltor}</div>
+        ${dauerauf ? '<div class="tor-dauerauf-hinweis">Dauer-Auf</div>' : ''}
         <div class="name">${name}${anim.ueberfaellig ? ' · dauert länger als sonst' : ''}</div>`;
     } else if (type === 'cover') {
       const pos = attrs.current_position;
@@ -2370,7 +2400,7 @@
     sizeToSpan, minSpanFor, clampSpan, resolveSpan, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
-    torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, canOverlayOnPhoto, applyCustomTheme, esc,
+    torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, zahlFormatieren, symbolFuer, symbolNamen,
     quickTileAktion, quickTileAktiv, quickTileText,

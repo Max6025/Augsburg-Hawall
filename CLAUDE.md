@@ -386,6 +386,14 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Sekunden), wird die Karte rot und behält ihren Zustand — eine Karte, die hier einfach
   weiterläuft, behauptet, alles sei in Ordnung. Die rote Farbe wird **direkt am Element**
   gesetzt: Ein Akzent aus einer CSS-Klasse käme gegen das Inline-`--kachel-akzent` nicht an.
+- **Dauer-Auf ist kein Fehler.** Viele Torsteuerungen kennen einen Zustand „bleibt offen" — für
+  den Umzugswagen, die Gartenparty, den Paketboten. Dass das Tor dann nicht zufährt, ist
+  gewollt, und die Überfällig-Warnung wäre dort ein Fehlalarm. Nach dem dritten Fehlalarm
+  glaubt niemand der Warnung mehr, auch wenn wirklich etwas klemmt. Welche Entität das meldet,
+  weiß nur der Nutzer (`settings.torDaueraufEntity`); sie steht **nicht** auf einer eigenen
+  Karte und muss deshalb ausdrücklich in `letzteAnzeigeEntitaeten` — sonst käme ihr Umschalten
+  erst beim nächsten Abruf an. Ein **unerreichbarer** Melder (`unavailable`) gilt als AUS: Sonst
+  genügte eine kaputte Entität, um die Warnung für immer stillzulegen.
 - **Die Flügeltor-Karte schaltet NICHT.** Ein Tor, das aufgeht, weil jemand im Vorbeigehen die
   Wand berührt hat, ist genau das, was auf einem Wandpanel nicht passieren darf. Sie zeigt nur,
   was das Tor gerade tut; zum Öffnen gibt es die Tor-Karte mit ihren Knöpfen. Und
@@ -531,7 +539,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-378 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+383 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 
