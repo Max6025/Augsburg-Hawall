@@ -437,7 +437,19 @@
    * @param {Date}   p.jetzt
    */
   function sollAbschiedZeigen(p) {
-    if (!p || !p.aktiviert) return false;
+    if (!p) return false;
+
+    // "Jetzt anzeigen" aus den Einstellungen schlaegt ALLES -- auch einen fehlenden Termin,
+    // den falschen Tag, die Uhrzeitgrenze und den Verworfen-Zustand. Wer den Schirm ansehen
+    // will, hat in aller Regel gerade keinen Termin am letzten Tag laufen; sonst muesste er
+    // nicht danach fragen. Genau daran ist der Knopf beim Ankunftsschirm zuerst gescheitert.
+    //
+    // Auch die Einstellung "verwenden" wird uebergangen: Man will ja sehen, ob sich das
+    // Einschalten lohnt.
+    const erzwungenBis = Number(p.erzwungenBis) || 0;
+    if (erzwungenBis && (p.jetzt || new Date()).getTime() < erzwungenBis) return true;
+
+    if (!p.aktiviert) return false;
     // Zwei Vollbilder uebereinander waeren ein Fehler, kein Entwurf.
     if (p.ankunftSichtbar) return false;
 

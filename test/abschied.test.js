@@ -67,3 +67,46 @@ test('Die Farben liegen im kuehlen Teil des Farbkreises', () => {
   assert.ok(ABSCHIED_TON_VON >= 150 && ABSCHIED_TON_BIS <= 300, ABSCHIED_TON_VON + '-' + ABSCHIED_TON_BIS);
   assert.ok(ABSCHIED_TON_BIS - ABSCHIED_TON_VON >= 60, 'ein zu schmaler Ausschnitt sieht einfarbig aus');
 });
+
+// --- Zum Ansehen erzwingen --------------------------------------------------------------------
+//
+// Wer den Schirm ansehen will, hat in aller Regel gerade keinen mehrtaegigen Termin am letzten
+// Tag laufen -- sonst muesste er nicht danach fragen. Genau daran ist der Knopf beim
+// Ankunftsschirm zuerst gescheitert: Er setzte nur den Verworfen-Zustand zurueck, und es
+// passierte nichts.
+
+const inZehnMinuten = () => Date.now() + 10 * 60000;
+
+test('Erzwungen erscheint er ohne Termin', () => {
+  assert.strictEqual(sollAbschiedZeigen({
+    aktiviert: true, anzeigefenster: null, verlauf: null,
+    erzwungenBis: inZehnMinuten(), jetzt: new Date()
+  }), true);
+});
+
+test('Erzwungen schlaegt den falschen Tag, die Uhrzeit und das Wegtippen', () => {
+  const p = {
+    aktiviert: true,
+    verlauf: { mehrtaegig: true, letzterTag: false },
+    anzeigefenster: { start: START },
+    verworfenFuer: START,
+    abStunde: 23,
+    erzwungenBis: inZehnMinuten(),
+    jetzt: new Date(2026, 8, 13, 3, 0, 0)
+  };
+  assert.strictEqual(sollAbschiedZeigen(p), true);
+});
+
+test('Erzwungen erscheint er auch, wenn er ausgeschaltet ist', () => {
+  // Man will ja sehen, ob sich das Einschalten lohnt.
+  assert.strictEqual(sollAbschiedZeigen({
+    aktiviert: false, anzeigefenster: null, erzwungenBis: inZehnMinuten(), jetzt: new Date()
+  }), true);
+});
+
+test('Eine abgelaufene Frist erzwingt nichts mehr', () => {
+  assert.strictEqual(sollAbschiedZeigen({
+    aktiviert: true, anzeigefenster: null, erzwungenBis: Date.now() - 60000, jetzt: new Date()
+  }), false);
+  assert.strictEqual(sollAbschiedZeigen(basis({ erzwungenBis: 0 })), true, 'ohne Frist gilt der Rest weiter');
+});

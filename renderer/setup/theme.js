@@ -528,3 +528,24 @@ async function abschiedDashboardsLaden(gewaehlt) {
       '<option value="" disabled>\u2013 noch kein Unterdashboard angelegt \u2013</option>');
   }
 }
+
+// --- Abschiedsschirm zum Ansehen ---------------------------------------------------------------
+const showAbschiedBtn = document.getElementById('showAbschiedBtn');
+if (showAbschiedBtn) {
+  showAbschiedBtn.addEventListener('click', async () => {
+    const ziel = document.getElementById('showAbschiedResult');
+    ziel.className = 'result';
+    ziel.textContent = 'Wird angefordert …';
+    try {
+      const d = await fetch('/api/abschied/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+      ziel.className = d.ok ? 'result ok' : 'result err';
+      ziel.textContent = d.ok
+        ? 'Der Abschiedsschirm erscheint gleich auf dem Display – spätestens nach einer halben Minute. '
+          + 'Er bleibt ' + (d.minuten || 10) + ' Minuten stehen oder bis jemand den Text links antippt.'
+        : 'Fehler: ' + d.error;
+    } catch (e) {
+      ziel.className = 'result err';
+      ziel.textContent = 'Fehler: ' + e.message;
+    }
+  });
+}

@@ -1417,6 +1417,7 @@ async function abschiedPruefen() {
     anzeigefenster: zustand ? zustand.activeWindow : null,
     verworfenFuer: config.abschiedDismissedFor || '',
     abStunde: config.abschiedAbStunde,
+    erzwungenBis: config.abschiedErzwungenBis || 0,
     ankunftSichtbar: !!(ankunftsschirm && ankunftsschirm.istSichtbar()),
     jetzt: new Date()
   });
@@ -1477,6 +1478,30 @@ async function abschiedKartenBauen() {
 }
 
 let abschiedLayout = null;
+
+/**
+ * Holt die Konfiguration nach, solange ein erzwungenes Anzeigen laufen koennte.
+ *
+ * Nur dann: Ein Abruf alle zehn Sekunden fuer eine Einstellung, die sich fast nie aendert,
+ * waere Last ohne Erkenntnis. Ist gerade nichts erzwungen, genuegt der Blick alle zehn
+ * Sekunden auf den vorhandenen Wert.
+ */
+let abschiedKonfigGeholt = 0;
+async function abschiedKonfigNachsehen() {
+  if (!config) return;
+  const laeuft = (config.abschiedErzwungenBis || 0) > Date.now();
+  // Waehrend es laeuft, braucht es nichts Neues. Sonst alle 30 Sekunden einmal nachfragen --
+  // so erscheint der Schirm nach dem Knopfdruck spaetestens nach einer halben Minute.
+  if (laeuft || Date.now() - abschiedKonfigGeholt < 30000) return;
+  abschiedKonfigGeholt = Date.now();
+  try {
+    const d = await fetch(`${API}/api/config`).then(r => r.json());
+    if (d && typeof d.abschiedErzwungenBis === 'number') {
+      config.abschiedErzwungenBis = d.abschiedErzwungenBis;
+      config.abschiedDismissedFor = d.abschiedDismissedFor || '';
+    }
+  } catch (e) { /* dann beim naechsten Mal */ }
+}
 
 function ankunftsschirmPruefen() {
   if (!ankunftsschirm || !config) return;
@@ -1938,7 +1963,9 @@ function uhrenKartenAktualisieren() {
   // Der Steuerungszustand wird nur bei Aenderungen geschickt -- das Ablaufen der Anzeigedauer
   // ist aber keine Aenderung. Deshalb zusaetzlich ein eigener Takt.
   setInterval(ankunftsschirmPruefen, 60000);
-  setInterval(abschiedPruefen, 60000);
+  // Alle zehn Sekunden statt jede Minute: "Jetzt anzeigen" aus den Einstellungen speichert
+  // nichts und laedt die Ansicht deshalb nicht neu -- der Schirm soll trotzdem gleich kommen.
+  setInterval(async () => { await abschiedKonfigNachsehen(); abschiedPruefen(); }, 10000);
 
   checkNightMode();
   // Erst nach dem Aufbau: Das Bild wird nur gebraucht, wenn die App mal NICHT laeuft -- es hat

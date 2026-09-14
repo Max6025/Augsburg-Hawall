@@ -119,6 +119,13 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   **Unterdashboard** (ein zweiter Karten-Editor wäre derselbe Editor noch einmal — und der
   zweite wäre der, den niemand pflegt), und **nur der Text links tippt ihn weg**: Die Karten
   müssen bedienbar bleiben.
+  „Jetzt anzeigen" schlägt bei **beiden** Schirmen alles — fehlender Termin, falscher Tag,
+  Uhrzeitgrenze, weggetippt, und sogar den Einschalter selbst. Wer einen Schirm ansehen will,
+  hat in aller Regel gerade keinen passenden Termin laufen; sonst müsste er nicht danach
+  fragen. Genau daran ist der Knopf beim Ankunftsschirm zuerst gescheitert.
+  Weil „Jetzt anzeigen" **nichts speichert**, lädt sich die Ansicht dabei auch nicht neu: Der
+  Abschiedsschirm fragt die Konfiguration deshalb alle 30 Sekunden selbst nach — aber nur,
+  solange keine Frist läuft.
   Er erscheint **nur bei mehrtägigen Terminen**. Bei einem eintägigen wäre der „letzte Tag"
   derselbe wie der Ankunftstag, und das Panel verabschiedete Gäste, die gerade hereingekommen
   sind.
@@ -564,7 +571,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-392 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+396 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 
