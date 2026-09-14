@@ -119,6 +119,35 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   **Unterdashboard** (ein zweiter Karten-Editor wäre derselbe Editor noch einmal — und der
   zweite wäre der, den niemand pflegt), und **nur der Text links tippt ihn weg**: Die Karten
   müssen bedienbar bleiben.
+- **Die Kartenfläche des Abschiedsschirms hat dasselbe 6×6-Raster wie die Wand.** Die Karten
+  kommen aus einem Unterdashboard und bringen von dort **beides** mit: Größe *und* Platz
+  (`grid-column: 4 / span 3`). Mit weniger Spalten zeigt das ins Leere — der Browser hängt
+  stillschweigend weitere Spalten an, und was dahinter liegt, steht außerhalb des Bildschirms.
+  Am 2026-09-14 sah das auf der Wand so aus: eine riesige Alarmkarte und daneben der Streifen
+  einer zweiten. Die Lösung ist **nicht**, den Platz wegzuwerfen — dann sieht der Schirm anders
+  aus als das, was im Editor angeordnet wurde, und die Regel wird unerklärbar. `abschiedSpanne()`
+  schneidet nur noch als Fangnetz und **schiebt herein statt zu beschneiden**: Eine Karte, die
+  schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter links liegt, nicht.
+  Die Zahlen stehen in `ABSCHIED_SPALTEN`/`ABSCHIED_ZEILEN` **und** in `dashboard.css`; ein Test
+  vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt, sondern genau diesen Rand.
+- **Der Text des Abschiedsschirms ist eine Abhakliste, keine Aufzählung.** Eine Abreiseliste
+  wird abgearbeitet, nicht gelesen — als bloße Stichpunkte muss man sich selbst merken, wo man
+  war, und genau dabei bleibt das Fenster im Bad zu. Gebaut wird aus dem **fertigen Markdown**
+  statt aus einem zweiten Textparser: Fett, Kursiv und verschachtelte Listen sollen weiter
+  funktionieren, und zwei Parser für dieselbe Sprache laufen früher oder später auseinander.
+  Drei Punkte hängen daran:
+  1. **Der Haken hängt am Text, nicht an der Position** (`hakenSchluessel()`). Wer einen Punkt
+     in der Mitte einfügt, hätte sonst alle Haken darunter um eins verschoben — „Saugen" wäre
+     erledigt, weil darüber eine Zeile dazugekommen ist.
+  2. **Je Termin ein eigener Eintrag** (`hakenSpeicherName()`). Die nächste Abreise fängt leer
+     an, ohne dass jemand aufräumt. Im Testmodus ein fester Name, damit das Ausprobieren keine
+     echte Abreise überschreibt.
+  3. **`inhaltSetzen()` schreibt nur bei echter Änderung.** Der Schirm wird alle zehn Sekunden
+     geprüft; ohne diese Sperre wäre ein Haken nach spätestens zehn Sekunden wieder weg — man
+     hakt ab und sieht zu, wie es sich zurückstellt. Der Termin gehört mit in die Signatur,
+     sonst stehen bei der nächsten Abreise noch die Haken der letzten.
+  Das Antippen eines Punktes darf **nicht** durchblubbern: Die linke Hälfte ist die
+  Wegtipp-Fläche, und die Liste liegt darin. Zum Ausblenden bleiben Überschrift und Hinweiszeile.
   Das Ansehen auf Zuruf schlägt bei **beiden** Schirmen alles — fehlender Termin, falscher
   Tag, Uhrzeitgrenze, weggetippt, und sogar den Einschalter selbst. Wer einen Schirm ansehen
   will, hat in aller Regel gerade keinen passenden Termin laufen; sonst müsste er nicht danach
@@ -582,7 +611,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-404 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+412 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 

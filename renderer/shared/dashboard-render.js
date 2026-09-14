@@ -206,6 +206,43 @@
     return base;
   }
 
+  // --- Karten auf dem Abschiedsschirm ---------------------------------------------------
+  //
+  // Die Karten kommen aus einem Unterdashboard und bringen von dort BEIDES mit: ihre Groesse
+  // und ihren Platz im 6x6-Raster der Wand. Beides wird behalten -- der Schirm zeigt das
+  // Unterdashboard so, wie es im Editor angeordnet wurde, nur in einer schmaleren Flaeche.
+  // Das ist die Regel, die man sich merken kann: Was du dort hinlegst, liegt hier auch dort.
+  //
+  // Die Flaeche muss deshalb DASSELBE Raster haben. Vorher hatte sie zwei Spalten, und eine
+  // Karte mit "grid-column: 4 / span 3" zeigte ins Leere: Der Browser haengt stillschweigend
+  // weitere Spalten an, und was dahinter kommt, steht halb ausserhalb des Bildschirms. Genau
+  // so sah es am 2026-09-14 auf der Wand aus -- eine riesige Alarmkarte und daneben der
+  // Streifen einer zweiten.
+  //
+  // Geschnitten wird nur noch als Fangnetz: Ein Eintrag, der ueber den Rand hinausragt (aus
+  // einem aelteren Layout, von Hand bearbeitet, aus einer Austauschdatei), wird
+  // hereingeschoben statt hinausgeschrieben.
+  const ABSCHIED_SPALTEN = 6;
+  const ABSCHIED_ZEILEN = 6;
+
+  function abschiedSpanne(span, spalten, zeilen) {
+    const maxS = Number(spalten) > 0 ? Number(spalten) : ABSCHIED_SPALTEN;
+    const maxZ = Number(zeilen) > 0 ? Number(zeilen) : ABSCHIED_ZEILEN;
+    const ganz = (w, kleinstes, groesstes) => {
+      const n = Math.round(Number(w));
+      if (!Number.isFinite(n)) return kleinstes;
+      return Math.max(kleinstes, Math.min(n, groesstes));
+    };
+    const cols = ganz(span && span.cols, 1, maxS);
+    const rows = ganz(span && span.rows, 1, maxZ);
+    if (span && Number.isInteger(span.x) && Number.isInteger(span.y)) {
+      // Hereinschieben, nicht abschneiden: Eine Karte, die schmaler gemacht wird, verliert
+      // ihren Inhalt; eine, die ein Feld weiter links liegt, nicht.
+      return { cols, rows, x: ganz(span.x, 0, maxS - cols), y: ganz(span.y, 0, maxZ - rows) };
+    }
+    return { cols, rows };
+  }
+
   const PRESS_DOMAINS = { button: 'press', input_button: 'press', scene: 'turn_on', script: 'turn_on' };
   const TOGGLE_DOMAINS = ['light', 'switch', 'input_boolean', 'fan'];
   const NUMERIC_DOMAINS = ['sensor', 'number', 'input_number'];
@@ -2397,7 +2434,7 @@
   global.DashboardRender = {
     ICONS, DOMAIN_LABEL, CARD_TYPES, TOGGLE_DOMAINS, PRESS_DOMAINS,
     defaultCardType, allowedCardTypes, defaultSize, buildCard,
-    sizeToSpan, minSpanFor, clampSpan, resolveSpan, thresholdColor,
+    sizeToSpan, minSpanFor, clampSpan, resolveSpan, abschiedSpanne, ABSCHIED_SPALTEN, ABSCHIED_ZEILEN, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,

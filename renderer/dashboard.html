@@ -129,7 +129,7 @@
 <script src="shared/alarm.js"></script>
 <script src="shared/ankunftsschirm.js"></script>
 <script>
-const { ICONS, defaultCardType, buildCard, resolveSpan } = DashboardRender;
+const { ICONS, defaultCardType, buildCard, resolveSpan, abschiedSpanne } = DashboardRender;
 const params = new URLSearchParams(location.search);
 
 // Laeuft diese Seite AUF dem Panel oder im Browser eines anderen Geraets?
@@ -1426,7 +1426,10 @@ async function abschiedPruefen() {
   abschiedsschirm.inhaltSetzen({
     ueberschrift: config.abschiedHeading || 'Gute Heimreise',
     text: config.abschiedText || '',
-    testmodus: !!config.abschiedTestmodus
+    testmodus: !!config.abschiedTestmodus,
+    // Die Abhakliste merkt sich je Termin, was schon erledigt ist -- dafuer muss sie wissen,
+    // welcher Termin das ist. inhaltSetzen laeuft vor zeigen(), also hier mitgeben.
+    fensterStart: (zustand && zustand.activeWindow) ? zustand.activeWindow.start : null
   });
   await abschiedKartenBauen();
   abschiedsschirm.zeigen(zustand && zustand.activeWindow ? zustand.activeWindow.start : null);
@@ -1470,7 +1473,7 @@ async function abschiedKartenBauen() {
     if (!ohneZustand && !s) continue;
     let history;
     if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, (entry.settings || {}).graphHours);
-    flaeche.appendChild(buildCard(entry.entity_id, s, type, resolveSpan(entry, type), {
+    flaeche.appendChild(buildCard(entry.entity_id, s, type, abschiedSpanne(resolveSpan(entry, type)), {
       editable: false, history, apiBase: API, statesById, namen: haNamen,
       torZeiten: torZeiten[entry.entity_id],
       settings: entry.settings || {}, callbacks: dashboardRueckrufe()

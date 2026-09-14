@@ -6,7 +6,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { sollAbschiedZeigen, abschiedHinweis, ABSCHIED_TON_VON, ABSCHIED_TON_BIS } = require('../renderer/shared/ankunftsschirm.js');
+const { sollAbschiedZeigen, abschiedHinweis, hakenSchluessel, hakenSpeicherName,
+  ABSCHIED_TON_VON, ABSCHIED_TON_BIS } = require('../renderer/shared/ankunftsschirm.js');
 
 const START = new Date(2026, 8, 12, 16, 0, 0).toISOString();
 const basis = (u) => Object.assign({
@@ -132,4 +133,26 @@ test('Im Testmodus steht dort keine Aufforderung zum Antippen', () => {
   // Und der Weg zurueck muss dort stehen, sonst sucht man ihn an der Wand.
   assert.match(abschiedHinweis(true), /Einstellungen/);
   assert.match(abschiedHinweis(false), /antippen/i);
+});
+
+// --- Abhakliste --------------------------------------------------------------------------------
+
+test('Der Haken haengt am Text, nicht an der Position', () => {
+  // Wer einen Punkt in der Mitte einfuegt, haette sonst alle Haken darunter um eins
+  // verschoben -- "Saugen" waere erledigt, weil darueber eine Zeile dazugekommen ist.
+  assert.strictEqual(hakenSchluessel('  Alle   Türen  verschließen '), 'alle türen verschließen');
+  assert.strictEqual(hakenSchluessel('Fensterläden zu'), hakenSchluessel('fensterläden   ZU'));
+  // Wird ein Punkt umformuliert, faellt sein Haken weg -- es ist dann eine andere Aufgabe.
+  assert.notStrictEqual(hakenSchluessel('Fenster zu'), hakenSchluessel('Fenster kippen'));
+  assert.strictEqual(hakenSchluessel(null), '');
+});
+
+test('Jeder Termin hat seine eigenen Haken', () => {
+  // Die naechste Abreise faengt mit einer leeren Liste an, ohne dass jemand aufraeumt.
+  const a = hakenSpeicherName('2026-09-12T16:00:00.000Z');
+  const b = hakenSpeicherName('2026-10-02T16:00:00.000Z');
+  assert.notStrictEqual(a, b);
+  // Ohne Termin (Testmodus) ein fester Name -- Ausprobieren darf keine echte Abreise ueberschreiben.
+  assert.strictEqual(hakenSpeicherName(null), hakenSpeicherName(''));
+  assert.notStrictEqual(hakenSpeicherName(null), a);
 });

@@ -234,13 +234,47 @@ body { background: var(--page-bg-image, none) center/cover fixed, var(--bg); }
 
 /* Die Karten: ein eigenes kleines Raster, das sich nach der Anzahl richtet. Sie sollen
    BEDIENBAR bleiben -- deshalb faengt nur die linke Haelfte das Wegtippen ab. */
+/* DASSELBE Raster wie das Dashboard (6x6). Die Karten bringen ihren Platz aus dem
+   Unterdashboard mit -- mit weniger Spalten zeigt "grid-column: 4 / span 3" ins Leere, der
+   Browser haengt stillschweigend Spalten an, und die naechste Karte steht halb ausserhalb
+   des Bildschirms. Die Zahlen stehen auch in ABSCHIED_SPALTEN/ABSCHIED_ZEILEN; ein Test
+   vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt, sondern genau das. */
 .abschiedsschirm .ab-karten {
-  display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(0, 1fr);
-  gap: 1.6vh; height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1.2vh; height: 100%; min-height: 0; overflow: hidden;
 }
 .abschiedsschirm .ab-karten .card { min-height: 0; }
 .abschiedsschirm .ab-leer { grid-column: 1 / -1; align-self: center; text-align: center;
   color: rgba(243, 241, 247, 0.6); font-size: 1.8vh; }
+
+/* Die Abhakliste. Eine Abreiseliste wird abgearbeitet, nicht gelesen -- als blosse
+   Stichpunkte muss man sich selbst merken, wo man war, und genau dabei bleibt das Fenster im
+   Bad zu. Farben ausdruecklich hier und nicht auf .as-text: Diese Klasse traegt nur
+   Markdown-Regeln und wird auch von der themenabhaengigen Ankuendigungsbox benutzt. */
+.abschiedsschirm .ab-text.ab-liste ul { list-style: none; margin: 0.5vh 0 0; padding: 0; }
+.abschiedsschirm .ab-punkt {
+  display: flex; align-items: flex-start; gap: 1.4vh;
+  padding: 0.9vh 0; cursor: pointer;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+.abschiedsschirm .ab-kaestchen {
+  flex: none; width: 2.6vh; height: 2.6vh; margin-top: 0.25vh; box-sizing: border-box;
+  border: 0.25vh solid rgba(243, 241, 247, 0.45); border-radius: 0.6vh;
+  position: relative;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+/* Der Haken ist gezeichnet, nicht geschrieben: Ein Zeichen aus einer Schrift sitzt in jeder
+   Schriftgroesse woanders, und auf einer Wand faellt genau das auf. */
+.abschiedsschirm .ab-kaestchen::after {
+  content: ''; position: absolute; left: 32%; top: 6%;
+  width: 26%; height: 58%; border: solid #6ee7a8; border-width: 0 0.25vh 0.25vh 0;
+  transform: rotate(42deg) scale(0.4); transform-origin: center;
+  opacity: 0; transition: opacity 140ms ease, transform 140ms ease;
+}
+.abschiedsschirm .ab-erledigt .ab-kaestchen { border-color: #6ee7a8; background: rgba(110, 231, 168, 0.14); }
+.abschiedsschirm .ab-erledigt .ab-kaestchen::after { opacity: 1; transform: rotate(42deg) scale(1); }
+.abschiedsschirm .ab-erledigt { opacity: 0.42; text-decoration: line-through; }
 
 @media (max-width: 900px) {
   .abschiedsschirm .ab-inhalt { grid-template-columns: 1fr; gap: 2vh; padding: 4vh 5vw; }

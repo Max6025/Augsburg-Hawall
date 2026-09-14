@@ -485,6 +485,29 @@
       : 'Zum Ausblenden antippen';
   }
 
+  /**
+   * Der Schluessel, unter dem ein Haken gemerkt wird -- der Punkt selbst, normalisiert.
+   *
+   * Bewusst der TEXT und nicht die Position: Wer einen Punkt in der Mitte einfuegt, haette
+   * sonst alle Haken darunter um eins verschoben -- "Saugen" waere ploetzlich erledigt, weil
+   * darueber eine Zeile dazugekommen ist. Wird ein Punkt umformuliert, faellt sein Haken weg,
+   * und das ist richtig so: Es ist dann eine andere Aufgabe.
+   */
+  function hakenSchluessel(text) {
+    return String(text == null ? '' : text).replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  /**
+   * Wo die Haken eines Termins liegen.
+   *
+   * Je Termin ein eigener Eintrag: Die naechste Abreise faengt mit einer leeren Liste an, ohne
+   * dass jemand aufraeumen muss. Im Testmodus laeuft kein Termin -- dort ein fester Name,
+   * damit das Ausprobieren nicht die Haken einer echten Abreise ueberschreibt.
+   */
+  function hakenSpeicherName(fensterStart) {
+    return 'abschied-haken:' + (fensterStart || 'test');
+  }
+
   function Abschiedsschirm(wurzel, optionen) {
     const opt = optionen || {};
     this.wurzel = wurzel;
@@ -532,9 +555,95 @@
   Abschiedsschirm.prototype._animationStoppen = Ankunftsschirm.prototype._animationStoppen;
 
   Abschiedsschirm.prototype.inhaltSetzen = function (inhalt) {
+    // Der Schirm wird alle zehn Sekunden geprueft. Wuerde hier jedes Mal neu geschrieben,
+    // waeren gesetzte Haken nach spaetestens zehn Sekunden wieder weg -- man haekt ab und
+    // sieht zu, wie es sich zurueckstellt. Nur bei echter Aenderung anfassen.
+    // Der Termin gehoert in die Signatur: Bei der naechsten Abreise muss die Liste neu
+    // gebaut werden, sonst stehen dort noch die Haken der letzten. Und er muss HIER
+    // gesetzt werden, nicht erst in zeigen(): Aufgerufen wird zuerst diese Methode, und
+    // sie liest die Haken bereits.
+    this.fensterStart = inhalt.fensterStart || this.fensterStart || null;
+    const signatur = [this.fensterStart || '', inhalt.ueberschrift || '',
+      inhalt.text || '', inhalt.testmodus ? '1' : '0'].join('|');
+    if (signatur === this._inhaltSignatur) return;
+    this._inhaltSignatur = signatur;
+
     this.wurzel.querySelector('.ab-ueberschrift').innerHTML = inlineMarkdown(inhalt.ueberschrift || '');
     this.wurzel.querySelector('.ab-text').innerHTML = markdown(inhalt.text || '');
     this.wurzel.querySelector('.ab-hinweis').textContent = abschiedHinweis(inhalt.testmodus);
+    this._checklisteBauen();
+  };
+
+  /**
+   * Macht aus den Aufzaehlungspunkten eine echte Abhakliste.
+   *
+   * Eine Abreiseliste wird abgearbeitet, nicht gelesen. Als blosse Stichpunkte muss man sich
+   * selbst merken, wo man war -- und genau dabei bleibt das Fenster im Bad zu.
+   *
+   * Gebaut wird aus dem fertigen Markdown statt aus einem zweiten Textparser: Fett, Kursiv und
+   * verschachtelte Listen sollen weiter funktionieren, und zwei Parser fuer dieselbe Sprache
+   * laufen frueher oder spaeter auseinander.
+   */
+  Abschiedsschirm.prototype._checklisteBauen = function () {
+    const text = this.wurzel.querySelector('.ab-text');
+    const punkte = text.querySelectorAll('li');
+    if (!punkte.length) return;
+
+    text.classList.add('ab-liste');
+    const gesetzt = this._hakenLesen();
+
+    punkte.forEach((li) => {
+      const schluessel = hakenSchluessel(li.textContent);
+      li.className = 'ab-punkt';
+      li.setAttribute('role', 'checkbox');
+      li.dataset.schluessel = schluessel;
+
+      const kaestchen = document.createElement('span');
+      kaestchen.className = 'ab-kaestchen';
+      kaestchen.setAttribute('aria-hidden', 'true');
+      li.prepend(kaestchen);
+
+      this._hakenAnzeigen(li, gesetzt.indexOf(schluessel) >= 0);
+
+      li.addEventListener('click', (ev) => {
+        // Sonst blendet derselbe Tipp den ganzen Schirm aus: Die linke Haelfte ist die
+        // Wegtipp-Flaeche, und die Liste liegt darin.
+        ev.stopPropagation();
+        this._hakenUmschalten(li);
+      });
+    });
+  };
+
+  Abschiedsschirm.prototype._hakenAnzeigen = function (li, an) {
+    li.classList.toggle('ab-erledigt', !!an);
+    li.setAttribute('aria-checked', an ? 'true' : 'false');
+  };
+
+  Abschiedsschirm.prototype._hakenUmschalten = function (li) {
+    const schluessel = li.dataset.schluessel;
+    const gesetzt = this._hakenLesen();
+    const stelle = gesetzt.indexOf(schluessel);
+    if (stelle >= 0) gesetzt.splice(stelle, 1); else gesetzt.push(schluessel);
+    this._hakenAnzeigen(li, stelle < 0);
+    this._hakenSchreiben(gesetzt);
+  };
+
+  // Die Haken liegen im Browser des Geraets, nicht auf dem Server. Sie gehoeren dem, der vor
+  // der Wand steht und abarbeitet -- und ein halb abgehakter Zettel ist nichts, was eine
+  // Sicherung ueberleben muesste. Jeder Zugriff gekapselt: In einem privaten Fenster oder bei
+  // gesperrtem Speicher wirft schon das Lesen, und daran darf der ganze Schirm nicht scheitern.
+  Abschiedsschirm.prototype._hakenLesen = function () {
+    try {
+      const roh = window.localStorage.getItem(hakenSpeicherName(this.fensterStart));
+      const liste = JSON.parse(roh || '[]');
+      return Array.isArray(liste) ? liste.map(String) : [];
+    } catch (e) { return []; }
+  };
+
+  Abschiedsschirm.prototype._hakenSchreiben = function (liste) {
+    try {
+      window.localStorage.setItem(hakenSpeicherName(this.fensterStart), JSON.stringify(liste));
+    } catch (e) { /* dann halten die Haken nur bis zum Neuaufbau -- besser als ein Absturz */ }
   };
 
   /** Die Flaeche fuer die Karten -- gefuellt wird sie vom Dashboard, das Karten bauen kann. */
@@ -611,7 +720,7 @@
     this.wurzel.classList.remove('ta-sichtbar');
   };
 
-  const api = { sollAnzeigen, sollAbschiedZeigen, abschiedHinweis, markdown, inlineMarkdown, bildFolge, textFuerDrehung,
+  const api = { sollAnzeigen, sollAbschiedZeigen, abschiedHinweis, hakenSchluessel, hakenSpeicherName, markdown, inlineMarkdown, bildFolge, textFuerDrehung,
     Ankunftsschirm, Abschiedsschirm, Terminankuendigung, ANZAHL_FORMEN, ANKUENDIGUNG_MS,
     ABSCHIED_TON_VON, ABSCHIED_TON_BIS };
   global.AnkunftsschirmModul = api;
