@@ -230,8 +230,13 @@
     el.style.width = groesse + 'vw';
     el.style.height = groesse * z(0.7, 1.25) + 'vw';
     el.style.setProperty('--as-weich', Math.round(groesse * z(1.1, 1.9)) + 'px');
+    // Der Farbausschnitt gehoert dem Schirm, nicht der Funktion: Der Ankunftsschirm nimmt den
+    // ganzen Farbkreis, der Abschiedsschirm nur den kuehlen Teil. So bleibt die Geburt einer
+    // Form fuer beide dieselbe Rechnung.
+    const tonVon = this.tonVon === undefined ? 0 : this.tonVon;
+    const tonBis = this.tonBis === undefined ? 360 : this.tonBis;
     el.style.background = 'radial-gradient(circle at ' + z(30, 70) + '% ' + z(30, 70) + '%, ' +
-      'hsl(' + z(0, 360) + ' ' + z(72, 96) + '% ' + z(52, 68) + '%), transparent 70%)';
+      'hsl(' + z(tonVon, tonBis) + ' ' + z(72, 96) + '% ' + z(52, 68) + '%), transparent 70%)';
     el.style.transition = 'none';
     el.style.left = z(-15, 100) + 'vw';
     el.style.top = z(-15, 100) + 'vh';
@@ -397,6 +402,136 @@
     this._animationStoppen();
   };
 
+  // --- Abschiedsschirm ---------------------------------------------------------------------------
+  //
+  // Das Gegenstueck zum Ankunftsschirm: am LETZTEN Tag eines Aufenthalts. Dieselbe Buehne,
+  // dieselben wandernden Farbwolken -- aber kuehl statt warm, und mit KARTEN.
+  //
+  // Warum kuehl: Die beiden Schirme sollen sich nicht verwechseln lassen. Wer morgens an der
+  // Wand vorbeigeht, soll am Farbton erkennen, ob heute jemand kommt oder jemand faehrt, ohne
+  // die Ueberschrift zu lesen.
+  //
+  // Warum mit Karten, obwohl der Ankunftsschirm ausdruecklich keine hat: Ein ankommender Gast
+  // wird begruesst und soll nichts tun. Ein abreisender hat eine Liste -- Muell, Fenster,
+  // Schluessel -- und will dabei sehen, wie das Wetter auf der Fahrt wird und wann er los
+  // muss. Das sind Karten, und die gibt es hier ohnehin schon.
+  //
+  // Welche Karten, entscheidet der Nutzer: Der Schirm zeigt die Karten eines Unterdashboards.
+  // Ein zweiter Editor waere derselbe Editor noch einmal.
+
+  // Kuehler Ausschnitt des Farbkreises: Blau ueber Tuerkis bis Violett. Der Ankunftsschirm
+  // nimmt den ganzen Kreis.
+  const ABSCHIED_TON_VON = 175;
+  const ABSCHIED_TON_BIS = 285;
+
+  /**
+   * Soll der Abschiedsschirm gerade sichtbar sein?
+   *
+   * @param {object} p
+   * @param {boolean} p.aktiviert     Einstellung
+   * @param {object|null} p.verlauf   { letzterTag, mehrtaegig } aus der Steuerung
+   * @param {object|null} p.anzeigefenster { start } als ISO-Zeichenkette
+   * @param {string} p.verworfenFuer  Beginn des Fensters, fuer das weggetippt wurde
+   * @param {number} p.abStunde       ab welcher vollen Stunde des letzten Tages
+   * @param {boolean} p.ankunftSichtbar  der Ankunftsschirm hat Vorrang
+   * @param {Date}   p.jetzt
+   */
+  function sollAbschiedZeigen(p) {
+    if (!p || !p.aktiviert) return false;
+    // Zwei Vollbilder uebereinander waeren ein Fehler, kein Entwurf.
+    if (p.ankunftSichtbar) return false;
+
+    const fenster = p.anzeigefenster;
+    if (!fenster || !fenster.start) return false;
+
+    // Nur bei mehrtaegigen Terminen. Bei einem Termin, der ohnehin nur heute laeuft, waere
+    // "letzter Tag" derselbe Tag wie die Ankunft -- eine Verabschiedung am Ankunftstag ist
+    // keine Information, sondern ein Fehler.
+    const v = p.verlauf;
+    if (!v || !v.mehrtaegig || !v.letzterTag) return false;
+
+    if (p.verworfenFuer && p.verworfenFuer === fenster.start) return false;
+
+    // Vor dieser Stunde schlaeft man noch. 0 heisst: den ganzen letzten Tag.
+    const ab = Number(p.abStunde);
+    if (ab > 0 && (p.jetzt || new Date()).getHours() < ab) return false;
+
+    return true;
+  }
+
+  function Abschiedsschirm(wurzel, optionen) {
+    const opt = optionen || {};
+    this.wurzel = wurzel;
+    this.beimWegtippen = opt.beimWegtippen || function () {};
+    this.formen = [];
+    this.sichtbar = false;
+    this.fensterStart = null;
+    this.tonVon = ABSCHIED_TON_VON;
+    this.tonBis = ABSCHIED_TON_BIS;
+    this._bauen();
+  }
+
+  Abschiedsschirm.prototype._bauen = function () {
+    this.wurzel.innerHTML =
+      '<div class="as-buehne"></div>' +
+      '<div class="as-raster"></div>' +
+      '<div class="ab-inhalt">' +
+        '<div class="ab-links">' +
+          '<h1 class="as-ueberschrift ab-ueberschrift"></h1>' +
+          '<p class="as-text ab-text"></p>' +
+          '<p class="ab-hinweis">Zum Ausblenden antippen</p>' +
+        '</div>' +
+        '<div class="ab-karten"></div>' +
+      '</div>';
+
+    const buehne = this.wurzel.querySelector('.as-buehne');
+    for (let i = 0; i < ANZAHL_FORMEN; i++) {
+      const el = document.createElement('span');
+      el.className = 'as-form';
+      buehne.appendChild(el);
+      this.formen.push({ el, timerAus: 0, timerNeu: 0 });
+    }
+
+    // Nur die linke Haelfte tippt weg. Die Karten sollen BEDIENBAR bleiben -- wer das Licht
+    // ausmacht, will nicht, dass dabei der halbe Schirm verschwindet.
+    this.wurzel.querySelector('.ab-links').addEventListener('click', () => {
+      if (!this.sichtbar) return;
+      this.beimWegtippen(this.fensterStart);
+    });
+  };
+
+  // Dieselbe Geburt wie beim Ankunftsschirm, nur im kuehlen Ausschnitt des Farbkreises.
+  Abschiedsschirm.prototype._gebaeren = Ankunftsschirm.prototype._gebaeren;
+  Abschiedsschirm.prototype._animationStarten = Ankunftsschirm.prototype._animationStarten;
+  Abschiedsschirm.prototype._animationStoppen = Ankunftsschirm.prototype._animationStoppen;
+
+  Abschiedsschirm.prototype.inhaltSetzen = function (inhalt) {
+    this.wurzel.querySelector('.ab-ueberschrift').innerHTML = inlineMarkdown(inhalt.ueberschrift || '');
+    this.wurzel.querySelector('.ab-text').innerHTML = markdown(inhalt.text || '');
+  };
+
+  /** Die Flaeche fuer die Karten -- gefuellt wird sie vom Dashboard, das Karten bauen kann. */
+  Abschiedsschirm.prototype.kartenFlaeche = function () {
+    return this.wurzel.querySelector('.ab-karten');
+  };
+
+  Abschiedsschirm.prototype.istSichtbar = function () { return !!this.sichtbar; };
+
+  Abschiedsschirm.prototype.zeigen = function (fensterStart) {
+    this.fensterStart = fensterStart || null;
+    if (this.sichtbar) return;
+    this.sichtbar = true;
+    this.wurzel.classList.add('as-sichtbar');
+    this._animationStarten();
+  };
+
+  Abschiedsschirm.prototype.verbergen = function () {
+    if (!this.sichtbar) return;
+    this.sichtbar = false;
+    this.wurzel.classList.remove('as-sichtbar');
+    this._animationStoppen();
+  };
+
   // --- Terminankuendigung ---------------------------------------------------------------------
   //
   // Beginnt ein Termin, faellt das Panel nicht mit der Tuer ins Haus. Ablauf: schwarz, dann
@@ -449,7 +584,9 @@
     this.wurzel.classList.remove('ta-sichtbar');
   };
 
-  const api = { sollAnzeigen, markdown, inlineMarkdown, bildFolge, textFuerDrehung, Ankunftsschirm, Terminankuendigung, ANZAHL_FORMEN, ANKUENDIGUNG_MS };
+  const api = { sollAnzeigen, sollAbschiedZeigen, markdown, inlineMarkdown, bildFolge, textFuerDrehung,
+    Ankunftsschirm, Abschiedsschirm, Terminankuendigung, ANZAHL_FORMEN, ANKUENDIGUNG_MS,
+    ABSCHIED_TON_VON, ABSCHIED_TON_BIS };
   global.AnkunftsschirmModul = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

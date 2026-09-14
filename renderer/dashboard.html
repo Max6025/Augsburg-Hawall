@@ -98,6 +98,9 @@
   <!-- Ankunftsschirm: Vollbild vor dem Dashboard zu Beginn eines Anzeigefensters.
        Inhalt und Animation baut shared/ankunftsschirm.js selbst auf. -->
   <div class="ankunftsschirm" id="ankunftsschirm"></div>
+  <!-- Das Gegenstueck fuer den letzten Tag. Gleiche Buehne, kuehle Farben, mit Karten.
+       Inhalt und Animation baut shared/ankunftsschirm.js selbst auf. -->
+  <div class="ankunftsschirm abschiedsschirm" id="abschiedsschirm"></div>
   <!-- Steht dauerhaft am Rand, solange ein mehrtaegiger Termin laeuft. Nicht als Meldung,
        die man wegtippt: Wer sie weggetippt hat, sieht am naechsten Morgen nicht mehr,
        dass heute abgereist wird. -->
@@ -1390,10 +1393,90 @@ let panelControlActive = false;
 
 // --- Ankunftsschirm --------------------------------------------------------------------------
 let ankunftsschirm = null;
+let abschiedsschirm = null;
+let abschiedKartenStand = '';   // woraus die Karten zuletzt gebaut wurden
 let terminankuendigung = null;
 let letzterSteuerungszustand = null;
 let angekuendigtesFenster = null;   // Beginn des Fensters, das bereits angekuendigt wurde
 let ersterZustand = true;           // der allererste Zustand kuendigt nichts an
+
+// --- Abschiedsschirm: der letzte Tag ----------------------------------------------------------
+//
+// Dieselbe Buehne wie beim Ankunftsschirm, aber kuehl statt warm -- und mit Karten. Ein
+// ankommender Gast wird begruesst und soll nichts tun; ein abreisender hat eine Liste und
+// will dabei sehen, wie das Wetter auf der Fahrt wird.
+//
+// Welche Karten, sagt die Einstellung: die eines Unterdashboards. Ein zweiter Editor waere
+// derselbe Editor noch einmal.
+async function abschiedPruefen() {
+  if (!abschiedsschirm || !config) return;
+  const zustand = letzterSteuerungszustand;
+  const zeigen = AnkunftsschirmModul.sollAbschiedZeigen({
+    aktiviert: !!config.abschiedEnabled,
+    verlauf: zustand ? zustand.verlauf : null,
+    anzeigefenster: zustand ? zustand.activeWindow : null,
+    verworfenFuer: config.abschiedDismissedFor || '',
+    abStunde: config.abschiedAbStunde,
+    ankunftSichtbar: !!(ankunftsschirm && ankunftsschirm.istSichtbar()),
+    jetzt: new Date()
+  });
+  if (!zeigen) return abschiedsschirm.verbergen();
+
+  abschiedsschirm.inhaltSetzen({
+    ueberschrift: config.abschiedHeading || 'Gute Heimreise',
+    text: config.abschiedText || ''
+  });
+  await abschiedKartenBauen();
+  abschiedsschirm.zeigen(zustand && zustand.activeWindow ? zustand.activeWindow.start : null);
+}
+
+/**
+ * Baut die Karten des gewaehlten Unterdashboards auf den Schirm.
+ *
+ * Neu gebaut wird nur, wenn sich wirklich etwas geaendert hat -- sonst liefe hier bei jedem
+ * Zustandswechsel ein kompletter Neuaufbau, und der Schirm steht unter Umstaenden Stunden.
+ */
+async function abschiedKartenBauen() {
+  const flaeche = abschiedsschirm.kartenFlaeche();
+  const id = String(config.abschiedDashboard || '').trim();
+  if (!id) { flaeche.innerHTML = ''; abschiedKartenStand = ''; return; }
+
+  let layout = abschiedLayout;
+  if (!layout) {
+    try {
+      const d = await fetch(`${API}/api/dashboards/${encodeURIComponent(id)}`).then(r => r.json());
+      layout = abschiedLayout = (d && d.ok && d.dashboard && d.dashboard.layout) || [];
+    } catch (e) {
+      flaeche.innerHTML = '';
+      return;
+    }
+  }
+  if (!layout.length) {
+    flaeche.innerHTML = '<div class="ab-leer">Für den Abschiedsschirm ist noch kein Dashboard mit Karten gewählt.</div>';
+    return;
+  }
+
+  const stand = zustandsSignatur(layout);
+  if (stand === abschiedKartenStand && flaeche.children.length) return;
+  abschiedKartenStand = stand;
+
+  flaeche.innerHTML = '';
+  for (const entry of layout.filter(e => !e.unterleiste)) {
+    const type = entry.card_type || defaultCardType(entry.entity_id, statesById[entry.entity_id]);
+    const ohneZustand = ['clock', 'navigate', 'energy', 'photo', 'quicktiles'].includes(type);
+    const s = ohneZustand ? null : statesById[entry.entity_id];
+    if (!ohneZustand && !s) continue;
+    let history;
+    if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, (entry.settings || {}).graphHours);
+    flaeche.appendChild(buildCard(entry.entity_id, s, type, resolveSpan(entry, type), {
+      editable: false, history, apiBase: API, statesById, namen: haNamen,
+      torZeiten: torZeiten[entry.entity_id],
+      settings: entry.settings || {}, callbacks: dashboardRueckrufe()
+    }));
+  }
+}
+
+let abschiedLayout = null;
 
 function ankunftsschirmPruefen() {
   if (!ankunftsschirm || !config) return;
@@ -1632,6 +1715,8 @@ function applyControlState(state) {
 
   verlaufAnzeigen(state.verlauf);
   ankunftsschirmPruefen();
+  // Nach dem Ankunftsschirm, nicht davor: Er hat Vorrang, und sollAbschiedZeigen() fragt ihn.
+  abschiedPruefen();
   panelControlActive = !!state.configured;
 
   const overlay = $('haErrorOverlay');
@@ -1838,9 +1923,22 @@ function uhrenKartenAktualisieren() {
   initCornerEscapeGesture();
   ankunftsschirmAufbauen();
   terminankuendigung = new AnkunftsschirmModul.Terminankuendigung($('terminankuendigung'));
+  abschiedsschirm = new AnkunftsschirmModul.Abschiedsschirm($('abschiedsschirm'), {
+    beimWegtippen: async (fensterStart) => {
+      abschiedsschirm.verbergen();
+      if (fensterStart) config.abschiedDismissedFor = fensterStart;
+      try {
+        await fetch(`${API}/api/abschied/dismiss`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ windowStart: fensterStart || '' })
+        });
+      } catch (e) { /* dann kommt er beim naechsten Abruf noch einmal -- kein Schaden */ }
+    }
+  });
   // Der Steuerungszustand wird nur bei Aenderungen geschickt -- das Ablaufen der Anzeigedauer
   // ist aber keine Aenderung. Deshalb zusaetzlich ein eigener Takt.
   setInterval(ankunftsschirmPruefen, 60000);
+  setInterval(abschiedPruefen, 60000);
 
   checkNightMode();
   // Erst nach dem Aufbau: Das Bild wird nur gebraucht, wenn die App mal NICHT laeuft -- es hat

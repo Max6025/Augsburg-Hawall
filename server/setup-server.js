@@ -399,6 +399,13 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       welcomeImageSeconds: store.get('welcomeImageSeconds') === undefined ? 8 : store.get('welcomeImageSeconds'),
       welcomeHours: store.get('welcomeHours') === undefined ? 5 : store.get('welcomeHours'),
       welcomeDismissedFor: store.get('welcomeDismissedFor') || '',
+      // Abschiedsschirm: das Gegenstueck zum Ankunftsschirm, am letzten Tag.
+      abschiedEnabled: !!store.get('abschiedEnabled'),
+      abschiedHeading: store.get('abschiedHeading') || '',
+      abschiedText: store.get('abschiedText') || '',
+      abschiedDashboard: store.get('abschiedDashboard') || '',
+      abschiedAbStunde: store.get('abschiedAbStunde') === undefined ? 0 : store.get('abschiedAbStunde'),
+      abschiedDismissedFor: store.get('abschiedDismissedFor') || '',
       welcomeErzwungenBis: store.get('welcomeErzwungenBis') || 0,
       // Standard AN -- die Bewegung ist der sichtbare Teil des Designs.
       // Wie gross das Panel wirklich ist -- der Editor zeichnet seine Arbeitsflaeche danach.
@@ -440,7 +447,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       welcomeImageEntity2, welcomeImageSeconds, welcomeImage2Quelle,
       welcomeTestmodus, welcomeTestSekunden, hintergrundBewegung, rueckkehrSekunden,
       ankunftEnabled, ankunftEntity, ankunftZuhause, ankunftNachMinuten,
-      abwesendEnabled, abwesendHelligkeit, abwesendSekunden, desktopHintergrund
+      abwesendEnabled, abwesendHelligkeit, abwesendSekunden, desktopHintergrund,
+      abschiedEnabled, abschiedHeading, abschiedText, abschiedDashboard, abschiedAbStunde
     } = req.body || {};
     const finalHaUrl = haUrl || store.get('haUrl');
     const finalToken = token || store.get('token');
@@ -521,6 +529,14 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     }
     if (desktopHintergrund !== undefined) store.set('desktopHintergrund', !!desktopHintergrund);
 
+    if (abschiedEnabled !== undefined) store.set('abschiedEnabled', !!abschiedEnabled);
+    if (abschiedHeading !== undefined) store.set('abschiedHeading', String(abschiedHeading || ''));
+    if (abschiedText !== undefined) store.set('abschiedText', String(abschiedText || ''));
+    if (abschiedDashboard !== undefined) store.set('abschiedDashboard', String(abschiedDashboard || '').trim());
+    if (abschiedAbStunde !== undefined) {
+      store.set('abschiedAbStunde', Math.max(0, Math.min(23, parseInt(abschiedAbStunde, 10) || 0)));
+    }
+
     // Mindestlaenge, damit das Feld nicht versehentlich leer bleibt und der Schutz still ausfaellt.
     if (setupCode !== undefined && String(setupCode).length > 0) {
       const code = String(setupCode);
@@ -551,6 +567,15 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     // trotzdem muss sich der Schirm wegtippen lassen.
     if (start) store.set('welcomeDismissedFor', start);
     store.delete('welcomeErzwungenBis');
+    res.json({ ok: true });
+  });
+
+  // Weggetippt gilt fuer genau diesen Termin -- wie beim Ankunftsschirm. Eigene Route aus
+  // demselben Grund: ueber /api/config wuerde onConfigSaved() die Ansicht neu laden, und der
+  // Schirm waere sofort wieder da.
+  app.post('/api/abschied/dismiss', (req, res) => {
+    const start = String((req.body && req.body.windowStart) || '');
+    if (start) store.set('abschiedDismissedFor', start);
     res.json({ ok: true });
   });
 

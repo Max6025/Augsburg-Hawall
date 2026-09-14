@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Abschiedsschirm – Vorschau</title>
+<!--
+  Der Abschiedsschirm mit erfundenem Inhalt und echten Karten -- ohne Home Assistant, ohne
+  Electron, ohne Termin. Lädt dieselbe CSS-Datei und dieselben Module wie das Dashboard.
+
+  Öffnen: direkt im Browser. ?hell für das helle Design (die Bühne bleibt dunkel, das ist so).
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  /* Der Schirm ist im Betrieb ein Overlay über dem Dashboard. Hier soll er einfach die
+     ganze Fläche haben -- deshalb sichtbar schalten und nichts darunter legen. */
+</style>
+</head>
+<body class="wandanzeige">
+<div class="ankunftsschirm abschiedsschirm as-sichtbar" id="abschiedsschirm"></div>
+
+<script src="../../renderer/shared/dashboard-render.js"></script>
+<script src="../../renderer/shared/akku.js"></script>
+<script src="../../renderer/shared/alarm.js"></script>
+<script src="../../renderer/shared/ankunftsschirm.js"></script>
+<script>
+const Z = (state, attributes = {}) => ({ state, attributes });
+DashboardRender.applyCustomTheme(DashboardRender.DEFAULT_THEME);
+if (new URLSearchParams(location.search).has('hell')) document.body.classList.add('light-theme');
+
+const schirm = new AnkunftsschirmModul.Abschiedsschirm(document.getElementById('abschiedsschirm'), {
+  beimWegtippen: () => console.log('weggetippt')
+});
+
+schirm.inhaltSetzen({
+  ueberschrift: 'Gute **Heimreise**',
+  text: 'Vor der Abfahrt bitte:\n\n- Fenster und Türen schließen\n- Müll mitnehmen\n- Schlüssel in den Briefkasten\n\nWir haben uns gefreut, dass ihr da wart.'
+});
+
+// Ein paar echte Karten, wie sie aus einem Unterdashboard kämen.
+const KARTEN = [
+  ['sensor.aussen', 'temperature', Z('19.4', { friendly_name: 'Außen', unit_of_measurement: '°C' }), 1, 1],
+  ['clock:1', 'clock', null, 1, 1],
+  ['cover.tor', 'fluegeltor', Z('closed', { friendly_name: 'Einfahrt', device_class: 'gate' }), 1, 1],
+  ['alarm_control_panel.haus', 'alarm', Z('disarmed', { friendly_name: 'Alarmanlage', supported_features: 7 }), 1, 1]
+];
+
+const flaeche = schirm.kartenFlaeche();
+KARTEN.forEach(([id, typ, zustand, c, r]) => {
+  flaeche.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: c, rows: r }, {
+    editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: {}
+  }));
+});
+
+schirm.zeigen('2026-09-12T14:00:00.000Z');
+</script>
+</body>
+</html>

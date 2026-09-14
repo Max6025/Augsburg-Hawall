@@ -96,6 +96,12 @@ async function load() {
   ankunftEntitaetenLaden();
 
   // Ankunftsschirm
+  $('abschiedEnabled').checked = !!configRes.abschiedEnabled;
+  $('abschiedHeading').value = configRes.abschiedHeading || '';
+  $('abschiedText').value = configRes.abschiedText || '';
+  $('abschiedAbStunde').value = configRes.abschiedAbStunde === undefined ? 0 : configRes.abschiedAbStunde;
+  abschiedDashboardsLaden(configRes.abschiedDashboard || '');
+
   $('welcomeEnabled').checked = !!configRes.welcomeEnabled;
   $('welcomeHeading').value = configRes.welcomeHeading || '';
   $('welcomeText').value = configRes.welcomeText || '';
@@ -323,6 +329,11 @@ function alleFelder() {
     calendarLeadMinutes: zahl('calLead', 0),
     calendarTrailMinutes: zahl('calTrail', 0),
 
+    abschiedEnabled: $('abschiedEnabled').checked,
+    abschiedHeading: $('abschiedHeading').value,
+    abschiedText: $('abschiedText').value,
+    abschiedDashboard: $('abschiedDashboard').value,
+    abschiedAbStunde: zahl('abschiedAbStunde', 0),
     welcomeEnabled: $('welcomeEnabled').checked,
     welcomeHeading: $('welcomeHeading').value,
     welcomeText: $('welcomeText').value,
@@ -495,4 +506,25 @@ if (tonTestBtn) {
       tonTestBtn.disabled = false;
     }
   });
+}
+
+// --- Die Unterdashboards fuer den Abschiedsschirm ----------------------------------------------
+//
+// Der Schirm zeigt die Karten eines Unterdashboards. Ein zweiter Karten-Editor waere derselbe
+// Editor noch einmal -- und der zweite waere der, den niemand pflegt.
+async function abschiedDashboardsLaden(gewaehlt) {
+  const feld = document.getElementById('abschiedDashboard');
+  if (!feld) return;
+  let liste = [];
+  try {
+    const d = await fetch('/api/dashboards').then(r => r.json());
+    liste = (d && d.ok && d.dashboards) ? d.dashboards : [];
+  } catch (e) { /* dann bleibt nur "keine Karten" */ }
+  feld.innerHTML = '<option value="">\u2013 keine Karten \u2013</option>'
+    + liste.map(x => '<option value="' + x.id + '">' + x.name + '</option>').join('');
+  feld.value = gewaehlt || '';
+  if (!liste.length) {
+    feld.insertAdjacentHTML('beforeend',
+      '<option value="" disabled>\u2013 noch kein Unterdashboard angelegt \u2013</option>');
+  }
 }

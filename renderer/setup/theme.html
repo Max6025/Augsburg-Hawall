@@ -395,6 +395,51 @@
 
     <details class="einstellungsblock">
       <summary>
+        <span class="eb-titel">Abschiedsschirm</span>
+        <span class="eb-unter">Der letzte Tag, mit Karten</span>
+      </summary>
+      <div class="eb-inhalt">
+    <p class="note">Das Gegenstück zum Ankunftsschirm: eine Vollbildseite am <strong>letzten
+      Tag</strong> eines mehrtägigen Termins. Gleiche Bühne, gleiche wandernden Farbwolken –
+      aber <strong>kühl statt warm</strong>, damit man schon am Farbton sieht, ob heute jemand
+      kommt oder jemand fährt.</p>
+    <p class="note">Anders als der Ankunftsschirm zeigt er <strong>Karten</strong>: Ein
+      ankommender Gast wird begrüßt und soll nichts tun, ein abreisender hat eine Liste – Müll,
+      Fenster, Schlüssel – und will dabei sehen, wie das Wetter auf der Fahrt wird. Welche
+      Karten, bestimmst du unten: Er zeigt die eines Unterdashboards, das du im Karten-Editor
+      ganz normal einrichtest.</p>
+    <p class="note">Antippen des <strong>Textes links</strong> blendet ihn für diesen Termin
+      aus. Die Karten rechts bleiben bedienbar – wer das Licht ausmacht, will nicht, dass dabei
+      der halbe Schirm verschwindet.</p>
+
+    <label><input type="checkbox" id="abschiedEnabled" style="width:auto; margin-right:0.5rem;">Abschiedsschirm verwenden</label>
+
+    <label style="margin-top:1rem;">Überschrift</label>
+    <input type="text" id="abschiedHeading" placeholder="Gute **Heimreise**">
+    <p class="hint-text">Wie beim Ankunftsschirm: <code>**…**</code> wird fett und rückt auf eine
+      eigene Zeile.</p>
+
+    <label style="margin-top:1rem;">Text</label>
+    <textarea id="abschiedText" rows="4" placeholder="Bitte Fenster schließen, Müll mitnehmen und den Schlüssel in den Briefkasten."></textarea>
+    <p class="hint-text">Markdown wird unterstützt – Aufzählungen mit <code>-</code> sind hier
+      besonders praktisch, eine Checkliste liest sich schneller als ein Absatz.</p>
+
+    <label style="margin-top:1rem;">Karten von diesem Unterdashboard</label>
+    <select id="abschiedDashboard"><option value="">– keine Karten –</option></select>
+    <p class="hint-text">Leg dir unter <a href="dashboards.html">Unterdashboards</a> eines an
+      (z.&nbsp;B. „Abreise“) und richte es im <a href="editor.html">Karten-Editor</a> ein. Es
+      erscheint dann hier zur Auswahl. Vier bis sechs Karten sind gut – mehr wird auf dem Schirm
+      klein.</p>
+
+    <label style="margin-top:1rem;">Erst ab dieser Uhrzeit</label>
+    <input type="number" id="abschiedAbStunde" min="0" max="23" step="1" value="0" style="max-width:140px;">
+    <p class="hint-text">Volle Stunde, 0 = den ganzen letzten Tag. Wer um 7 einträgt, bekommt ihn
+      nicht schon um Mitternacht vorgesetzt.</p>
+      </div>
+    </details>
+
+    <details class="einstellungsblock">
+      <summary>
         <span class="eb-titel">Zugangscode</span>
         <span class="eb-unter">Schutz dieser Oberfläche im Netzwerk</span>
       </summary>

@@ -34,7 +34,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
 | `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst. Läuft auch als **Live-Ansicht** unter `/live` im Browser |
-| `renderer/shared/ankunftsschirm.js` | Ankunftsschirm: `sollAnzeigen()` ist reine Entscheidung ohne DOM und ohne Uhr, der Rest ist Anzeige |
+| `renderer/shared/ankunftsschirm.js` | Ankunfts- **und** Abschiedsschirm: `sollAnzeigen()` / `sollAbschiedZeigen()` sind reine Entscheidung ohne DOM und ohne Uhr, der Rest ist Anzeige |
 | `renderer/shared/dashboard-render.js` | Kartenkatalog und Rendering; enthält auch das eingebaute Design `DEFAULT_THEME` |
 
 Die Rangfolge in `decide()` ist die einzige Stelle, an der entschieden wird, ob das Panel an
@@ -109,6 +109,19 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Neuaufbau aus. Die Alarmanlage dagegen wird **nicht** gesammelt (kein 120-ms-Fenster) — wer
   heimkommt, soll auf einen hellen Bildschirm treffen und nicht auf einen Sammeltakt warten.
   Dafür steht sie auch dann in `letzteAnzeigeEntitaeten`, wenn sie auf keiner Karte liegt.
+- **Ankunfts- und Abschiedsschirm sind Geschwister, keine Zwillinge.** Beide benutzen dieselbe
+  Bühne und dieselbe Geburt einer Farbwolke — der Farb­ausschnitt hängt aber am **Objekt**
+  (`tonVon`/`tonBis`), nicht an der Funktion: Ankunft nimmt den ganzen Farbkreis, Abschied nur
+  den kühlen Teil (175–285°). Wer morgens an der Wand vorbeigeht, soll am Farbton erkennen, ob
+  heute jemand kommt oder jemand fährt, ohne die Überschrift zu lesen.
+  Drei Unterschiede sind Absicht: Der Abschiedsschirm zeigt **Karten** (ein Ankommender wird
+  begrüßt und soll nichts tun, ein Abreisender hat eine Liste), er nimmt sie aus einem
+  **Unterdashboard** (ein zweiter Karten-Editor wäre derselbe Editor noch einmal — und der
+  zweite wäre der, den niemand pflegt), und **nur der Text links tippt ihn weg**: Die Karten
+  müssen bedienbar bleiben.
+  Er erscheint **nur bei mehrtägigen Terminen**. Bei einem eintägigen wäre der „letzte Tag"
+  derselbe wie der Ankunftstag, und das Panel verabschiedete Gäste, die gerade hereingekommen
+  sind.
 - **Ganztägige Termine beginnen um Mitternacht.** Ein Anzeigefenster steht damit einen halben
   Tag, bevor jemand da ist — die Wand leuchtet gegen ein leeres Haus, und der Ankunftsschirm hat
   seine Anzeigedauer aufgebraucht, bevor der erste Gast zur Tür hereinkommt. Deshalb wartet
@@ -551,7 +564,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-383 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+392 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 
