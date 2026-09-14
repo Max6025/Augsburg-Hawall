@@ -407,6 +407,11 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       abschiedAbStunde: store.get('abschiedAbStunde') === undefined ? 0 : store.get('abschiedAbStunde'),
       abschiedDismissedFor: store.get('abschiedDismissedFor') || '',
       abschiedTestmodus: !!store.get('abschiedTestmodus'),
+      // Ruheschirm: waehrend eines Termins nicht durchgehend leuchten.
+      ruheEnabled: !!store.get('ruheEnabled'),
+      ruheMinuten: store.get('ruheMinuten') === undefined ? 3 : store.get('ruheMinuten'),
+      ruheHelligkeit: store.get('ruheHelligkeit') === undefined ? 12 : store.get('ruheHelligkeit'),
+      ruheText: store.get('ruheText') || '',
       welcomeErzwungenBis: store.get('welcomeErzwungenBis') || 0,
       // Standard AN -- die Bewegung ist der sichtbare Teil des Designs.
       // Wie gross das Panel wirklich ist -- der Editor zeichnet seine Arbeitsflaeche danach.
@@ -449,7 +454,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       welcomeTestmodus, welcomeTestSekunden, hintergrundBewegung, rueckkehrSekunden,
       ankunftEnabled, ankunftEntity, ankunftZuhause, ankunftNachMinuten,
       abwesendEnabled, abwesendHelligkeit, abwesendSekunden, desktopHintergrund,
-      abschiedEnabled, abschiedHeading, abschiedText, abschiedDashboard, abschiedAbStunde
+      abschiedEnabled, abschiedHeading, abschiedText, abschiedDashboard, abschiedAbStunde,
+      ruheEnabled, ruheMinuten, ruheHelligkeit, ruheText
     } = req.body || {};
     const finalHaUrl = haUrl || store.get('haUrl');
     const finalToken = token || store.get('token');
@@ -534,6 +540,16 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (abschiedHeading !== undefined) store.set('abschiedHeading', String(abschiedHeading || ''));
     if (abschiedText !== undefined) store.set('abschiedText', String(abschiedText || ''));
     if (abschiedDashboard !== undefined) store.set('abschiedDashboard', String(abschiedDashboard || '').trim());
+    if (ruheEnabled !== undefined) store.set('ruheEnabled', !!ruheEnabled);
+    if (ruheText !== undefined) store.set('ruheText', String(ruheText || ''));
+    if (ruheMinuten !== undefined) {
+      store.set('ruheMinuten', Math.max(1, Math.min(120, parseInt(ruheMinuten, 10) || 3)));
+    }
+    if (ruheHelligkeit !== undefined) {
+      // Nach unten begrenzt: Bei 0 waere die Aufforderung unsichtbar, und niemand wuesste,
+      // dass ein Tipp genuegt -- die Wand saehe schlicht kaputt aus.
+      store.set('ruheHelligkeit', Math.max(1, Math.min(60, parseInt(ruheHelligkeit, 10) || 12)));
+    }
     if (abschiedAbStunde !== undefined) {
       store.set('abschiedAbStunde', Math.max(0, Math.min(23, parseInt(abschiedAbStunde, 10) || 0)));
     }

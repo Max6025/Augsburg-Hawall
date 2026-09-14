@@ -34,6 +34,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
 | `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst. Läuft auch als **Live-Ansicht** unter `/live` im Browser |
+| `renderer/shared/ruheschirm.js` | Ruheschirm: hinlegen, wenn waehrend eines Termins niemand da ist — `sollRuhen()` ist reine Entscheidung |
 | `renderer/shared/ankunftsschirm.js` | Ankunfts- **und** Abschiedsschirm: `sollAnzeigen()` / `sollAbschiedZeigen()` sind reine Entscheidung ohne DOM und ohne Uhr, der Rest ist Anzeige |
 | `renderer/shared/dashboard-render.js` | Kartenkatalog und Rendering; enthält auch das eingebaute Design `DEFAULT_THEME` |
 
@@ -130,6 +131,22 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter links liegt, nicht.
   Die Zahlen stehen in `ABSCHIED_SPALTEN`/`ABSCHIED_ZEILEN` **und** in `dashboard.css`; ein Test
   vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt, sondern genau diesen Rand.
+- **Der Ruheschirm schaltet NICHTS am Panel.** Er ist ein Overlay wie das Nachtschwarz (siehe
+  CONTEXT.md), kein „Panel aus". Über das Panel entscheidet weiterhin allein `decide()` — wer
+  das hier aufweicht, hat zwei Stellen, die dasselbe schalten, und sie widersprechen einander
+  spätestens beim nächsten Sonderfall. Vier Punkte sind nicht verhandelbar:
+  1. **Nur während eines Anzeigefensters.** Außerhalb ist das Panel ohnehin aus.
+  2. **Ankunfts- und Abschiedsschirm haben Vorrang**, und nachts bleibt es beim Nachtschwarz —
+     eine leuchtende Aufforderung wäre dort ausgerechnet dann die einzige Lichtquelle im Raum,
+     wenn jemand schlafen will.
+  3. **Die Helligkeit läuft über `helligkeitAnpassen()`**, nicht am Ruheschirm vorbei. Nacht,
+     Abwesenheit und Ruhe greifen auf dieselbe Schraube; wer sie einzeln dreht, bekommt einen
+     Bildschirm, der beim Aufwachen auf die falsche Stufe springt.
+  4. **Die Bedienung wird auf `pointerdown` und `keydown` gemessen, NIE auf `mousemove`.** Das
+     Aufwecken des Panels wackelt mit dem Mauszeiger (`panel.js`) — als Bedienung gezählt käme
+     der Ruheschirm nie wieder.
+  Er läuft **nur auf dem Panel** (`IM_PANEL`): In der Live-Ansicht würde er dem, der von
+  unterwegs nachsieht, genau das verdecken, wofür er die Seite geöffnet hat.
 - **Karten brauchen mehr als ihren Zustand, und das steht an einer Stelle.** `kartenZusatz()`
   in `dashboard.html` holt Verlauf, Vorhersage, Mülltermine und Energiequellen. Zwei Flächen
   bauen Karten — das Dashboard und der Abschiedsschirm —, und der Abschiedsschirm holte
@@ -635,7 +652,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-418 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+429 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 

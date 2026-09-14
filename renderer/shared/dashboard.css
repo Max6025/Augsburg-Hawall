@@ -1636,3 +1636,55 @@ body.light-theme .notify-box .as-text strong { color: #17151d; }
 
 /* Das Foto-Etikett und die Karten auf einem Foto bleiben bewusst hell: Darunter liegt ein
    Bild, kein Theme -- und ueber einem Urlaubsfoto ist dunkle Schrift schlechter lesbar. */
+
+/* --- Ruheschirm ---------------------------------------------------------------------------
+   Waehrend eines Termins haelt die Steuerung das Panel durchgehend an -- die meiste Zeit geht
+   aber niemand vorbei, und dann steht eine helle Wand in einem leeren Raum. Gemeldet wurde das
+   als Frage: "Warum ist der Bildschirm die ganze Zeit an?"
+
+   Der Schirm liegt UNTER Ankunfts- und Abschiedsschirm (9997) und unter der Ankuendigung
+   (9998): Wer begruesst wird oder eine Nachricht bekommt, soll die sehen und nicht eine
+   Aufforderung zum Tippen. Ueber allem anderen liegt er, weil sonst eine Karte den Tipp
+   abfaengt, der ihn wegnehmen soll.
+
+   Fest dunkel, unabhaengig vom Design -- wie der Ankunftsschirm. Ein heller Ruheschirm waere
+   ein Widerspruch in sich. */
+.ruheschirm {
+  position: fixed; inset: 0; z-index: 9990;
+  background: #05050a;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; visibility: hidden;
+  transition: opacity 700ms ease, visibility 0s linear 700ms;
+  cursor: none;
+}
+/* Sichtbarkeit UND Deckkraft: Teile, die sich selbst eingeblendet haben, blenden sich nicht
+   von selbst wieder aus -- siehe die Ankuendigungs-Box. */
+.ruheschirm.ru-sichtbar {
+  opacity: 1; visibility: visible;
+  transition: opacity 700ms ease, visibility 0s linear 0s;
+}
+.ru-mitte { display: flex; flex-direction: column; align-items: center; gap: 4vh; }
+.ru-kreis { position: relative; width: 16vh; height: 16vh; display: flex;
+  align-items: center; justify-content: center; }
+.ru-finger { width: 7vh; height: 7vh; color: rgba(243, 241, 247, 0.75); }
+/* Zwei Wellen, versetzt: Eine Bewegung faellt aus dem Augenwinkel auf, eine stehende Kontur
+   nicht. Sie laufen langsam -- eine haetsche Animation an einer dunklen Wand sieht aus wie
+   eine Warnung. */
+.ru-welle {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 0.25vh solid rgba(243, 241, 247, 0.5);
+  animation: ru-puls 3.4s ease-out infinite;
+}
+.ru-welle-2 { animation-delay: 1.7s; }
+@keyframes ru-puls {
+  0%   { transform: scale(0.45); opacity: 0; }
+  25%  { opacity: 0.55; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.ru-text {
+  margin: 0; font-size: clamp(2.2vh, 4.4vh, 6vh); font-weight: 300; letter-spacing: 0.04em;
+  color: rgba(243, 241, 247, 0.82); text-align: center; max-width: 80vw;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ru-welle { animation: none; opacity: 0.35; }
+}

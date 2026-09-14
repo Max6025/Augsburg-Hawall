@@ -96,6 +96,11 @@ async function load() {
   ankunftEntitaetenLaden();
 
   // Ankunftsschirm
+  $('ruheEnabled').checked = !!configRes.ruheEnabled;
+  $('ruheMinuten').value = configRes.ruheMinuten === undefined ? 3 : configRes.ruheMinuten;
+  $('ruheHelligkeit').value = configRes.ruheHelligkeit === undefined ? 12 : configRes.ruheHelligkeit;
+  $('ruheText').value = configRes.ruheText || '';
+
   $('abschiedEnabled').checked = !!configRes.abschiedEnabled;
   // Der Testmodus wird ueber eine eigene Route gespeichert und faehrt beim Neustart nicht von
   // allein herunter -- der Schalter muss also zeigen, was wirklich laeuft.
@@ -332,6 +337,10 @@ function alleFelder() {
     calendarLeadMinutes: zahl('calLead', 0),
     calendarTrailMinutes: zahl('calTrail', 0),
 
+    ruheEnabled: $('ruheEnabled').checked,
+    ruheMinuten: zahl('ruheMinuten', 3),
+    ruheHelligkeit: zahl('ruheHelligkeit', 12),
+    ruheText: $('ruheText').value,
     abschiedEnabled: $('abschiedEnabled').checked,
     abschiedHeading: $('abschiedHeading').value,
     abschiedText: $('abschiedText').value,

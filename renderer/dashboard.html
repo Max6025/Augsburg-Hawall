@@ -109,6 +109,10 @@
        oben links, gegenueber der Termin-Anzeige. -->
   <button class="zurueck-knopf" id="zurueckKnopf" hidden aria-label="Zurück zum Hauptdashboard"></button>
   <div class="terminankuendigung" id="terminankuendigung"></div>
+  <!-- Waehrend eines Termins haelt die Steuerung das Panel durchgehend an. Wenn niemand da
+       ist, muss es deshalb nicht leuchten: ein fast schwarzer Schirm mit einer grossen
+       Aufforderung, ein Tipp bringt das Dashboard sofort zurueck. -->
+  <div class="ruheschirm" id="ruheschirm"></div>
 
   <!-- Ankuendigung. Der weisse Rahmen als SVG ist entfallen: Er wurde per Animation
        gezeichnet und blieb mit `forwards` stehen -- beim Ausblenden verschwand nur der
@@ -128,6 +132,7 @@
 <script src="shared/akku.js"></script>
 <script src="shared/alarm.js"></script>
 <script src="shared/ankunftsschirm.js"></script>
+<script src="shared/ruheschirm.js"></script>
 <script>
 const { ICONS, defaultCardType, buildCard, resolveSpan, abschiedSpanne } = DashboardRender;
 const params = new URLSearchParams(location.search);
@@ -795,9 +800,19 @@ function wirdGeradeBedient() {
 
 (function bedienungBeobachten() {
   const raster = $('grid');
-  if (!raster) return;
-  ['pointerdown', 'input', 'change', 'keydown'].forEach(ev =>
-    raster.addEventListener(ev, bedienungGemerkt, { passive: true, capture: true }));
+  if (raster) {
+    ['pointerdown', 'input', 'change', 'keydown'].forEach(ev =>
+      raster.addEventListener(ev, bedienungGemerkt, { passive: true, capture: true }));
+  }
+  // Fuer den Ruheschirm zaehlt JEDE Beruehrung, nicht nur eine im Kartenraster: Auch wer nur
+  // den Streifen unten antippt oder zurueckgeht, ist offensichtlich da.
+  //
+  // Ausdruecklich NICHT auf mousemove: Das Aufwecken des Panels wackelt mit dem Mauszeiger
+  // (panel.js), und das wuerde sich hier als Bedienung zurueckmelden -- der Ruheschirm kaeme
+  // dann nie wieder.
+  ['pointerdown', 'keydown'].forEach(ev =>
+    document.addEventListener(ev, () => { letzteBedienung = Date.now(); },
+      { passive: true, capture: true }));
 })();
 
 async function refresh() {
@@ -1268,6 +1283,12 @@ function abwesendPruefen() {
  */
 function helligkeitAnpassen() {
   if (nightActive && $('nightOverlay').classList.contains('show')) return setBrightnessSafe(5);
+  // Der Ruheschirm dimmt mit. Ein schwarzer Schirm bei voller Hintergrundbeleuchtung ist in
+  // einem dunklen Raum immer noch eine leuchtende Flaeche -- und genau darum ging die Frage,
+  // warum der Bildschirm die ganze Zeit an ist.
+  if (ruheschirm && ruheschirm.istSichtbar()) {
+    return setBrightnessSafe(RuheschirmModul.ruheHelligkeit(config && config.ruheHelligkeit));
+  }
   if (abwesend) return setBrightnessSafe(abwesendHelligkeit());
   setBrightnessSafe(100);
 }
@@ -1409,11 +1430,61 @@ let panelControlActive = false;
 // --- Ankunftsschirm --------------------------------------------------------------------------
 let ankunftsschirm = null;
 let abschiedsschirm = null;
+let ruheschirm = null;
+// Beim Start gilt der Moment des Ladens als Bedienung: Nach einem Update soll das Dashboard
+// erst einmal dastehen, statt sich sofort hinzulegen -- sonst sieht ein frisch installiertes
+// Update aus wie ein schwarzer Bildschirm.
+let letzteBedienung = Date.now();
 let abschiedKartenStand = '';   // woraus die Karten zuletzt gebaut wurden
 let terminankuendigung = null;
 let letzterSteuerungszustand = null;
 let angekuendigtesFenster = null;   // Beginn des Fensters, das bereits angekuendigt wurde
 let ersterZustand = true;           // der allererste Zustand kuendigt nichts an
+
+// --- Ruheschirm: warum leuchtet die Wand den ganzen Tag? ---------------------------------------
+//
+// Waehrend eines Termins haelt die Steuerung das Panel durchgehend an, damit jemand, der
+// vorbeigeht, sein Dashboard sieht. Die meiste Zeit geht aber niemand vorbei.
+//
+// Der Schirm entscheidet NICHTS ueber das Panel -- das bleibt allein Sache von decide().
+// Hier wird nur anders angezeigt und dunkler gestellt.
+function ruhePruefen() {
+  if (!ruheschirm || !config) return;
+  const zustand = letzterSteuerungszustand;
+  const ruhen = RuheschirmModul.sollRuhen({
+    aktiviert: !!config.ruheEnabled,
+    imTermin: !!(zustand && zustand.activeWindow),
+    schirmSichtbar: !!((ankunftsschirm && ankunftsschirm.istSichtbar())
+      || (abschiedsschirm && abschiedsschirm.istSichtbar())),
+    nacht: !!(nightActive && $('nightOverlay').classList.contains('show')),
+    letzteBedienung,
+    minuten: config.ruheMinuten,
+    jetzt: new Date()
+  });
+  if (ruhen === ruheschirm.istSichtbar()) return;
+
+  if (ruhen) {
+    ruheschirm.textSetzen(config.ruheText);
+    ruheschirm.zeigen();
+  } else {
+    ruheschirm.verbergen();
+  }
+  // Erst umschalten, dann rechnen: helligkeitAnpassen() liest den GESAMTEN Zustand, nicht das
+  // letzte Ereignis -- sonst springt die Helligkeit, sobald Nacht und Ruhe zusammentreffen.
+  helligkeitAnpassen();
+}
+
+/** Aufwecken: Dashboard sofort zeigen, frisch, und die Frist neu starten. */
+function ruheWecken() {
+  letzteBedienung = Date.now();
+  if (!ruheschirm || !ruheschirm.istSichtbar()) return;
+  ruheschirm.verbergen();
+  helligkeitAnpassen();
+  // Wer aufweckt, soll aktuelle Zahlen sehen und nicht den Stand von vor einer Stunde. Der
+  // Bedien-Schutz wuerde den Neuaufbau sonst verschieben -- genau wie beim Dashboardwechsel.
+  aufbauErzwingen = true;
+  refresh();
+}
 
 // --- Abschiedsschirm: der letzte Tag ----------------------------------------------------------
 //
@@ -1967,6 +2038,11 @@ function uhrenKartenAktualisieren() {
   initCornerEscapeGesture();
   ankunftsschirmAufbauen();
   terminankuendigung = new AnkunftsschirmModul.Terminankuendigung($('terminankuendigung'));
+  // Nur auf dem Panel: In der Live-Ansicht im Browser wuerde ein Ruheschirm dem, der von
+  // unterwegs nachsieht, genau das verdecken, wofuer er die Seite geoeffnet hat.
+  if (IM_PANEL) {
+    ruheschirm = new RuheschirmModul.Ruheschirm($('ruheschirm'), { beimWecken: ruheWecken });
+  }
   abschiedsschirm = new AnkunftsschirmModul.Abschiedsschirm($('abschiedsschirm'), {
     beimWegtippen: async (fensterStart) => {
       // Im Testmodus tippt ihn nichts weg. Er wuerde sonst verschwinden und beim naechsten
@@ -1989,6 +2065,9 @@ function uhrenKartenAktualisieren() {
   // Alle zehn Sekunden statt jede Minute: Der Testmodus-Schalter speichert ueber eine eigene
   // Route und laedt die Ansicht nicht neu -- der Schirm soll trotzdem zuegig kommen und gehen.
   setInterval(async () => { await abschiedKonfigNachsehen(); abschiedPruefen(); }, 10000);
+  // Eigener, kurzer Takt: Das Hinlegen darf sich nicht um eine halbe Minute verspaeten, sonst
+  // wirkt die eingestellte Frist ungenau.
+  setInterval(ruhePruefen, 5000);
 
   checkNightMode();
   // Erst nach dem Aufbau: Das Bild wird nur gebraucht, wenn die App mal NICHT laeuft -- es hat

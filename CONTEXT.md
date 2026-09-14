@@ -77,6 +77,15 @@ läuft. Hat Vorrang vor der Kalendersteuerung — mit genau einer Ausnahme: kurz
 Ankunft. Wer nachts ankommt, soll begrüßt werden.
 _Vermeiden_: Nachtmodus (heißt in HA Wall Display etwas anderes)
 
+**Ruheschirm**:
+Ein fast schwarzes Overlay mit einer großen Aufforderung („Zum Anzeigen tippen"), das während
+eines Anzeigefensters über dem Wall Display liegt, wenn eine Weile niemand das Panel berührt
+hat. Ein Tipp nimmt ihn weg. Wie das Nachtschwarz ein **Overlay**, kein Panel aus: Das Panel
+leuchtet weiter, nur gedimmt, und die Steuerung entscheidet über das Panel weiterhin allein.
+Er greift ausschließlich **während** eines Anzeigefensters — außerhalb ist das Panel ohnehin
+aus, und ein zweiter Schalter für dieselbe Sache widerspräche dem ersten irgendwann.
+_Vermeiden_: Bildschirmschoner (der ist in diesem Projekt entfernt worden), Standby
+
 ### Schutzmechanismen
 
 **Wächter**:

@@ -395,6 +395,42 @@
 
     <details class="einstellungsblock">
       <summary>
+        <span class="eb-titel">Ruheschirm</span>
+        <span class="eb-unter">Nicht den ganzen Termin durchleuchten</span>
+      </summary>
+      <div class="eb-inhalt">
+    <p class="note">Während eines Termins hält die Steuerung das Panel durchgehend an – damit
+      jeder, der vorbeigeht, sein Dashboard sieht. Die meiste Zeit geht aber niemand vorbei,
+      und dann steht eine helle Wand in einem leeren Raum.</p>
+    <p class="note">Mit dieser Einstellung legt sich das Dashboard nach einer Weile ohne
+      Bedienung hin: Der Bildschirm wird fast schwarz und zeigt nur noch eine große
+      Aufforderung. <strong>Ein Tipp, und das Dashboard ist sofort wieder da</strong> – mit
+      frischen Werten.</p>
+    <p class="note">Das ist <strong>nicht</strong> dasselbe wie „Panel aus". Außerhalb eines
+      Termins schaltet die Kalendersteuerung das Panel weiterhin ganz ab, wie gewohnt. Und
+      wenn gerade der Ankunfts- oder Abschiedsschirm steht oder die Nachtsperre greift, hält
+      sich der Ruheschirm heraus.</p>
+
+    <label><input type="checkbox" id="ruheEnabled" style="width:auto; margin-right:0.5rem;">Ruheschirm verwenden</label>
+
+    <label style="margin-top:1rem;">Hinlegen nach … Minuten ohne Bedienung</label>
+    <input type="number" id="ruheMinuten" min="1" max="120" step="1" placeholder="3" style="max-width:140px;">
+    <p class="hint-text">Ab Werk 3 Minuten. Lang genug, um ein Dashboard in Ruhe zu lesen, ohne
+      es anzufassen; kurz genug, dass die Wand nicht stundenlang leuchtet.</p>
+
+    <label style="margin-top:1rem;">Helligkeit im Ruhezustand (%)</label>
+    <input type="number" id="ruheHelligkeit" min="1" max="60" step="1" placeholder="12" style="max-width:140px;">
+    <p class="hint-text">Ab Werk 12&nbsp;%. Nicht ganz aus: Die Aufforderung muss lesbar bleiben,
+      sonst steht dort eine schwarze Scheibe und niemand weiß, dass ein Tipp genügt.</p>
+
+    <label style="margin-top:1rem;">Aufforderung</label>
+    <input type="text" id="ruheText" placeholder="Zum Anzeigen tippen">
+    <p class="hint-text">Leer lassen für „Zum Anzeigen tippen“.</p>
+      </div>
+    </details>
+
+    <details class="einstellungsblock">
+      <summary>
         <span class="eb-titel">Abschiedsschirm</span>
         <span class="eb-unter">Der letzte Tag, mit Karten</span>
       </summary>
