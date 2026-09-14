@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { sollAbschiedZeigen, ABSCHIED_TON_VON, ABSCHIED_TON_BIS } = require('../renderer/shared/ankunftsschirm.js');
+const { sollAbschiedZeigen, abschiedHinweis, ABSCHIED_TON_VON, ABSCHIED_TON_BIS } = require('../renderer/shared/ankunftsschirm.js');
 
 const START = new Date(2026, 8, 12, 16, 0, 0).toISOString();
 const basis = (u) => Object.assign({
@@ -68,45 +68,68 @@ test('Die Farben liegen im kuehlen Teil des Farbkreises', () => {
   assert.ok(ABSCHIED_TON_BIS - ABSCHIED_TON_VON >= 60, 'ein zu schmaler Ausschnitt sieht einfarbig aus');
 });
 
-// --- Zum Ansehen erzwingen --------------------------------------------------------------------
+// --- Testmodus ---------------------------------------------------------------------------------
 //
 // Wer den Schirm ansehen will, hat in aller Regel gerade keinen mehrtaegigen Termin am letzten
 // Tag laufen -- sonst muesste er nicht danach fragen. Genau daran ist der Knopf beim
 // Ankunftsschirm zuerst gescheitert: Er setzte nur den Verworfen-Zustand zurueck, und es
 // passierte nichts.
+//
+// Und er endet nicht von allein: Eine Frist beantwortet "sieht das an der Wand gut aus?" nur
+// fuer die ersten zehn Minuten. Wer danach hinsieht, findet den Schirm weg und weiss nicht,
+// ob es an ihm oder an der Uhr lag.
 
-const inZehnMinuten = () => Date.now() + 10 * 60000;
-
-test('Erzwungen erscheint er ohne Termin', () => {
+test('Im Testmodus erscheint er ohne Termin', () => {
   assert.strictEqual(sollAbschiedZeigen({
     aktiviert: true, anzeigefenster: null, verlauf: null,
-    erzwungenBis: inZehnMinuten(), jetzt: new Date()
+    testmodus: true, jetzt: new Date()
   }), true);
 });
 
-test('Erzwungen schlaegt den falschen Tag, die Uhrzeit und das Wegtippen', () => {
+test('Der Testmodus schlaegt den falschen Tag, die Uhrzeit und das Wegtippen', () => {
   const p = {
     aktiviert: true,
     verlauf: { mehrtaegig: true, letzterTag: false },
     anzeigefenster: { start: START },
     verworfenFuer: START,
     abStunde: 23,
-    erzwungenBis: inZehnMinuten(),
+    testmodus: true,
     jetzt: new Date(2026, 8, 13, 3, 0, 0)
   };
   assert.strictEqual(sollAbschiedZeigen(p), true);
 });
 
-test('Erzwungen erscheint er auch, wenn er ausgeschaltet ist', () => {
+test('Im Testmodus erscheint er auch, wenn er ausgeschaltet ist', () => {
   // Man will ja sehen, ob sich das Einschalten lohnt.
   assert.strictEqual(sollAbschiedZeigen({
-    aktiviert: false, anzeigefenster: null, erzwungenBis: inZehnMinuten(), jetzt: new Date()
+    aktiviert: false, anzeigefenster: null, testmodus: true, jetzt: new Date()
   }), true);
 });
 
-test('Eine abgelaufene Frist erzwingt nichts mehr', () => {
+test('Der Testmodus laeuft nicht von allein ab', () => {
+  // Dieselbe Frage in einem Jahr muss dieselbe Antwort bekommen -- der Schalter ist die
+  // einzige Uhr, die hier zaehlt.
+  const inEinemJahr = new Date(Date.now() + 365 * 24 * 3600 * 1000);
   assert.strictEqual(sollAbschiedZeigen({
-    aktiviert: true, anzeigefenster: null, erzwungenBis: Date.now() - 60000, jetzt: new Date()
+    aktiviert: false, anzeigefenster: null, testmodus: true, jetzt: inEinemJahr
+  }), true);
+});
+
+test('Ohne Testmodus gilt der Rest unveraendert weiter', () => {
+  assert.strictEqual(sollAbschiedZeigen({
+    aktiviert: true, anzeigefenster: null, testmodus: false, jetzt: new Date()
   }), false);
-  assert.strictEqual(sollAbschiedZeigen(basis({ erzwungenBis: 0 })), true, 'ohne Frist gilt der Rest weiter');
+  assert.strictEqual(sollAbschiedZeigen(basis({ testmodus: false })), true);
+  // Ein fehlendes Feld darf nicht als "an" durchgehen.
+  assert.strictEqual(sollAbschiedZeigen(basis({ verworfenFuer: START })), false);
+});
+
+test('Im Testmodus steht dort keine Aufforderung zum Antippen', () => {
+  // Eine Wand, die zum Antippen auffordert und nicht reagiert, sieht kaputt aus -- wer
+  // davorsteht, sucht den Fehler am Geraet statt in den Einstellungen.
+  assert.ok(!/antippen/i.test(abschiedHinweis(true)), abschiedHinweis(true));
+  assert.match(abschiedHinweis(true), /Testmodus/);
+  // Und der Weg zurueck muss dort stehen, sonst sucht man ihn an der Wand.
+  assert.match(abschiedHinweis(true), /Einstellungen/);
+  assert.match(abschiedHinweis(false), /antippen/i);
 });

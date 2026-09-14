@@ -119,13 +119,24 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   **Unterdashboard** (ein zweiter Karten-Editor wäre derselbe Editor noch einmal — und der
   zweite wäre der, den niemand pflegt), und **nur der Text links tippt ihn weg**: Die Karten
   müssen bedienbar bleiben.
-  „Jetzt anzeigen" schlägt bei **beiden** Schirmen alles — fehlender Termin, falscher Tag,
-  Uhrzeitgrenze, weggetippt, und sogar den Einschalter selbst. Wer einen Schirm ansehen will,
-  hat in aller Regel gerade keinen passenden Termin laufen; sonst müsste er nicht danach
+  Das Ansehen auf Zuruf schlägt bei **beiden** Schirmen alles — fehlender Termin, falscher
+  Tag, Uhrzeitgrenze, weggetippt, und sogar den Einschalter selbst. Wer einen Schirm ansehen
+  will, hat in aller Regel gerade keinen passenden Termin laufen; sonst müsste er nicht danach
   fragen. Genau daran ist der Knopf beim Ankunftsschirm zuerst gescheitert.
-  Weil „Jetzt anzeigen" **nichts speichert**, lädt sich die Ansicht dabei auch nicht neu: Der
-  Abschiedsschirm fragt die Konfiguration deshalb alle 30 Sekunden selbst nach — aber nur,
-  solange keine Frist läuft.
+  **Die beiden enden verschieden, und das ist Absicht.** Der Ankunftsschirm bekommt eine Frist
+  von zehn Minuten: Man sieht ihn an, er geht wieder. Der Abschiedsschirm hat statt dessen
+  einen **Schalter, der bleibt** (`abschiedTestmodus`) — er zeigt Karten, und ob die an der
+  Wand taugen, sieht man nicht in zehn Minuten. Eine Frist beantwortete die Frage nur für ihren
+  Anfang: Wer später hinsieht, findet den Schirm weg und weiß nicht, ob es an ihm oder an der
+  Uhr lag. Solange der Schalter an ist, lässt der Schirm sich auch **nicht wegtippen** —
+  er käme beim nächsten Takt von selbst wieder, und dieses Flackern sähe aus wie ein Fehler.
+  Der Schalter ist der einzige Ausgang, und deshalb darf `/api/abschied/dismiss` ihn **nicht**
+  anfassen.
+  Weil der Schalter über eine **eigene Route** speichert, lädt die Ansicht sich dabei nicht neu
+  (über `/api/config` täte sie es, und beim Ausschalten verdeckte der Neuaufbau genau das, was
+  man prüfen will). Die Anzeige fragt die Konfiguration deshalb alle 30 Sekunden selbst nach —
+  in **beide** Richtungen: Ohne das Nachfragen während des Testmodus bekäme sie das Ausschalten
+  nie mit, und der Schirm stünde bis zum nächsten Neustart.
   Er erscheint **nur bei mehrtägigen Terminen**. Bei einem eintägigen wäre der „letzte Tag"
   derselbe wie der Ankunftstag, und das Panel verabschiedete Gäste, die gerade hereingekommen
   sind.
@@ -571,7 +582,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-396 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+404 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 

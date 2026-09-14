@@ -439,15 +439,16 @@
   function sollAbschiedZeigen(p) {
     if (!p) return false;
 
-    // "Jetzt anzeigen" aus den Einstellungen schlaegt ALLES -- auch einen fehlenden Termin,
-    // den falschen Tag, die Uhrzeitgrenze und den Verworfen-Zustand. Wer den Schirm ansehen
-    // will, hat in aller Regel gerade keinen Termin am letzten Tag laufen; sonst muesste er
-    // nicht danach fragen. Genau daran ist der Knopf beim Ankunftsschirm zuerst gescheitert.
+    // Der Testmodus schlaegt ALLES -- fehlender Termin, falscher Tag, Uhrzeitgrenze,
+    // weggetippt, und auch die Einstellung "verwenden" selbst: Man will ja gerade sehen, ob
+    // sich das Einschalten lohnt. Wer den Schirm ansehen will, hat in aller Regel keinen
+    // passenden Termin laufen; sonst muesste er nicht danach fragen.
     //
-    // Auch die Einstellung "verwenden" wird uebergangen: Man will ja sehen, ob sich das
-    // Einschalten lohnt.
-    const erzwungenBis = Number(p.erzwungenBis) || 0;
-    if (erzwungenBis && (p.jetzt || new Date()).getTime() < erzwungenBis) return true;
+    // Er endet NICHT von allein. Eine Frist, die im Hintergrund ablaeuft, beantwortet die
+    // Frage "sieht das an der Wand gut aus?" nur fuer die ersten zehn Minuten -- wer danach
+    // hinsieht, findet den Schirm weg und weiss nicht, ob es an ihm oder an der Uhr lag.
+    // Aus ist er erst, wenn der Schalter wieder umgelegt wird.
+    if (p.testmodus) return true;
 
     if (!p.aktiviert) return false;
     // Zwei Vollbilder uebereinander waeren ein Fehler, kein Entwurf.
@@ -469,6 +470,19 @@
     if (ab > 0 && (p.jetzt || new Date()).getHours() < ab) return false;
 
     return true;
+  }
+
+  /**
+   * Was unter dem Text steht -- die einzige Bedienanleitung, die dieser Schirm hat.
+   *
+   * Im Testmodus tippt ihn nichts weg. Dann darf dort auch nicht stehen, man solle antippen:
+   * Eine Wand, die eine Aufforderung zeigt und nicht darauf reagiert, sieht kaputt aus, und
+   * wer davorsteht, sucht den Fehler am Geraet statt in den Einstellungen.
+   */
+  function abschiedHinweis(testmodus) {
+    return testmodus
+      ? 'Testmodus – endet über den Schalter in den Einstellungen'
+      : 'Zum Ausblenden antippen';
   }
 
   function Abschiedsschirm(wurzel, optionen) {
@@ -520,6 +534,7 @@
   Abschiedsschirm.prototype.inhaltSetzen = function (inhalt) {
     this.wurzel.querySelector('.ab-ueberschrift').innerHTML = inlineMarkdown(inhalt.ueberschrift || '');
     this.wurzel.querySelector('.ab-text').innerHTML = markdown(inhalt.text || '');
+    this.wurzel.querySelector('.ab-hinweis').textContent = abschiedHinweis(inhalt.testmodus);
   };
 
   /** Die Flaeche fuer die Karten -- gefuellt wird sie vom Dashboard, das Karten bauen kann. */
@@ -596,7 +611,7 @@
     this.wurzel.classList.remove('ta-sichtbar');
   };
 
-  const api = { sollAnzeigen, sollAbschiedZeigen, markdown, inlineMarkdown, bildFolge, textFuerDrehung,
+  const api = { sollAnzeigen, sollAbschiedZeigen, abschiedHinweis, markdown, inlineMarkdown, bildFolge, textFuerDrehung,
     Ankunftsschirm, Abschiedsschirm, Terminankuendigung, ANZAHL_FORMEN, ANKUENDIGUNG_MS,
     ABSCHIED_TON_VON, ABSCHIED_TON_BIS };
   global.AnkunftsschirmModul = api;

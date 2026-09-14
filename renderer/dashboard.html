@@ -1417,7 +1417,7 @@ async function abschiedPruefen() {
     anzeigefenster: zustand ? zustand.activeWindow : null,
     verworfenFuer: config.abschiedDismissedFor || '',
     abStunde: config.abschiedAbStunde,
-    erzwungenBis: config.abschiedErzwungenBis || 0,
+    testmodus: !!config.abschiedTestmodus,
     ankunftSichtbar: !!(ankunftsschirm && ankunftsschirm.istSichtbar()),
     jetzt: new Date()
   });
@@ -1425,7 +1425,8 @@ async function abschiedPruefen() {
 
   abschiedsschirm.inhaltSetzen({
     ueberschrift: config.abschiedHeading || 'Gute Heimreise',
-    text: config.abschiedText || ''
+    text: config.abschiedText || '',
+    testmodus: !!config.abschiedTestmodus
   });
   await abschiedKartenBauen();
   abschiedsschirm.zeigen(zustand && zustand.activeWindow ? zustand.activeWindow.start : null);
@@ -1480,24 +1481,25 @@ async function abschiedKartenBauen() {
 let abschiedLayout = null;
 
 /**
- * Holt die Konfiguration nach, solange ein erzwungenes Anzeigen laufen koennte.
+ * Fragt nach, ob der Testmodus umgelegt wurde.
  *
- * Nur dann: Ein Abruf alle zehn Sekunden fuer eine Einstellung, die sich fast nie aendert,
- * waere Last ohne Erkenntnis. Ist gerade nichts erzwungen, genuegt der Blick alle zehn
- * Sekunden auf den vorhandenen Wert.
+ * Der Schalter speichert ueber eine eigene Route und laedt die Anzeige deshalb NICHT neu --
+ * sonst wuerde ein Neuaufbau verdecken, ob der Schirm von selbst kommt und geht. Also muss
+ * die Anzeige selbst nachsehen. Alle 30 Sekunden reicht: Wer den Schalter umlegt, geht
+ * anschliessend zur Wand.
+ *
+ * In BEIDE Richtungen -- auch waehrend der Testmodus laeuft. Sonst bekaeme die Anzeige das
+ * Ausschalten nie mit, und der Schirm stuende bis zum naechsten Neustart.
  */
 let abschiedKonfigGeholt = 0;
 async function abschiedKonfigNachsehen() {
   if (!config) return;
-  const laeuft = (config.abschiedErzwungenBis || 0) > Date.now();
-  // Waehrend es laeuft, braucht es nichts Neues. Sonst alle 30 Sekunden einmal nachfragen --
-  // so erscheint der Schirm nach dem Knopfdruck spaetestens nach einer halben Minute.
-  if (laeuft || Date.now() - abschiedKonfigGeholt < 30000) return;
+  if (Date.now() - abschiedKonfigGeholt < 30000) return;
   abschiedKonfigGeholt = Date.now();
   try {
     const d = await fetch(`${API}/api/config`).then(r => r.json());
-    if (d && typeof d.abschiedErzwungenBis === 'number') {
-      config.abschiedErzwungenBis = d.abschiedErzwungenBis;
+    if (d && typeof d.abschiedTestmodus === 'boolean') {
+      config.abschiedTestmodus = d.abschiedTestmodus;
       config.abschiedDismissedFor = d.abschiedDismissedFor || '';
     }
   } catch (e) { /* dann beim naechsten Mal */ }
@@ -1950,6 +1952,10 @@ function uhrenKartenAktualisieren() {
   terminankuendigung = new AnkunftsschirmModul.Terminankuendigung($('terminankuendigung'));
   abschiedsschirm = new AnkunftsschirmModul.Abschiedsschirm($('abschiedsschirm'), {
     beimWegtippen: async (fensterStart) => {
+      // Im Testmodus tippt ihn nichts weg. Er wuerde sonst verschwinden und beim naechsten
+      // Takt von selbst wiederkommen -- ein Flackern, das aussieht wie ein Fehler. Aus ist
+      // er erst, wenn der Schalter in den Einstellungen wieder umgelegt wird.
+      if (config && config.abschiedTestmodus) return;
       abschiedsschirm.verbergen();
       if (fensterStart) config.abschiedDismissedFor = fensterStart;
       try {
@@ -1963,8 +1969,8 @@ function uhrenKartenAktualisieren() {
   // Der Steuerungszustand wird nur bei Aenderungen geschickt -- das Ablaufen der Anzeigedauer
   // ist aber keine Aenderung. Deshalb zusaetzlich ein eigener Takt.
   setInterval(ankunftsschirmPruefen, 60000);
-  // Alle zehn Sekunden statt jede Minute: "Jetzt anzeigen" aus den Einstellungen speichert
-  // nichts und laedt die Ansicht deshalb nicht neu -- der Schirm soll trotzdem gleich kommen.
+  // Alle zehn Sekunden statt jede Minute: Der Testmodus-Schalter speichert ueber eine eigene
+  // Route und laedt die Ansicht nicht neu -- der Schirm soll trotzdem zuegig kommen und gehen.
   setInterval(async () => { await abschiedKonfigNachsehen(); abschiedPruefen(); }, 10000);
 
   checkNightMode();

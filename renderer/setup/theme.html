@@ -436,12 +436,16 @@
     <p class="hint-text">Volle Stunde, 0 = den ganzen letzten Tag. Wer um 7 einträgt, bekommt ihn
       nicht schon um Mitternacht vorgesetzt.</p>
 
-    <button id="showAbschiedBtn" style="max-width:320px; margin-top:1.2rem;">Jetzt auf dem Display anzeigen</button>
-    <div id="showAbschiedResult" class="result"></div>
-    <p class="hint-text">Zum Ansehen – ohne auf den letzten Tag eines mehrtägigen Termins zu
-      warten. Schlägt alles andere: fehlender Termin, falscher Tag, Uhrzeitgrenze, weggetippt,
-      und sogar den Schalter „Abschiedsschirm verwenden“. Du sollst ja sehen, ob sich das
-      Einschalten lohnt. <strong>Vorher speichern</strong>, sonst siehst du den alten Text.</p>
+    <label style="margin-top:1.2rem;"><input type="checkbox" id="abschiedTestmodus" style="width:auto; margin-right:0.5rem;">Zum Testen dauerhaft anzeigen</label>
+    <div id="abschiedTestmodusResult" class="result"></div>
+    <p class="hint-text">Solange dieser Schalter an ist, steht der Abschiedsschirm
+      <strong>dauerhaft</strong> auf dem Display – egal, was sonst eingestellt ist: kein Termin,
+      falscher Tag, Uhrzeitgrenze, weggetippt, und sogar der Schalter „Abschiedsschirm
+      verwenden“ darüber. Du sollst ja in Ruhe sehen, ob sich das Einschalten lohnt.</p>
+    <p class="hint-text">Er lässt sich dabei <strong>nicht wegtippen</strong>. Zurück in den
+      Normalbetrieb geht es nur hier, indem du den Schalter wieder ausschaltest. Wirkt sofort,
+      ohne Speichern – die anderen Felder oben brauchen weiterhin
+      <strong>„Alle Einstellungen speichern“</strong>, sonst siehst du den alten Text.</p>
       </div>
     </details>
 

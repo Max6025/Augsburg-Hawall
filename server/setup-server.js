@@ -406,7 +406,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       abschiedDashboard: store.get('abschiedDashboard') || '',
       abschiedAbStunde: store.get('abschiedAbStunde') === undefined ? 0 : store.get('abschiedAbStunde'),
       abschiedDismissedFor: store.get('abschiedDismissedFor') || '',
-      abschiedErzwungenBis: store.get('abschiedErzwungenBis') || 0,
+      abschiedTestmodus: !!store.get('abschiedTestmodus'),
       welcomeErzwungenBis: store.get('welcomeErzwungenBis') || 0,
       // Standard AN -- die Bewegung ist der sichtbare Teil des Designs.
       // Wie gross das Panel wirklich ist -- der Editor zeichnet seine Arbeitsflaeche danach.
@@ -571,9 +571,12 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     res.json({ ok: true });
   });
 
-  // Wie lange ein erzwungener Schirm stehen bleibt, wenn ihn niemand wegtippt. Lang
+  // Wie lange ein erzwungener ANKUNFTSschirm stehen bleibt, wenn ihn niemand wegtippt. Lang
   // genug, um vom Einstellungsgeraet zur Wand zu gehen und hinzusehen; kurz genug, dass ein
   // vergessener Knopfdruck das Panel nicht den halben Tag blockiert.
+  //
+  // Der Abschiedsschirm hat bewusst KEINE Frist, sondern einen Schalter: Er zeigt Karten, und
+  // ob die an der Wand taugen, sieht man nicht in zehn Minuten.
   const WELCOME_ERZWUNGEN_MS = 10 * 60 * 1000;
 
   // Weggetippt gilt fuer genau diesen Termin -- wie beim Ankunftsschirm. Eigene Route aus
@@ -581,21 +584,24 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   // Schirm waere sofort wieder da.
   app.post('/api/abschied/dismiss', (req, res) => {
     const start = String((req.body && req.body.windowStart) || '');
-    // Ein leerer Fensterbeginn ist erlaubt: Beim erzwungenen Anzeigen laeuft kein Termin, und
-    // trotzdem muss sich der Schirm wegtippen lassen.
     if (start) store.set('abschiedDismissedFor', start);
-    store.delete('abschiedErzwungenBis');
     res.json({ ok: true });
   });
 
-  // Abschiedsschirm jetzt zeigen -- zum Ansehen, ohne auf den letzten Tag eines mehrtaegigen
-  // Termins zu warten. Dieselbe Frist wie beim Ankunftsschirm: lang genug, um vom
-  // Einstellungsgeraet zur Wand zu gehen, kurz genug, dass ein vergessener Knopfdruck das
-  // Panel nicht den halben Tag blockiert.
-  app.post('/api/abschied/show', (req, res) => {
-    store.delete('abschiedDismissedFor');
-    store.set('abschiedErzwungenBis', Date.now() + WELCOME_ERZWUNGEN_MS);
-    res.json({ ok: true, minuten: Math.round(WELCOME_ERZWUNGEN_MS / 60000) });
+  // Der Testmodus: Abschiedsschirm dauerhaft anzeigen, unabhaengig von Termin, Tag und
+  // Uhrzeit -- und er bleibt, bis dieser Schalter wieder umgelegt wird.
+  //
+  // Eigene Route statt eines Feldes in /api/config: Ueber /api/config laeuft
+  // onConfigSaved(), und das laedt die Anzeige neu. Zum Ansehen eines Schirms die ganze
+  // Wand neu zu laden ist unnoetig -- und beim Ausschalten wuerde der Neuaufbau verdecken,
+  // ob der Schirm von selbst verschwindet.
+  app.post('/api/abschied/testmodus', (req, res) => {
+    const an = !!(req.body && req.body.an);
+    store.set('abschiedTestmodus', an);
+    // Beim Einschalten den Verworfen-Zustand raeumen: Sonst haengt am selben Schirm noch die
+    // Entscheidung von gestern, und nach dem Ausschalten bliebe er unerwartet weg.
+    if (an) store.delete('abschiedDismissedFor');
+    res.json({ ok: true, an });
   });
 
   // Ankunftsschirm jetzt zeigen.

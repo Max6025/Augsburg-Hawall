@@ -97,6 +97,9 @@ async function load() {
 
   // Ankunftsschirm
   $('abschiedEnabled').checked = !!configRes.abschiedEnabled;
+  // Der Testmodus wird ueber eine eigene Route gespeichert und faehrt beim Neustart nicht von
+  // allein herunter -- der Schalter muss also zeigen, was wirklich laeuft.
+  if ($('abschiedTestmodus')) $('abschiedTestmodus').checked = !!configRes.abschiedTestmodus;
   $('abschiedHeading').value = configRes.abschiedHeading || '';
   $('abschiedText').value = configRes.abschiedText || '';
   $('abschiedAbStunde').value = configRes.abschiedAbStunde === undefined ? 0 : configRes.abschiedAbStunde;
@@ -529,23 +532,36 @@ async function abschiedDashboardsLaden(gewaehlt) {
   }
 }
 
-// --- Abschiedsschirm zum Ansehen ---------------------------------------------------------------
-const showAbschiedBtn = document.getElementById('showAbschiedBtn');
-if (showAbschiedBtn) {
-  showAbschiedBtn.addEventListener('click', async () => {
-    const ziel = document.getElementById('showAbschiedResult');
+// --- Abschiedsschirm dauerhaft zum Testen ------------------------------------------------------
+//
+// Eigene Route statt eines Feldes im grossen Speichern-Knopf: Der Schalter soll sofort wirken,
+// und /api/config wuerde die ganze Anzeige neu laden -- beim Ausschalten wuerde der Neuaufbau
+// gerade das verdecken, was man pruefen will.
+const abschiedTestmodus = document.getElementById('abschiedTestmodus');
+if (abschiedTestmodus) {
+  abschiedTestmodus.addEventListener('change', async () => {
+    const ziel = document.getElementById('abschiedTestmodusResult');
+    const an = abschiedTestmodus.checked;
     ziel.className = 'result';
-    ziel.textContent = 'Wird angefordert …';
+    ziel.textContent = 'Wird übernommen …';
     try {
-      const d = await fetch('/api/abschied/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+      const d = await fetch('/api/abschied/testmodus', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ an })
+      }).then(r => r.json());
       ziel.className = d.ok ? 'result ok' : 'result err';
       ziel.textContent = d.ok
-        ? 'Der Abschiedsschirm erscheint gleich auf dem Display – spätestens nach einer halben Minute. '
-          + 'Er bleibt ' + (d.minuten || 10) + ' Minuten stehen oder bis jemand den Text links antippt.'
+        ? (d.an
+          ? 'Der Abschiedsschirm steht jetzt dauerhaft auf dem Display – spätestens nach einer '
+            + 'halben Minute. Wegtippen geht nicht; zum Beenden diesen Schalter wieder ausschalten.'
+          : 'Testmodus aus. Das Display geht innerhalb einer halben Minute zurück in den Normalbetrieb.')
         : 'Fehler: ' + d.error;
+      // Der Schalter zeigt, was der Server wirklich gespeichert hat -- nicht, was angeklickt wurde.
+      if (d.ok) abschiedTestmodus.checked = !!d.an;
     } catch (e) {
       ziel.className = 'result err';
       ziel.textContent = 'Fehler: ' + e.message;
+      abschiedTestmodus.checked = !an;
     }
   });
 }
