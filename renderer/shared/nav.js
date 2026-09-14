@@ -10,6 +10,20 @@
     if (a.getAttribute('href') === current) a.classList.add('active');
   });
 
+  // --- Der Weg zur Live-Ansicht -------------------------------------------------------------
+  //
+  // Sie steht hier und nicht als Markup in zehn Seiten: Eine Verknuepfung, die man an zehn
+  // Stellen pflegen muss, fehlt an neun davon irgendwann.
+  const links = document.querySelector('.hawall-nav-links');
+  if (links && !links.querySelector('[href="/live"]')) {
+    const a = document.createElement('a');
+    a.href = '/live';
+    a.textContent = 'Live-Ansicht';
+    a.title = 'Dieselbe Anzeige wie auf der Wand – hier bedienbar';
+    links.appendChild(a);
+    if (location.pathname === '/live') a.classList.add('active');
+  }
+
   // --- Akkustand des Panels ---------------------------------------------------------------
   //
   // Diese Seite laeuft auf einem anderen Geraet als das Panel: navigator.getBattery() wuerde

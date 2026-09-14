@@ -33,7 +33,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `server/setup-server.js` | Express auf Port 8788, HA-Proxy, Zugangscode |
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
-| `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst |
+| `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst. Läuft auch als **Live-Ansicht** unter `/live` im Browser |
 | `renderer/shared/ankunftsschirm.js` | Ankunftsschirm: `sollAnzeigen()` ist reine Entscheidung ohne DOM und ohne Uhr, der Rest ist Anzeige |
 | `renderer/shared/dashboard-render.js` | Kartenkatalog und Rendering; enthält auch das eingebaute Design `DEFAULT_THEME` |
 
@@ -328,6 +328,18 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Hintergründe, die einander ähnlich sehen sollen und es nach der ersten Änderung nicht mehr
   tun. `createRadialGradient` kann außerdem nur Kreise: Die Fläche wird für jede Wolke kurz
   gestaucht, sonst sind die Wolken rund statt oval.
+- **Dieselbe Seite läuft an zwei Orten: auf der Wand und unter `/live` im Browser.**
+  Unterschieden wird über `IM_PANEL` (`location.protocol === 'file:'`). Das ist keine
+  Kosmetik — alles, was das **Gerät** betrifft, darf nur auf dem Panel passieren:
+  Helligkeit stellen, den Akku melden (sonst stünde der Akku des Notebooks in der Leiste),
+  das Hintergrundbild ablegen, den Warnton abspielen, nachts schwarz werden. Wer künftig
+  etwas einbaut, das den Rechner anfasst, muss `IM_PANEL` prüfen — sonst tut es die
+  Live-Ansicht mit.
+  Bewusst **keine Bildschirmübertragung**: Ein Videostrom kostet dauernd Rechenzeit, frisst
+  auf einem Surface Go Akku und sieht trotzdem unscharf aus. Die Seite holt ihre Daten
+  ohnehin über diesen Server; ein Tastendruck geht denselben Weg wie auf dem Panel.
+  Die Route heißt `/live` **ohne** abschließenden Schrägstrich: Mit `/live/` wäre die
+  Grundlage für `shared/…` das Verzeichnis `/live/`, und jede Datei liefe ins Leere.
 - **Kein Mauszeiger auf der Anzeige.** `body.wandanzeige` blendet ihn überall aus. Er taucht
   sonst von allein auf, weil das Aufwecken mit dem Mauszeiger wackeln muss (`panel.js`), und
   bleibt dann mitten auf der Wand stehen. Bewusst an die Body-Klasse gebunden: Der

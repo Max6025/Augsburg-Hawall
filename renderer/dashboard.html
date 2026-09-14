@@ -128,8 +128,24 @@
 <script>
 const { ICONS, defaultCardType, buildCard, resolveSpan } = DashboardRender;
 const params = new URLSearchParams(location.search);
+
+// Laeuft diese Seite AUF dem Panel oder im Browser eines anderen Geraets?
+//
+// Die App laedt sie ueber file://, die Live-Ansicht ueber http://<panel>:8788/live. Der
+// Unterschied ist nicht kosmetisch: Auf dem Panel darf sie die Helligkeit stellen, den
+// Akku melden und das Hintergrundbild ablegen -- im Browser waere all das falsch. Der Akku
+// des Notebooks ist nicht der des Panels, und wer von der Couch aus zusieht, will nicht,
+// dass sein Bildschirm nachts schwarz wird.
+const IM_PANEL = location.protocol === 'file:';
+
 const PORT = params.get('port') || '8787';
-const API = `http://localhost:${PORT}`;
+// Im Browser derselbe Ursprung wie die Seite -- sonst greift der Zugangscode nicht (das
+// Sitzungs-Plaetzchen gilt nur fuer den Ursprung, von dem die Seite kam) und jeder Aufruf
+// scheitert an der Herkunftspruefung.
+const API = IM_PANEL ? `http://localhost:${PORT}` : location.origin;
+
+// Der Mauszeiger wird nur auf der Wand ausgeblendet. Wer die Live-Ansicht bedient, braucht ihn.
+if (!IM_PANEL) document.body.classList.remove('wandanzeige');
 
 let config = null;
 let statesById = {};
@@ -906,6 +922,9 @@ function applyNotify() {
 // dem diese App laeuft -- NICHT ueber HA, sondern die Battery-Status-API des Browsers. ---
 let batteryObj = null;
 async function initDeviceBattery() {
+  // Die Akkuwarnung gilt dem PANEL. In der Live-Ansicht waere sie eine Warnung ueber das
+  // falsche Geraet -- und der Warnton kaeme aus dem Notebook statt von der Wand.
+  if (!IM_PANEL) return;
   if (!navigator.getBattery) return; // Geraet ohne Akku (z.B. Desktop-PC) oder nicht unterstuetzt
   try {
     batteryObj = await navigator.getBattery();
@@ -1117,6 +1136,10 @@ function tonZustandMelden(fehler) {
 // sie beim naechsten Start. Fuer "Ton testen" reicht das nicht -- man will ihn JETZT hoeren,
 // auf der Wand, waehrend man danebensteht.
 function befehleEmpfangen() {
+  // "Warnton auf der Wand abspielen" soll auf der WAND klingen. Waere die Live-Ansicht
+  // mit angemeldet, piepste auch das Notebook -- und die Rueckmeldung, ob es geklappt hat,
+  // kaeme vom falschen Geraet.
+  if (!IM_PANEL) return;
   let quelle;
   try {
     quelle = new EventSource(`${API}/api/anzeige/befehle`);
@@ -1145,6 +1168,10 @@ let akkuMeldungZeit = 0;
 const AKKU_LEBENSZEICHEN_MS = 5 * 60 * 1000;
 
 function akkuMelden(prozent, laedt) {
+  // Nur vom Panel. Sonst meldete die Live-Ansicht den Akku des Notebooks, auf dem sie
+  // gerade offen ist -- und in der Navigationsleiste staende eine Zahl, die mit dem Panel
+  // nichts zu tun hat.
+  if (!IM_PANEL) return;
   const stand = prozent + '/' + laedt;
   if (stand === akkuZuletztGemeldet && Date.now() - akkuMeldungZeit < AKKU_LEBENSZEICHEN_MS) return;
   akkuZuletztGemeldet = stand;
@@ -1170,6 +1197,8 @@ function parseHM(str) {
 }
 
 function isNightTime() {
+  // In der Live-Ansicht gibt es keinen Nachtmodus: Wer sie oeffnet, will etwas sehen.
+  if (!IM_PANEL) return false;
   // Sobald die Kalendersteuerung aktiv ist, liegt die Nachtsperre im Hauptprozess: sie schaltet
   // das Panel wirklich ab, statt nur ein schwarzes Overlay darueberzulegen. Beides gleichzeitig
   // laufen zu lassen wuerde sich gegenseitig ins Gehege kommen.
@@ -1765,6 +1794,7 @@ function hintergrundZeichnen(breite, hoehe, text) {
  * sie dann erst zu zeichnen waere zu spaet.
  */
 async function hintergrundAblegen() {
+  if (!IM_PANEL) return false;   // das Hintergrundbild gehoert dem Panel
   if (!config || !config.desktopHintergrund) return false;
   const g = (config && config.panelGroesse) || {};
   const breite = Math.max(640, Math.round(Number(g.breite) || 1920));

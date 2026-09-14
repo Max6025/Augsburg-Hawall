@@ -171,6 +171,25 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
   });
 
+  // --- Die Live-Ansicht ---------------------------------------------------------------------
+  //
+  // Dieselbe Anzeige wie auf der Wand, im Browser eines anderen Geraets -- und bedienbar.
+  //
+  // Bewusst KEINE Bildschirmuebertragung: Das waere ein Videostrom, der dauernd Rechenzeit
+  // kostet, auf einem Surface Go Akku frisst und trotzdem unscharf aussieht. Stattdessen
+  // laeuft dieselbe Seite noch einmal -- sie holt ihre Daten ohnehin ueber diesen Server, und
+  // ein Tastendruck geht denselben Weg wie auf dem Panel.
+  //
+  // Sie liegt HINTER dem Zugangscode (die Pruefung steht weiter oben): Wer die Anzeige
+  // bedienen kann, kann Licht, Tore und die Alarmanlage schalten.
+  //
+  // Ohne abschliessenden Schraegstrich, damit `shared/...` in der Seite auf `/shared/...`
+  // zeigt. Mit Schraegstrich waere die Grundlage `/live/` und jede Datei ein Fehlschlag.
+  app.get('/live', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'renderer', 'dashboard.html'));
+  });
+  app.get('/live/', (req, res) => res.redirect('/live'));
+
   app.use('/setup', express.static(path.join(__dirname, '..', 'renderer', 'setup')));
   app.use('/shared', express.static(path.join(__dirname, '..', 'renderer', 'shared')));
 
