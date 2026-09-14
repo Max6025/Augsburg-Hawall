@@ -176,3 +176,73 @@ test('Die Grenzen stimmen mit dem Raster in der CSS ueberein', () => {
   assert.ok(block.includes(spalten), spalten + ' fehlt in: ' + block);
   assert.ok(block.includes(zeilen), zeilen + ' fehlt in: ' + block);
 });
+
+// --- Muelltermine ------------------------------------------------------------------------------
+//
+// Zwei Dinge waren hier falsch. Erstens war der KARTENNAME die groesste Schrift -- aus zwei
+// Metern las man "Muelltermine" und sonst nichts, obwohl die Frage "welche Tonne, und wann?"
+// lautet. Zweitens stand jeder Eintrag in einer eigenen Zeile; in Crespina fahren dienstags
+// zwei Tonnen zusammen, und das frass die halbe Karte.
+
+test('Termine werden nach Tagen zusammengefasst', () => {
+  const tage = R.wasteTage([
+    { summary: 'Pannoloni', start: '2026-09-15' },
+    { summary: 'Organico', start: '2026-09-14' },
+    { summary: 'Indifferenziato', start: '2026-09-15' }
+  ]);
+  assert.strictEqual(tage.length, 2);
+  assert.deepStrictEqual(tage[0].arten, ['Organico']);
+  // Innerhalb eines Tages bleibt die Reihenfolge aus Home Assistant stehen -- umsortieren
+  // wuerde eine Rangfolge behaupten, die es nicht gibt.
+  assert.deepStrictEqual(tage[1].arten, ['Pannoloni', 'Indifferenziato'], 'beide Tonnen an einem Tag');
+});
+
+test('Derselbe Tonnenname an einem Tag steht nur einmal da', () => {
+  const tage = R.wasteTage([
+    { summary: 'Organico', start: '2026-09-14' },
+    { summary: 'Organico', start: '2026-09-14' }
+  ]);
+  assert.deepStrictEqual(tage[0].arten, ['Organico']);
+});
+
+test('Die Anzahl begrenzt TAGE, nicht Eintraege', () => {
+  const ev = [
+    { summary: 'A', start: '2026-09-14' }, { summary: 'B', start: '2026-09-14' },
+    { summary: 'C', start: '2026-09-15' }, { summary: 'D', start: '2026-09-16' }
+  ];
+  assert.strictEqual(R.wasteTage(ev, 2).length, 2);
+  assert.deepStrictEqual(R.wasteTage(ev, 2)[0].arten, ['A', 'B']);
+});
+
+test('Kaputte Eintraege werden uebergangen, nicht gezaehlt', () => {
+  assert.deepStrictEqual(R.wasteTage(null), []);
+  assert.deepStrictEqual(R.wasteTage([{ summary: 'X' }, { start: '' }]), []);
+});
+
+test('Ein reines Datum ist LOKALE Mitternacht, nicht UTC', () => {
+  // new Date('2026-09-14') ist nach der Norm UTC-Mitternacht. Westlich von Greenwich waere das
+  // der 13. September -- die Tonne stuende einen Tag zu frueh auf der Karte. Genau dieser
+  // Fallstrick steht in CLAUDE.md.
+  const d = R.wasteDatum('2026-09-14');
+  assert.strictEqual(d.getFullYear(), 2026);
+  assert.strictEqual(d.getMonth(), 8);
+  assert.strictEqual(d.getDate(), 14, 'Ortszeit, nicht UTC');
+  assert.strictEqual(R.wasteTagesschluessel('2026-09-14'), '2026-09-14');
+  assert.strictEqual(R.wasteDatum('quatsch'), null);
+});
+
+test('Heute und morgen werden benannt, alles andere datiert', () => {
+  const zwei = (x) => String(x).padStart(2, '0');
+  const tag = (n) => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate());
+  };
+  assert.strictEqual(R.wasteDateLabel(tag(0)), 'Heute');
+  assert.strictEqual(R.wasteDateLabel(tag(1)), 'Morgen');
+  assert.match(R.wasteDateLabel(tag(5)), /\d\d\.\d\d\./);
+  // "Bald" ist eine Aufgabe, alles andere eine Information -- nur dafuer faerbt sich der Chip.
+  assert.strictEqual(R.wasteBald(tag(0)), true);
+  assert.strictEqual(R.wasteBald(tag(1)), true);
+  assert.strictEqual(R.wasteBald(tag(2)), false);
+  assert.strictEqual(R.wasteBald(tag(-1)), false, 'Vergangenes draengt nicht mehr');
+});

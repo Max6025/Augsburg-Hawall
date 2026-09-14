@@ -424,6 +424,37 @@ async function ensureForecast(entityId, forecastType) {
   }
 }
 
+/**
+ * Alles, was eine Karte ausser ihrem Zustand noch braucht: Verlauf, Vorhersage, Muelltermine,
+ * Energiequellen.
+ *
+ * Steht hier EINMAL, weil zwei Flaechen Karten bauen -- das Dashboard und der
+ * Abschiedsschirm. Der Abschiedsschirm holte anfangs nur den Verlauf; eine Muellkarte dort
+ * zeigte deshalb immer "Keine Termine gefunden", obwohl im Unterdashboard alles stimmte.
+ * Zwei Kopien dieser Liste laufen beim naechsten Kartentyp wieder auseinander.
+ */
+async function kartenZusatz(entry, type) {
+  const zusatz = {};
+  const einst = entry.settings || {};
+  if (MIT_VERLAUF.includes(type)) zusatz.history = await ensureHistory(entry.entity_id, einst.graphHours);
+  if (type === 'forecast') {
+    const fr = await ensureForecast(entry.entity_id, einst.forecastType);
+    zusatz.forecast = fr.forecast; zusatz.forecastError = fr.error;
+  }
+  if (type === 'waste') {
+    const wr = await ensureWasteEvents(entry.entity_id);
+    zusatz.waste = wr.events; zusatz.wasteError = wr.error;
+  }
+  if (type === 'energy') {
+    zusatz.energy = {
+      grid: statesById[einst.gridEntity], gridReturn: statesById[einst.gridReturnEntity],
+      solar: statesById[einst.solarEntity], battery: statesById[einst.batteryEntity],
+      batterySoc: statesById[einst.batterySocEntity]
+    };
+  }
+  return zusatz;
+}
+
 let wasteCache = {};
 async function ensureWasteEvents(entityId) {
   if (wasteCache[entityId]) return wasteCache[entityId];
@@ -721,26 +752,10 @@ async function render() {
     const s = (type === 'clock' || type === 'navigate' || type === 'energy' || type === 'photo' || type === 'quicktiles') ? null : statesById[entry.entity_id];
     if (type !== 'clock' && type !== 'navigate' && type !== 'energy' && type !== 'photo' && type !== 'quicktiles' && !s) continue;
     const span = resolveSpan(entry, type);
-    let history, forecast, forecastError, energy, waste, wasteError;
-    if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, (entry.settings || {}).graphHours);
-    if (type === 'forecast') { const fr = await ensureForecast(entry.entity_id, (entry.settings || {}).forecastType); forecast = fr.forecast; forecastError = fr.error; }
-    if (type === 'waste') { const wr = await ensureWasteEvents(entry.entity_id); waste = wr.events; wasteError = wr.error; }
-    if (type === 'energy') {
-      const es = entry.settings || {};
-      energy = {
-        grid: statesById[es.gridEntity], gridReturn: statesById[es.gridReturnEntity],
-        solar: statesById[es.solarEntity], battery: statesById[es.batteryEntity],
-        batterySoc: statesById[es.batterySocEntity]
-      };
-    }
+    const zusatz = await kartenZusatz(entry, type);
     grid.appendChild(buildCard(entry.entity_id, s, type, span, {
       editable: false,
-      history,
-      forecast,
-      forecastError,
-      energy,
-      waste,
-      wasteError,
+      ...zusatz,
       apiBase: API,
       photoVersion: type === 'photo' ? (entry.settings || {}).photoVersion : null,
       onPhoto: !!findOverlappingPhotoInLayout(entry, layout),
@@ -1471,10 +1486,9 @@ async function abschiedKartenBauen() {
     const ohneZustand = ['clock', 'navigate', 'energy', 'photo', 'quicktiles'].includes(type);
     const s = ohneZustand ? null : statesById[entry.entity_id];
     if (!ohneZustand && !s) continue;
-    let history;
-    if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, (entry.settings || {}).graphHours);
+    const zusatz = await kartenZusatz(entry, type);
     flaeche.appendChild(buildCard(entry.entity_id, s, type, abschiedSpanne(resolveSpan(entry, type)), {
-      editable: false, history, apiBase: API, statesById, namen: haNamen,
+      editable: false, ...zusatz, apiBase: API, statesById, namen: haNamen,
       torZeiten: torZeiten[entry.entity_id],
       settings: entry.settings || {}, callbacks: dashboardRueckrufe()
     }));

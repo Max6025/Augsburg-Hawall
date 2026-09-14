@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Mülltermine – Kartenvergleich</title>
+<!--
+  Die Mülltermine-Karte mit echten Daten, in den Groessen, in denen sie auf der Wand haengt.
+  Ohne Home Assistant, ohne Electron.
+
+  ?hell zeigt das helle Design. Am besten bei 1280x854 ansehen -- echte Panelgroesse.
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  body { margin: 0; min-height: 100vh; padding: 3vh 3vw; box-sizing: border-box; }
+  h2 { font: 600 1.6vh/1.4 system-ui, sans-serif; color: var(--muted);
+       letter-spacing: 0.1em; text-transform: uppercase; margin: 2.4vh 0 1vh; }
+  /* Dasselbe Raster wie auf der Wand: sechs Spalten, Zeilen wie dort hoch. */
+  .raster { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1.2vh;
+            grid-auto-rows: 9vh; }
+</style>
+</head>
+<body class="wandanzeige">
+<div id="raus"></div>
+
+<script src="../../renderer/shared/dashboard-render.js"></script>
+<script>
+DashboardRender.applyCustomTheme(DashboardRender.DEFAULT_THEME);
+if (new URLSearchParams(location.search).has('hell')) document.body.classList.add('light-theme');
+
+// Echte Daten: der Rhythmus aus Crespina, ab heute.
+// ACHTUNG: toISOString() waere hier falsch -- es rechnet nach UTC, und oestlich von
+// Greenwich landet die lokale Mitternacht auf dem VORTAG. Genau die Falle, die in CLAUDE.md
+// steht. Home Assistant liefert bei Ganztagesterminen ein reines Datum in Ortszeit.
+const tag = (n) => {
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n);
+  const zwei = (x) => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate());
+};
+const TERMINE = [
+  { summary: 'Organico', start: tag(0) },
+  { summary: 'Indifferenziato', start: tag(1) },
+  { summary: 'Pannoloni', start: tag(1) },
+  { summary: 'Carta', start: tag(2) },
+  { summary: 'Multimateriale leggero', start: tag(3) },
+  { summary: 'Organico', start: tag(4) }
+];
+
+// Eigene Farbregeln -- die eingebauten raten auf deutsche Tonnennamen.
+const FARBEN = [
+  { muster: 'organico', farbe: '#8a6a4b' },
+  { muster: 'carta', farbe: '#4f7cff' },
+  { muster: 'multimateriale', farbe: '#f0b429' },
+  { muster: 'indifferenziato', farbe: '#6b7280' },
+  { muster: 'pannoloni', farbe: '#d98bbd' }
+];
+
+const GROESSEN = [
+  ['Klein (2x2) -- so haengt sie meist', 2, 2],
+  ['Breit (3x2)', 3, 2],
+  ['Hoch (2x4) -- wie im Abschiedsschirm', 2, 4]
+];
+
+const raus = document.getElementById('raus');
+GROESSEN.forEach(([titel, cols, rows]) => {
+  const h = document.createElement('h2'); h.textContent = titel; raus.appendChild(h);
+  const r = document.createElement('div'); r.className = 'raster'; raus.appendChild(r);
+  r.appendChild(DashboardRender.buildCard('sensor.muell', { state: 'on', attributes: { friendly_name: 'Mülltermine' } },
+    'waste', { cols, rows }, {
+      editable: false, apiBase: '', statesById: {}, callbacks: {},
+      settings: { wasteCount: 5, wasteColors: FARBEN },
+      waste: TERMINE
+    }));
+  // Danebengestellt: wie sie ohne Termine aussieht -- der Fall, den man im Betrieb sieht,
+  // wenn die Integration klemmt.
+  r.appendChild(DashboardRender.buildCard('sensor.muell2', { state: 'on', attributes: { friendly_name: 'Mülltermine' } },
+    'waste', { cols, rows }, {
+      editable: false, apiBase: '', statesById: {}, callbacks: {},
+      settings: {}, waste: []
+    }));
+});
+</script>
+</body>
+</html>

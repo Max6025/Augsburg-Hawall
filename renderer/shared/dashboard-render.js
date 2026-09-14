@@ -1073,9 +1073,77 @@
     return WASTE_UNBEKANNT;
   }
 
+  /**
+   * Liest ein Termindatum -- ein reines Datum als LOKALE Mitternacht.
+   *
+   * `new Date('2026-09-14')` ist nach der Norm UTC-Mitternacht. Westlich von Greenwich ist das
+   * der 13. September, und ein Ganztagestermin rutscht auf den Vortag: Die Tonne steht dann
+   * einen Tag zu frueh auf der Karte. Genau dieser Fall steht als Fallstrick in CLAUDE.md und
+   * hat die Kalenderauswertung schon einmal erwischt. Ein Zeitpunkt MIT Uhrzeit bringt seine
+   * Zone selbst mit und wird unveraendert gelesen.
+   */
+  function wasteDatum(wert) {
+    const s = String(wert == null ? '' : wert).trim();
+    const nurDatum = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (nurDatum) return new Date(+nurDatum[1], +nurDatum[2] - 1, +nurDatum[3]);
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /** Der Tag, an dem ein Termin liegt -- als ortsbezogener Schluessel zum Gruppieren. */
+  function wasteTagesschluessel(wert) {
+    const d = wasteDatum(wert);
+    if (!d) return '';
+    const zwei = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate());
+  }
+
+  /**
+   * Fasst Termine zu TAGEN zusammen.
+   *
+   * Auf der Karte interessiert "was kommt an welchem Tag raus", nicht eine flache Liste, in
+   * der derselbe Tag dreimal untereinander steht. In Crespina fahren dienstags zwei Tonnen
+   * zusammen -- als Einzelzeilen frisst das die halbe Karte und sieht aus wie ein Fehler.
+   */
+  function wasteTage(events, hoechstens) {
+    const tage = [];
+    const nach = new Map();
+    for (const e of (Array.isArray(events) ? events : [])) {
+      const schluessel = wasteTagesschluessel(e && e.start);
+      if (!schluessel) continue;
+      if (!nach.has(schluessel)) {
+        const tag = { tag: schluessel, start: e.start, arten: [] };
+        nach.set(schluessel, tag);
+        tage.push(tag);
+      }
+      const art = String((e && e.summary) || '').trim();
+      if (art && nach.get(schluessel).arten.indexOf(art) < 0) nach.get(schluessel).arten.push(art);
+    }
+    tage.sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
+    const n = Number(hoechstens);
+    return n > 0 ? tage.slice(0, n) : tage;
+  }
+
+  /**
+   * Steht die Tonne heute oder morgen an?
+   *
+   * Nur dafuer faerbt sich der Zustands-Chip ein. Ab uebermorgen ist es eine Information,
+   * heute und morgen ist es eine Aufgabe -- und wer im Vorbeigehen hinsieht, soll den
+   * Unterschied sehen, ohne das Datum zu lesen.
+   */
+  function wasteBald(wert) {
+    const d = wasteDatum(wert);
+    if (!d) return false;
+    const heute = new Date(); heute.setHours(0, 0, 0, 0);
+    const ziel = new Date(d); ziel.setHours(0, 0, 0, 0);
+    const tage = Math.round((ziel - heute) / 86400000);
+    return tage >= 0 && tage <= 1;
+  }
+
   // Formatiert ein Datum relativ ("Heute", "Morgen", sonst Wochentag + Datum)
   function wasteDateLabel(dateStr) {
-    const d = new Date(dateStr);
+    const d = wasteDatum(dateStr);
+    if (!d) return '';
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const target = new Date(d); target.setHours(0, 0, 0, 0);
     const diffDays = Math.round((target - today) / 86400000);
@@ -2001,28 +2069,41 @@
         });
       }
     } else if (type === 'waste') {
-      const anzahlMuell = Math.max(1, Math.min(12, Number(settings.wasteCount) || 4));
+      // Dieselbe Anatomie wie jede andere Karte: Symbolzeile, Wert, Name als Bildunterschrift.
+      // Vorher war der KARTENNAME die groesste Schrift und die naechste Abfuhr klein darunter --
+      // aus zwei Metern las man "Muelltermine" und sonst nichts. Die Frage lautet aber "welche
+      // Tonne, und wann", und genau das steht jetzt gross.
+      const anzahlTage = Math.max(1, Math.min(12, Number(settings.wasteCount) || 4));
       const eigeneFarben = Array.isArray(settings.wasteColors) ? settings.wasteColors : [];
-      const events = (opts.waste || []).slice(0, anzahlMuell);
-      const next = events[0];
+      const tage = wasteTage(opts.waste, anzahlTage);
+      const naechster = tage[0];
+
+      // Die Farbe der naechsten Tonne wird der Kartenakzent -- Symbol, Schein und Anflug
+      // nehmen sie auf. Eine Tonne erkennt man an ihrer Farbe, lange bevor man den Namen
+      // liest; ein Punkt von zwoelf Pixeln leistet das nicht.
+      if (naechster) card.style.setProperty('--kachel-akzent', wasteColor(naechster.arten[0], eigeneFarben));
+
+      const punkte = (arten) => arten.map(a =>
+        `<span class="waste-dot" style="background:${wasteColor(a, eigeneFarben)}"></span>`).join('');
+
       card.innerHTML = `
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.trash)}</span><span class="name">${name}</span></div>
-        ${next ? `
-          <div class="waste-next">
-            <span class="waste-dot" style="background:${wasteColor(next.summary, eigeneFarben)}"></span>
-            <div>
-              <div class="waste-next-title">${esc(next.summary)}</div>
-              <div class="waste-next-date">${wasteDateLabel(next.start)}</div>
-            </div>
-          </div>
+        <div class="row">
+          <span class="icon">${symbolFuer(settings, ICONS.trash)}</span>
+          ${naechster ? `<span class="badge${wasteBald(naechster.start) ? ' waste-bald' : ''}">${esc(wasteDateLabel(naechster.start))}</span>` : ''}
+        </div>
+        ${naechster ? `
+          <div class="value waste-art">${esc(naechster.arten.join(' · '))}</div>
+          <div class="name">${name}</div>
           <div class="waste-list">
-            ${events.slice(1).map(e => `
+            ${tage.slice(1).map(t => `
               <div class="waste-item">
-                <span class="waste-dot" style="background:${wasteColor(e.summary, eigeneFarben)}"></span>
-                <span class="waste-item-title">${esc(e.summary)}</span>
-                <span class="waste-item-date">${wasteDateLabel(e.start)}</span>
+                <span class="waste-punkte">${punkte(t.arten)}</span>
+                <span class="waste-item-title">${esc(t.arten.join(' · '))}</span>
+                <span class="waste-item-date">${esc(wasteDateLabel(t.start))}</span>
               </div>`).join('')}
-          </div>` : `<div class="graph-empty">${opts.wasteError || 'Keine Termine gefunden'}</div>`}`;
+          </div>`
+        : `<div class="name">${name}</div>
+           <div class="graph-empty">${esc(opts.wasteError || 'Keine Termine gefunden')}</div>`}`;
     } else if (type === 'photo') {
       const cardId = entity_id; // z.B. "photo:1712345678" -- eindeutig pro Karte
       const urls = fotoUrls(cardId, settings, opts.apiBase);
@@ -2439,7 +2520,7 @@
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
-    wasteColor, zahlFormatieren, symbolFuer, symbolNamen,
+    wasteColor, wasteDatum, wasteTage, wasteBald, wasteTagesschluessel, wasteDateLabel, zahlFormatieren, symbolFuer, symbolNamen,
     quickTileAktion, quickTileAktiv, quickTileText,
     kachelRegler, miniVerlaufSvg, tendenz, rueckmeldung,
     ALARM_ZUSTAENDE, ALARM_TOENE, alarmDarstellung, symbolErraten,

@@ -902,8 +902,10 @@ function openSettings(entityId) {
   }
   if (fields.wasteOpts) {
     html += `
-      <label>Wie viele Termine anzeigen</label>
+      <label>Wie viele Abfuhrtage anzeigen</label>
       <input type="number" id="setWasteCount" min="1" max="12" placeholder="4" value="${settings.wasteCount ?? ''}">
+      <p class="hint-text">Gezaehlt werden TAGE, nicht Eintraege: Fahren an einem Tag zwei Tonnen,
+        stehen sie in einer Zeile. Der erste Tag ist der grosse oben.</p>
       <label style="margin-top:0.8rem;">Eigene Tonnenfarben</label>
       <div id="wasteColorList"></div>
       <button type="button" id="wasteAddColorBtn" style="margin-top:0.6rem;">+ Tonnenart hinzufügen</button>

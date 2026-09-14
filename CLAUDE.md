@@ -130,6 +130,30 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter links liegt, nicht.
   Die Zahlen stehen in `ABSCHIED_SPALTEN`/`ABSCHIED_ZEILEN` **und** in `dashboard.css`; ein Test
   vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt, sondern genau diesen Rand.
+- **Karten brauchen mehr als ihren Zustand, und das steht an einer Stelle.** `kartenZusatz()`
+  in `dashboard.html` holt Verlauf, Vorhersage, Mülltermine und Energiequellen. Zwei Flächen
+  bauen Karten — das Dashboard und der Abschiedsschirm —, und der Abschiedsschirm holte
+  anfangs nur den Verlauf: Eine Müllkarte zeigte dort immer „Keine Termine gefunden", obwohl
+  im Unterdashboard alles richtig eingestellt war. Wer einen Kartentyp mit eigenen Daten
+  ergänzt, ergänzt ihn dort — zwei Kopien dieser Liste laufen beim nächsten Typ wieder
+  auseinander.
+- **Die Mülltermine-Karte beantwortet „welche Tonne, und wann" — in dieser Reihenfolge.**
+  Vorher war der **Kartenname** die größte Schrift; aus zwei Metern las man „Mülltermine" und
+  sonst nichts, und die Folgetermine standen in 8-Pixel-Zeilen darunter. Jetzt dieselbe
+  Anatomie wie jede andere Karte: Symbolzeile mit dem Tag als Zustands-Chip, die Tonnenart als
+  Wert, der Kartenname als Bildunterschrift. Drei Punkte hängen daran:
+  1. **Gruppiert wird nach TAGEN** (`wasteTage()`), nicht nach Einträgen. In Crespina fahren
+     dienstags zwei Tonnen zusammen — als Einzelzeilen frisst das die halbe Karte und sieht
+     aus wie ein Fehler. Die Einstellung „wie viele" zählt seitdem Tage.
+  2. **Die Farbe der nächsten Tonne wird der Kartenakzent.** Eine Tonne erkennt man an ihrer
+     Farbe, lange bevor man den Namen liest; ein Punkt von zwölf Pixeln leistet das nicht.
+     Gesetzt wird `--kachel-akzent` — nicht `background`, siehe [ADR 0004](docs/adr/0004-farbe-als-akzent-statt-als-kachelfarbe.md).
+  3. **Heute und morgen färben den Zustands-Chip ein** (`wasteBald()`). Bis übermorgen ist es
+     eine Information, heute ist es eine Aufgabe.
+  Und: `new Date('2026-09-14')` ist **UTC**-Mitternacht. Westlich von Greenwich ist das der
+  13. September, und die Tonne stünde einen Tag zu früh auf der Karte — derselbe Fallstrick wie
+  bei den Ganztages-Terminen, nur an einer zweiten Stelle. `wasteDatum()` liest ein reines
+  Datum deshalb als **lokale** Mitternacht; ein Zeitpunkt mit Uhrzeit bringt seine Zone selbst mit.
 - **Der Text des Abschiedsschirms ist eine Abhakliste, keine Aufzählung.** Eine Abreiseliste
   wird abgearbeitet, nicht gelesen — als bloße Stichpunkte muss man sich selbst merken, wo man
   war, und genau dabei bleibt das Fenster im Bad zu. Gebaut wird aus dem **fertigen Markdown**
@@ -611,7 +635,7 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-412 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
+418 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
 Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
 Electron wird dafür nicht gebraucht.
 
