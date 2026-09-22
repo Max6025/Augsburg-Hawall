@@ -1,16 +1,22 @@
-# Italien Wall Display
+# Augsburg Wall Display
 
-Wandpanel für Home Assistant unter Windows, dessen Anzeige über Kalendereinträge gesteuert wird.
-Electron 31, Vanilla JS, kein Bundler, kein TypeScript.
+Wandpanel für Home Assistant unter Windows im **Dauerbetrieb**. Electron 31, Vanilla JS, kein
+Bundler, kein TypeScript.
 
-Vorlage ist [HA Wall Display](https://github.com/Max6025/Hawall); dies ist bewusst ein eigenes
-Projekt, siehe [ADR 0001](docs/adr/0001-eigenes-projekt-statt-einstellung-in-hawall.md).
+Vorlage ist [Italien Wall Display](https://github.com/Max6025/Italien-Hawall) — ein Fork mit
+voller Historie, `upstream` zeigt dorthin. Dies ist bewusst ein eigenes Projekt, siehe
+[ADR 0001](docs/adr/0001-eigenes-projekt-statt-schalter.md).
+
+**Der eine Satz, der alles andere erklärt:** Dort steuert ein Kalender die Anzeige, weil nur
+zeitweise jemand im Haus ist. Hier wohnt jemand. Der Normalzustand ist „Panel an", die einzige
+Ausnahme ist die Nacht — und was auf dem angeschalteten Panel zu sehen ist, entscheidet der
+Bildschirmschoner, nicht die Steuerung.
 
 ## Vor dem Loslegen lesen
 
 - [CONTEXT.md](CONTEXT.md) — das Glossar. **Panel** ist das Gerät, **Wall Display** die Anzeige;
-  **Panel aus** ist echtes Abschalten, **Nachtschwarz** nur ein Overlay. Diese Unterscheidungen
-  ernst nehmen, sie waren die Ursache der meisten Missverständnisse beim Entwurf.
+  **Panel aus** ist echtes Abschalten. Ganz unten steht, welche Begriffe aus der Vorlage hier
+  ersatzlos entfallen sind — die Liste ist da, damit niemand sie versehentlich wieder einführt.
 - [docs/adr/](docs/adr/) — fünf Entscheidungen, die im Code wie Versehen aussehen und keine sind.
 
 ## Architektur
@@ -20,32 +26,38 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 
 | Datei | Aufgabe |
 |---|---|
-| `control/calendar.js` | HA-Kalender abrufen, Treffer finden, Anzeigefenster berechnen |
 | `control/panel.js` | Panel per `SC_MONITORPOWER` schalten, über einen dauerhaft offenen PowerShell-Prozess |
 | `control/controller.js` | Zustandsautomat; die Rangfolge steht vollständig in `decide()` |
-| `control/ankunft.js` | Warten auf die Ankunft: erst Dashboard, wenn die Alarmanlage „zu Hause“ meldet |
-| `renderer/shared/alarm.js` | Was die Alarmanlage über das Haus sagt: zu Hause, abwesend, unbekannt |
-| `renderer/shared/mdi-pfade.js` | **Erzeugt.** Alle Material-Design-Symbole; wird nur bei Bedarf nachgeladen |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
 | `renderer/shared/akku.js` | Wie dringend die Akkuwarnung ist: Stufe, Abstand, Lautstärke, Stummschalten |
+| `renderer/shared/mdi-pfade.js` | **Erzeugt.** Alle Material-Design-Symbole; wird nur bei Bedarf nachgeladen |
 | `server/setup-server.js` | Express auf Port 8788, HA-Proxy, Zugangscode |
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
 | `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst. Läuft auch als **Live-Ansicht** unter `/live` im Browser |
-| `renderer/shared/ruheschirm.js` | Ruheschirm: hinlegen, wenn waehrend eines Termins niemand da ist — `sollRuhen()` ist reine Entscheidung |
-| `renderer/shared/ankunftsschirm.js` | Ankunfts- **und** Abschiedsschirm: `sollAnzeigen()` / `sollAbschiedZeigen()` sind reine Entscheidung ohne DOM und ohne Uhr, der Rest ist Anzeige |
+| `renderer/shared/bildschirmschoner.js` | Der Ruhezustand: `sollSchonen()` ist reine Entscheidung ohne DOM und ohne Netz, der Rest ist Anzeige |
+| `renderer/shared/buehne.js` | Die driftenden Farbwolken — ein Partikelsystem, ohne jede Entscheidung |
+| `renderer/shared/markdown.js` | Der kleine Markdown-Satz für eingetippte Texte |
 | `renderer/shared/dashboard-render.js` | Kartenkatalog und Rendering; enthält auch das eingebaute Design `DEFAULT_THEME` |
 
 Die Rangfolge in `decide()` ist die einzige Stelle, an der entschieden wird, ob das Panel an
-sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
+sein soll. Sie ist kurz, und das soll sie bleiben:
+
+```
+1. Karenzzeit nach dem Start  -> Panel an   (Rettungsanker nach einem Windows-Update)
+2. Pause aktiv                -> Panel an   (jemand steht davor und will bedienen)
+3. Nachtsperre aktiv          -> Panel aus  (die EINZIGE Regel, die abschaltet)
+4. sonst                      -> Panel an
+```
+
+Neue Sonderfälle gehören dorthin und nirgendwo sonst. Was auf dem *angeschalteten* Panel zu
+sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des Bildschirmschoners
+(siehe [ADR 0003](docs/adr/0003-schoner-ist-der-ruhezustand.md)).
 
 ## Fallstricke
 
-- **Ganztages-Termine**: Home Assistant liefert das Enddatum **ausschließend**. Ein Termin vom
-  3. bis 7. Juni hat `end.date = "2026-06-08"`. Wer das übersieht, schaltet einen Tag zu früh ab.
-- **Zeitzonen**: `{ date: ... }` muss als *lokale* Mitternacht gelesen werden, nicht als UTC.
 - **Panel einschalten braucht ECHTE Eingabe.** `SC_MONITORPOWER` mit `-1` allein hält nicht, und
   `SetCursorPos` hilft nicht: Es verschiebt den Zeiger, zählt für Windows aber nicht als
   Benutzereingabe und setzt den Leerlaufzähler nicht zurück. Am Gerät sah das so aus: Panel geht
@@ -74,7 +86,7 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   vom Code ausgenommen. Diese Grenze nicht aufweichen, sonst sperrt sich das Gerät selbst aus.
 - **Modern Standby frisst die Anwendung.** Gemessen am 2026-09-09 auf dem Surface Go: eine
   Minute nach dem Abschalten des Panels ging das *Gerät* in Connected Standby (Kernel-Power 506),
-  die App war weg, der Setup-Server unerreichbar, und ein Termin in dieser Zeit blieb unbemerkt.
+  die App war weg, der Setup-Server unerreichbar, und der Wächter lief nicht mehr.
   Dagegen hält `keepSystemAwake()` in `main.js` eine `prevent-app-suspension`-Anforderung. Wird
   hier je etwas an der Panel-Abschaltung geändert, muss dieser Fall neu gemessen werden --
   „Panel aus" und „Gerät schläft" sehen von außen identisch aus.
@@ -89,69 +101,48 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   zusaetzlich auf `powerMonitor.getSystemIdleTime()`, hereingereicht als `idleSeconds`. Nur
   gepruft, wenn ohnehin abgeschaltet wuerde: Das Einschalten wackelt mit dem Mauszeiger
   (`panel.js`), und das wuerde sich sonst selbst als Benutzereingabe zurueckmelden.
-- **Doppelte Nachtlogik**: Der alte Nachtmodus im Renderer ist deaktiviert, solange die
-  Kalendersteuerung aktiv ist (`panelControlActive` in `dashboard.html`). Beide gleichzeitig
-  laufen zu lassen führt zu Flackern.
+- **Nachts wird WIRKLICH abgeschaltet, und deshalb weckt nur der Leerlaufzähler.** Das
+  Nachtschwarz der Vorlage (ein Overlay über einem weiter leuchtenden Panel) gibt es hier
+  nicht mehr; Begründung und Folgen stehen vollständig in
+  [ADR 0002](docs/adr/0002-nachts-wirklich-aus.md). Die eine Zeile, die man dabei übersieht:
+  Die Leerlauf-Prüfung in `tick()` läuft **nur, wenn ohnehin abgeschaltet würde**. Ohne diese
+  Bedingung meldet sich das Mauszeiger-Wackeln aus `panel.js` als Benutzereingabe zurück, und
+  die Steuerung hält sich selbst am Leben.
 
-- **An der Alarmanlage hängen zwei Funktionen, und sie dürfen sich nicht widersprechen.**
-  „Auf Ankunft warten" (`control/ankunft.js`, Hauptprozess) und „bei Abwesenheit dimmen"
-  (`dashboard.html`, Renderer) fragen dieselbe Entität dasselbe. Die Auslegung steht deshalb an
-  **einer** Stelle: `renderer/shared/alarm.js` — unter `renderer/`, weil nur von dort ein
-  `<script src>` hinkommt; Hauptprozess und Server holen sie sich per `require`. Die Frage hat
-  **drei** Antworten, nicht zwei: zu Hause, abwesend, **unbekannt**. Wer „unbekannt" zu
-  „abwesend" macht, dimmt den Bildschirm dauerhaft herunter, weil eine Entitäts-ID einen
-  Tippfehler hat — und wer davorsteht, sucht den Fehler am Gerät.
-- **Nacht und Abwesenheit greifen auf dieselbe Schraube zu.** Beide stellen die Helligkeit.
-  Wer sie an zwei Stellen einzeln dreht, bekommt einen Bildschirm, der nach dem Ende der Nacht
-  auf volle Helligkeit springt, obwohl noch niemand zu Hause ist. `helligkeitAnpassen()`
-  rechnet sie deshalb aus dem **gesamten** Zustand aus, nicht aus dem letzten Ereignis.
-- **Während der Abwesenheit lässt die Live-Verbindung nur die Alarmanlage durch.** Sonst wäre
-  der langsamere Abruftakt wirkungslos: Jede Lampe im Haus löst weiterhin sofort einen
-  Neuaufbau aus. Die Alarmanlage dagegen wird **nicht** gesammelt (kein 120-ms-Fenster) — wer
-  heimkommt, soll auf einen hellen Bildschirm treffen und nicht auf einen Sammeltakt warten.
-  Dafür steht sie auch dann in `letzteAnzeigeEntitaeten`, wenn sie auf keiner Karte liegt.
-- **Ankunfts- und Abschiedsschirm sind Geschwister, keine Zwillinge.** Beide benutzen dieselbe
-  Bühne und dieselbe Geburt einer Farbwolke — der Farb­ausschnitt hängt aber am **Objekt**
-  (`tonVon`/`tonBis`), nicht an der Funktion: Ankunft nimmt den ganzen Farbkreis, Abschied nur
-  den kühlen Teil (175–285°). Wer morgens an der Wand vorbeigeht, soll am Farbton erkennen, ob
-  heute jemand kommt oder jemand fährt, ohne die Überschrift zu lesen.
-  Drei Unterschiede sind Absicht: Der Abschiedsschirm zeigt **Karten** (ein Ankommender wird
-  begrüßt und soll nichts tun, ein Abreisender hat eine Liste), er nimmt sie aus einem
-  **Unterdashboard** (ein zweiter Karten-Editor wäre derselbe Editor noch einmal — und der
-  zweite wäre der, den niemand pflegt), und **nur der Text links tippt ihn weg**: Die Karten
-  müssen bedienbar bleiben.
-- **Die Kartenfläche des Abschiedsschirms hat dasselbe 6×6-Raster wie die Wand.** Die Karten
-  kommen aus einem Unterdashboard und bringen von dort **beides** mit: Größe *und* Platz
-  (`grid-column: 4 / span 3`). Mit weniger Spalten zeigt das ins Leere — der Browser hängt
-  stillschweigend weitere Spalten an, und was dahinter liegt, steht außerhalb des Bildschirms.
-  Am 2026-09-14 sah das auf der Wand so aus: eine riesige Alarmkarte und daneben der Streifen
-  einer zweiten. Die Lösung ist **nicht**, den Platz wegzuwerfen — dann sieht der Schirm anders
-  aus als das, was im Editor angeordnet wurde, und die Regel wird unerklärbar. `abschiedSpanne()`
-  schneidet nur noch als Fangnetz und **schiebt herein statt zu beschneiden**: Eine Karte, die
-  schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter links liegt, nicht.
-  Die Zahlen stehen in `ABSCHIED_SPALTEN`/`ABSCHIED_ZEILEN` **und** in `dashboard.css`; ein Test
-  vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt, sondern genau diesen Rand.
-- **Der Ruheschirm schaltet NICHTS am Panel.** Er ist ein Overlay wie das Nachtschwarz (siehe
-  CONTEXT.md), kein „Panel aus". Über das Panel entscheidet weiterhin allein `decide()` — wer
-  das hier aufweicht, hat zwei Stellen, die dasselbe schalten, und sie widersprechen einander
-  spätestens beim nächsten Sonderfall. Vier Punkte sind nicht verhandelbar:
-  1. **Nur während eines Anzeigefensters.** Außerhalb ist das Panel ohnehin aus.
-  2. **Ankunfts- und Abschiedsschirm haben Vorrang**, und nachts bleibt es beim Nachtschwarz —
-     eine leuchtende Aufforderung wäre dort ausgerechnet dann die einzige Lichtquelle im Raum,
-     wenn jemand schlafen will.
-  3. **Die Helligkeit läuft über `helligkeitAnpassen()`**, nicht am Ruheschirm vorbei. Nacht,
-     Abwesenheit und Ruhe greifen auf dieselbe Schraube; wer sie einzeln dreht, bekommt einen
-     Bildschirm, der beim Aufwachen auf die falsche Stufe springt.
-  4. **Die Bedienung wird auf `pointerdown` und `keydown` gemessen, NIE auf `mousemove`.** Das
-     Aufwecken des Panels wackelt mit dem Mauszeiger (`panel.js`) — als Bedienung gezählt käme
-     der Ruheschirm nie wieder.
+- **Der Bildschirmschoner ist der RUHEZUSTAND, nicht die Ausnahme.** Das ist die Umkehrung
+  gegenüber der Vorlage und die häufigste Fehlerquelle beim Lesen dieses Projekts — die
+  vollständige Begründung steht in
+  [ADR 0003](docs/adr/0003-schoner-ist-der-ruhezustand.md). Vier Punkte sind nicht verhandelbar:
+  1. **`sollSchonen()` antwortet mit JA, solange keine Bedienung bekannt ist**, und
+     `letzteBedienung` startet bei `0`, nicht bei `Date.now()`. Das sieht aus wie ein
+     vergessener Sonderfall und ist der Kern der Sache.
+  2. **Er schaltet NICHTS am Panel.** Darüber entscheidet allein `decide()`.
+  3. **Die Helligkeit läuft über `helligkeitAnpassen()`**, das den *gesamten* Zustand liest,
+     nicht das letzte Ereignis. Nach dem Wegfall von Nachtschwarz und Abwesenheit ist der Schoner
+     dort im Moment der einzige Grund zu dimmen — wer einen zweiten hinzufügt, rechnet ihn
+     dort aus und nicht am Schoner vorbei.
+  4. **Bedienung wird auf `pointerdown` und `keydown` gemessen, NIE auf `mousemove`.**
   Er läuft **nur auf dem Panel** (`IM_PANEL`): In der Live-Ansicht würde er dem, der von
   unterwegs nachsieht, genau das verdecken, wofür er die Seite geöffnet hat.
+
+- **Die Kartenfläche des Schoners hat dasselbe 6×6-Raster wie die Wand.** Die Karten kommen aus
+  einem Unterdashboard und bringen von dort **beides** mit: Größe *und* Platz
+  (`grid-column: 4 / span 3`). Mit weniger Spalten zeigt das ins Leere — der Browser hängt
+  stillschweigend weitere Spalten an, und was dahinter liegt, steht außerhalb des Bildschirms.
+  Am 2026-09-14 sah das auf der Wand der Vorlage so aus: eine riesige Karte und daneben der
+  Streifen einer zweiten. Die Lösung ist **nicht**, den Platz wegzuwerfen — dann sieht der
+  Schoner anders aus als das, was im Editor angeordnet wurde, und die Regel wird unerklärbar.
+  `schonerSpanne()` schneidet nur noch als Fangnetz und **schiebt herein statt zu beschneiden**:
+  Eine Karte, die schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter links
+  liegt, nicht. Die Zahlen stehen in `SCHONER_SPALTEN`/`SCHONER_ZEILEN` **und** in
+  `dashboard.css`; ein Test vergleicht beide, weil ein Auseinanderlaufen keinen Fehler ergibt,
+  sondern genau diesen Rand.
+
 - **Karten brauchen mehr als ihren Zustand, und das steht an einer Stelle.** `kartenZusatz()`
   in `dashboard.html` holt Verlauf, Vorhersage, Mülltermine und Energiequellen. Zwei Flächen
-  bauen Karten — das Dashboard und der Abschiedsschirm —, und der Abschiedsschirm holte
-  anfangs nur den Verlauf: Eine Müllkarte zeigte dort immer „Keine Termine gefunden", obwohl
-  im Unterdashboard alles richtig eingestellt war. Wer einen Kartentyp mit eigenen Daten
+  bauen Karten — das Dashboard und der Bildschirmschoner —, und die zweite Fläche holte in
+  der Vorlage anfangs nur den Verlauf: Eine Müllkarte zeigte dort immer „Keine Termine
+  gefunden", obwohl im Unterdashboard alles richtig eingestellt war. Wer einen Kartentyp mit eigenen Daten
   ergänzt, ergänzt ihn dort — zwei Kopien dieser Liste laufen beim nächsten Typ wieder
   auseinander.
 - **Die Mülltermine-Karte beantwortet „welche Tonne, und wann" — in dieser Reihenfolge.**
@@ -169,75 +160,26 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
      eine Information, heute ist es eine Aufgabe.
   Und: `new Date('2026-09-14')` ist **UTC**-Mitternacht. Westlich von Greenwich ist das der
   13. September, und die Tonne stünde einen Tag zu früh auf der Karte — derselbe Fallstrick wie
-  bei den Ganztages-Terminen, nur an einer zweiten Stelle. `wasteDatum()` liest ein reines
+  bei Ganztages-Einträgen aus einem Kalender. `wasteDatum()` liest ein reines
   Datum deshalb als **lokale** Mitternacht; ein Zeitpunkt mit Uhrzeit bringt seine Zone selbst mit.
-- **Der Text des Abschiedsschirms ist eine Abhakliste, keine Aufzählung.** Eine Abreiseliste
-  wird abgearbeitet, nicht gelesen — als bloße Stichpunkte muss man sich selbst merken, wo man
-  war, und genau dabei bleibt das Fenster im Bad zu. Gebaut wird aus dem **fertigen Markdown**
-  statt aus einem zweiten Textparser: Fett, Kursiv und verschachtelte Listen sollen weiter
-  funktionieren, und zwei Parser für dieselbe Sprache laufen früher oder später auseinander.
-  Drei Punkte hängen daran:
-  1. **Der Haken hängt am Text, nicht an der Position** (`hakenSchluessel()`). Wer einen Punkt
-     in der Mitte einfügt, hätte sonst alle Haken darunter um eins verschoben — „Saugen" wäre
-     erledigt, weil darüber eine Zeile dazugekommen ist.
-  2. **Je Termin ein eigener Eintrag** (`hakenSpeicherName()`). Die nächste Abreise fängt leer
-     an, ohne dass jemand aufräumt. Im Testmodus ein fester Name, damit das Ausprobieren keine
-     echte Abreise überschreibt.
-  3. **`inhaltSetzen()` schreibt nur bei echter Änderung.** Der Schirm wird alle zehn Sekunden
-     geprüft; ohne diese Sperre wäre ein Haken nach spätestens zehn Sekunden wieder weg — man
-     hakt ab und sieht zu, wie es sich zurückstellt. Der Termin gehört mit in die Signatur,
-     sonst stehen bei der nächsten Abreise noch die Haken der letzten.
-  Das Antippen eines Punktes darf **nicht** durchblubbern: Die linke Hälfte ist die
-  Wegtipp-Fläche, und die Liste liegt darin. Zum Ausblenden bleiben Überschrift und Hinweiszeile.
-  Das Ansehen auf Zuruf schlägt bei **beiden** Schirmen alles — fehlender Termin, falscher
-  Tag, Uhrzeitgrenze, weggetippt, und sogar den Einschalter selbst. Wer einen Schirm ansehen
-  will, hat in aller Regel gerade keinen passenden Termin laufen; sonst müsste er nicht danach
-  fragen. Genau daran ist der Knopf beim Ankunftsschirm zuerst gescheitert.
-  **Die beiden enden verschieden, und das ist Absicht.** Der Ankunftsschirm bekommt eine Frist
-  von zehn Minuten: Man sieht ihn an, er geht wieder. Der Abschiedsschirm hat statt dessen
-  einen **Schalter, der bleibt** (`abschiedTestmodus`) — er zeigt Karten, und ob die an der
-  Wand taugen, sieht man nicht in zehn Minuten. Eine Frist beantwortete die Frage nur für ihren
-  Anfang: Wer später hinsieht, findet den Schirm weg und weiß nicht, ob es an ihm oder an der
-  Uhr lag. Solange der Schalter an ist, lässt der Schirm sich auch **nicht wegtippen** —
-  er käme beim nächsten Takt von selbst wieder, und dieses Flackern sähe aus wie ein Fehler.
-  Der Schalter ist der einzige Ausgang, und deshalb darf `/api/abschied/dismiss` ihn **nicht**
-  anfassen.
-  Weil der Schalter über eine **eigene Route** speichert, lädt die Ansicht sich dabei nicht neu
-  (über `/api/config` täte sie es, und beim Ausschalten verdeckte der Neuaufbau genau das, was
-  man prüfen will). Die Anzeige fragt die Konfiguration deshalb alle 30 Sekunden selbst nach —
-  in **beide** Richtungen: Ohne das Nachfragen während des Testmodus bekäme sie das Ausschalten
-  nie mit, und der Schirm stünde bis zum nächsten Neustart.
-  Er erscheint **nur bei mehrtägigen Terminen**. Bei einem eintägigen wäre der „letzte Tag"
-  derselbe wie der Ankunftstag, und das Panel verabschiedete Gäste, die gerade hereingekommen
-  sind.
-- **Ganztägige Termine beginnen um Mitternacht.** Ein Anzeigefenster steht damit einen halben
-  Tag, bevor jemand da ist — die Wand leuchtet gegen ein leeres Haus, und der Ankunftsschirm hat
-  seine Anzeigedauer aufgebraucht, bevor der erste Gast zur Tür hereinkommt. Deshalb wartet
-  `control/ankunft.js` auf ein besseres Signal: Die Alarmanlage steht im Regelfall auf
-  *abwesend* und wird kurz vor dem Betreten auf *zu Hause* gestellt. Drei Punkte daran sind
-  nicht verhandelbar:
-  1. **Ein unbekannter Zustand lässt nicht warten.** Tippfehler in der Entitäts-ID, umbenannte
-     Anlage, Home Assistant nicht erreichbar — die Alternative wäre eine Wand, die nie wieder
-     angeht und deren Ursache niemand sieht. Lieber einen halben Tag zu früh hell als einen
-     ganzen Termin lang dunkel.
-  2. **Die Ankunft gilt für das ganze Anzeigefenster**, nicht nur für den Moment. Wer tagsüber
-     wegfährt und scharf stellt, soll abends nicht vor einer dunklen Wand stehen. Die Frage
-     lautet „ist die Anreise passiert?“, nicht „ist gerade jemand zu Hause?“.
-  3. **Der Vermerk liegt im Store, nicht nur im Speicher** — und `ankunftAktualisieren()` fasst
-     ihn nicht an, solange noch kein Kalender-Abruf geglückt ist. Beim Start ist die
-     Fensterliste leer, weil noch niemand gefragt hat, nicht weil kein Termin läuft; wer dort
-     aufräumt, wartet nach jedem Update wieder auf eine Ankunft, die längst passiert ist.
-
-  Direkt nach der Ankunft schlägt das Panel die **Nachtsperre** für eine einstellbare Frist
-  (ab Werk eine Stunde). Wer um halb eins nachts ankommt, soll begrüßt werden und nicht vor
-  einer schwarzen Wand stehen. Und der Ankunftsschirm zählt seine Anzeigedauer **ab der
-  Ankunft** (`ankunftZeit` in `sollAnzeigen()`), nicht ab Terminbeginn.
-
+- **Die Zahl sagt WAS, das Zeichen sagt WO.** Zwei Temperaturkarten sahen gleich aus, und
+  der Unterschied zwischen innen und außen stand nur in der Bildunterschrift — der kleinsten
+  Schrift auf der Karte. Beim Luftdruck liegen die Werte innen und außen sogar fast gleich.
+  `ortErmitteln()` gibt Temperatur-, Luftdruck-, Feuchte- und Sensorkarten (`ORT_TYPEN`)
+  einen Ort, und der wird an der **Form** erkennbar gemacht, nie an der Farbe: Haus oder Tanne
+  oben links, ein Chip „INNEN" (Ring) bzw. „AUSSEN" (gefüllt), und dieselbe Silhouette groß
+  und blass hinter dem Wert. Die Silhouette ist das, was aus fünf Metern trägt. Farbe
+  scheidet aus, weil die Temperaturkarte ihren Akzent schon nach dem Wert färbt — „blau"
+  hieße dann kalt *oder* draußen. Geraten wird ab Werk aus Name und Kennung, „außen" vor
+  „innen" („Aussenwand Wohnzimmer" misst draußen); eine Einstellung gewinnt immer, auch
+  „Keine Angabe". Prüfen mit `.scratch/karten-design/ort-probe.html?weit` — die Frage ist
+  nicht, ob es gut aussieht, sondern ob man es aus der Entfernung erkennt. `?ohne` zeigt
+  zum Vergleich, wie es vorher war.
 - **Karten-Einstellungen leben an genau zwei Stellen.** `settingsFieldsForType()` in
   `editor.js` entscheidet, welche Felder ein Typ bekommt; `buildCard()` in
   `dashboard-render.js` liest sie. Wer eine Einstellung nur an einer der beiden Stellen
-  anlegt, bekommt keinen Fehler, sondern ein Feld ohne Wirkung — genau so war
-  `gauge.baseColor` über Monate tot. Die vollständige Bestandsaufnahme steht in
+  anlegt, bekommt keinen Fehler, sondern ein Feld ohne Wirkung — in der Vorlage war
+  `gauge.baseColor` so über Monate tot. Die vollständige Bestandsaufnahme steht in
   `.scratch/karten-einstellungen/spec.md`, samt der Punkte, die bewusst **nicht** gebaut
   wurden und warum.
 - **Neue Standardwerte ändern bestehende Anzeigen.** Die Nachkommastellen sind deshalb
@@ -256,11 +198,11 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   man das Gegenteil der Wahrheit. Die Bewegung ist dabei keine Spielerei: Sie unterscheidet
   „läuft gerade" (`hvac_action`) von „ist eingestellt" (`state`). Steht die Flamme still,
   heizt die Anlage nicht — das steht sonst nirgends auf der Karte.
-- **Der Ankunftsschirm hat einen FEST dunklen Hintergrund** (`#07070c`), unabhängig vom
-  Design. Eine pauschale Hell-Regel auf `.as-text` machte die Fettschrift dort dunkel auf
-  dunkel. Die Klasse trägt **Markdown-Regeln, keine Farbannahmen** — sie wird auch von der
-  Ankündigungsbox benutzt, und die ist themenabhängig. Farbregeln dafür immer auf den
-  Container scoped (`.notify-box .as-text …`), nie auf `.as-text` allein.
+- **`.as-text` trägt Markdown-Regeln, keine Farbannahmen.** Die Klasse kam vom Ankunftsschirm
+  der Vorlage, der einen fest dunklen Hintergrund hatte; heute benutzt sie nur noch die
+  Ankündigungsbox, und die ist themenabhängig. Eine pauschale Hell-Regel auf `.as-text` machte
+  die Fettschrift dort dunkel auf dunkel. Farbregeln dafür immer auf den Container scoped
+  (`.notify-box .as-text …`), nie auf `.as-text` allein.
 - **Der Neuaufbau läuft nur bei echter Änderung** (`zustandsSignatur()` über die Entitäten
   *dieses* Dashboards, Zustand **und** Attribute — eine Klimaanlage ändert beim Verstellen der
   Zieltemperatur nur ein Attribut). Erst dadurch sind fünf Sekunden Abfragetakt bezahlbar.
@@ -292,10 +234,11 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   standen weiter auf der Wand, obwohl die Entität längst leer war. Wer eine Überlagerung
   ausblendet, schaltet `opacity` **und** `visibility` am Container; Teile, die sich selbst
   eingeblendet haben, blenden sich nicht von selbst wieder aus.
-- **Wer etwas über allem anzeigt, muss die Stapelhöhen kennen.** Der Ankunftsschirm liegt auf
-  `z-index: 9997`. Die Ankündigungs-Box lag auf 80 und war damit während jedes Termins
-  vollständig zugedeckt — sie funktionierte, nur sah sie niemand. Eine Ankündigung ist die
-  dringendere Nachricht und liegt jetzt auf 9998.
+- **Wer etwas über allem anzeigt, muss die Stapelhöhen kennen.** Der Bildschirmschoner liegt
+  auf `z-index: 9990`, die Ankündigungs-Box auf 9998 — sie gewinnt bewusst, eine Nachricht ist
+  dringender als eine Ruhefläche. In der Vorlage lag die Box auf 80 und war damit während
+  jedes Termins vollständig zugedeckt: Sie funktionierte, nur sah sie niemand. Das ist hier
+  besonders leicht zu wiederholen, weil der Schoner die meiste Zeit liegt.
 - **„Leer" ist mehr als leer.** Home Assistant liefert `unknown`/`unavailable`, Menschen
   schreiben `-`, `keine` — und vertippen sich: Auf dem Gerät stand `unknow` ohne das letzte
   `n`. Mit einer Prüfung nur auf `unknown` hätte dieses Wort bildschirmfüllend an der Wand
@@ -311,7 +254,7 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   `$('settingsBody').innerHTML = html`, und **erst danach** darf Code die neuen Elemente
   anfassen. Steht ein `$('…')` davor, liefert es `null`, der Fehler bricht den ganzen Aufbau
   ab — und die Einstellungen lassen sich **gar nicht mehr öffnen**, nicht nur die eine Gruppe.
-  Genau so war die Alarm-Karte zwei Versionen lang unerreichbar.
+  In der Vorlage war eine ganze Karte deshalb zwei Versionen lang unerreichbar.
 - **`editor.html` lädt `setup/style.css` NICHT.** Es bindet nur `nav.css` und `dashboard.css`
   ein und bringt seine Regeln in einem eigenen `<style>`-Block mit. Wer dort etwas gestalten
   will und es in `style.css` schreibt, bekommt keinen Fehler — die Regel wirkt einfach nicht.
@@ -445,11 +388,6 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   sonst von allein auf, weil das Aufwecken mit dem Mauszeiger wackeln muss (`panel.js`), und
   bleibt dann mitten auf der Wand stehen. Bewusst an die Body-Klasse gebunden: Der
   Karten-Editor lädt dieselbe CSS-Datei, wird aber mit der Maus bedient.
-- **Die Alarm-Zustände gehören der Anlage, nicht der App.** `armed_home` heißt nicht überall
-  dasselbe — in der einen Anlage scharf mit freiem Innenbereich, in der anderen der ganz
-  normale Zustand, wenn jemand da ist. Wer Text oder Farbe fest verdrahtet, erzählt der Hälfte
-  der Nutzer etwas Unwahres über ihre Sicherheit. `ALARM_ZUSTAENDE` sind deshalb nur Vorgaben;
-  `alarmDarstellung()` lässt Text **und** Farbton je Karte überschreiben.
 - **Eine Karte, die etwas TUT, muss anders aussehen als eine, die etwas anzeigt.** Die
   Wechsel-Karte trug ein Fadenkreuz-Symbol und ein Wort, mittig, ohne Akzent — zwischen zwanzig
   Messwerten sah sie aus wie der einundzwanzigste, und gemeldet wurde sie als „versteht man
@@ -593,9 +531,9 @@ sein soll. Neue Sonderfälle gehören dorthin und nirgendwo sonst.
   Home Assistant offen, damit eine Änderung aus der HA-App in Sekundenbruchteilen auf der Wand
   steht. Der regelmäßige Abruf bleibt trotzdem — er läuft nur seltener, solange die Verbindung
   steht, und geht von allein wieder auf den kurzen Takt, wenn sie abbricht. Wer den Abruf
-  „weil es jetzt ja Push gibt" entfernt, baut genau den Fehler ein, den
-  [ADR 0002](docs/adr/0002-kalender-abrufen-statt-benachrichtigen.md) beschreibt. Begründung
-  vollständig in [ADR 0005](docs/adr/0005-zustaende-schieben-und-trotzdem-abrufen.md).
+  „weil es jetzt ja Push gibt" entfernt, baut einen Fehler ein, der sich erst zeigt, wenn die
+  Verbindung einmal stillschweigend hängt. Begründung vollständig in
+  [ADR 0005](docs/adr/0005-zustaende-schieben-und-trotzdem-abrufen.md).
 - **Ein Zeitgeber in einem Modul, das Tests laden, muss `unref()`.** `HaLive` hält drei davon
   (Rückfall, Wiederholung, Ping). Ohne `unref()` beendet sich `node --test` nicht mehr: Der
   Lauf ist fertig, alle Tests grün, und der Prozess hängt bis zum Zeitlimit. Von außen sieht
@@ -639,12 +577,21 @@ ohne Home Assistant, ohne Electron, ohne Gerät. **Beide Themes prüfen.** Weiß
 
 Das eingebaute Design `DEFAULT_THEME` in `dashboard-render.js` ist ab Werk aktiv; ein
 importiertes Design gewinnt. Der Seitenhintergrund ist dort bewusst ein **Standbild** aus
-denselben Farbwolken, die der Ankunftsschirm bewegt zeigt: Hinter Zahlen und Diagrammen
+denselben Farbwolken, die der Bildschirmschoner bewegt zeigt: Hinter Zahlen und Diagrammen
 konkurriert eine laufende Animation mit dem Inhalt, und ein Dashboard schaut man tagelang an.
+Auf dem Schoner ist es umgekehrt richtig — dort ist die Bewegung das Einzige, was es zu sehen
+gibt.
 
-Bei der Animation im Ankunftsschirm läuft der Zufall **nur bei der Geburt einer Form**, alle
-zehn bis zwanzig Sekunden. Dazwischen bewegt der Browser auf der Grafikeinheit, nicht
-JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate.
+Die Bühne (`renderer/shared/buehne.js`) ist ein **Partikelsystem**: feste Formenzahl, jede mit
+eigener Lebensdauer, und der Zufall läuft **nur bei der Geburt einer Form**, alle zehn bis
+zwanzig Sekunden. Dazwischen bewegt der Browser auf der Grafikeinheit, nicht JavaScript. Wer
+das ändert und pro Bild rechnet, kostet das Gerät die Bildrate — auf einem Surface Go ist das
+kein theoretischer Einwand. Aus demselben Grund hält `stoppen()` die Formen an, sobald der
+Schoner nicht liegt oder ein Standbild darüber liegt.
+
+Ansehen ohne Gerät: `.scratch/karten-design/schoner-probe.html` baut den Schoner von Hand auf
+und legt ihn nach fünf Sekunden statt nach Minuten hin. `?hell` zeigt das helle Design, `?bild`
+das Standbild statt der Wolken.
 
 ## Tests
 
@@ -652,9 +599,9 @@ JavaScript. Wer das ändert und pro Bild rechnet, kostet das Gerät die Bildrate
 npm test
 ```
 
-429 Tests über Kalenderauswertung, Zustandslogik, Ankunftserkennung, Zugangsschutz,
-Kartenaufbau, Ankunftsschirm, Akkumeldung, die Live-Verbindung und den PowerShell-Vorspann.
-Electron wird dafür nicht gebraucht.
+296 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
+nicht gebraucht; vier Tests werden außerhalb von Windows übersprungen.
 
 Neue Regeln in `decide()` gehören durch einen Test abgedeckt — dort steckt die Logik. Aber die
 Lehre aus 1.0.0 ist eine andere: Der einzige Fehler, der es bis aufs Gerät geschafft hat, lag in

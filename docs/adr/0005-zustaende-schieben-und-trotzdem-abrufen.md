@@ -2,12 +2,12 @@
 
 Für die **Zustände der Entitäten** hält `server/ha-live.js` eine WebSocket-Verbindung zu Home
 Assistant offen und reicht jedes `state_changed` per Server-Sent Events an die Anzeige weiter.
-Das sieht wie ein Widerspruch zu [ADR 0002](0002-kalender-abrufen-statt-benachrichtigen.md) aus
-und ist keiner: Der Abruf bleibt bestehen, nur seltener, solange die Verbindung steht. Bricht
-sie ab, geht er von allein wieder auf den kurzen Takt. Ein verpasster Anstoß wird also weiterhin
-nachgeholt — die Verbindung ist die Abkürzung, nicht der Verlass. Für den **Kalender** gilt
-unverändert reiner Abruf; dort hängt am verpassten Anstoß ein dunkles Panel, hier nur ein
-Messwert, der ein paar Sekunden alt ist.
+Der regelmäßige Abruf bleibt trotzdem bestehen — nur seltener, solange die Verbindung steht.
+Bricht sie ab, geht er von allein wieder auf den kurzen Takt. Ein verpasster Anstoß wird also
+nachgeholt: Die Verbindung ist die Abkürzung, nicht der Verlass. Wer den Abruf „weil es jetzt ja
+Push gibt" entfernt, baut einen Fehler ein, der sich erst zeigt, wenn die WebSocket-Verbindung
+einmal stillschweigend hängt — und dann friert die Wand ein, ohne dass irgendetwas nach einem
+Fehler aussieht.
 
 Gewünscht war ursprünglich „eine Integration, die dem Display sagt, es soll sich aktualisieren".
 Genau das kann Home Assistant ab Werk: Die WebSocket-API liefert `state_changed` für jede
