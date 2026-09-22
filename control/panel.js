@@ -51,9 +51,44 @@ const SMTO_ABORTIFHUNG = 0x0002;
 // kurz genug, dass ein haengendes Fenster die Steuerung nicht sichtbar aufhaelt.
 const SMTO_TIMEOUT_MS = 1500;
 
+// --- Das System wach halten, den Bildschirm aber schlafen lassen ---------------------------
+//
+// Gemessen am 2026-09-22 auf dem Surface Go: In der Sekunde, in der das Panel abgeschaltet
+// wurde, begann Connected Standby (Kernel-Power 506). Der Setup-Server war weg, SSH auch, und
+// zurueck kam das Geraet erst durch eine Beruehrung -- zwei Minuten spaeter (507).
+//
+// `keepSystemAwake()` in main.js sollte genau das verhindern, tut es aber nicht.
+// `powercfg /requests` auf dem Geraet zeigte:
+//
+//     SYSTEM:    Keine.
+//     AWAYMODE:  Augsburg Wall Display.exe
+//
+// Electrons `prevent-app-suspension` landet als **Away-Mode**-Anforderung. Away Mode stammt
+// aus der Zeit des klassischen S3-Schlafs und wirkt auf einem Modern-Standby-Geraet nicht.
+// Gebraucht wird eine SYSTEM-Anforderung, und Electron bietet dafuer keinen Weg: Sein
+// `prevent-display-sleep` wuerde zusaetzlich den BILDSCHIRM wach halten -- das Gegenteil
+// dessen, was dieses Projekt will.
+//
+// Deshalb hier, ueber denselben dauerhaft offenen PowerShell-Prozess, der ohnehin schon
+// Win32-Aufrufe macht. ES_SYSTEM_REQUIRED **ohne** ES_DISPLAY_REQUIRED: System wach, Panel
+// darf dunkel bleiben. Der Aufruf erzeugt KEINE Eingabe und weckt deshalb auch nichts auf --
+// das ist der Unterschied zum Mauszeiger-Wackeln beim Einschalten.
+//
+// Die Zahlen bewusst dezimal statt hexadezimal: PowerShell liest 0x80000001 als negativen
+// Int32, und der Aufruf schluegt dann ohne Fehlermeldung fehl.
+//   ES_CONTINUOUS      0x80000000 = 2147483648  (gilt, bis sie zurueckgenommen wird)
+//   ES_SYSTEM_REQUIRED 0x00000001
+const ES_WACH = 2147483649;   // ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+const ES_FREI = 2147483648;   // nur ES_CONTINUOUS -- nimmt die Anforderung zurueck
+// Die Anforderung haengt am THREAD. Stirbt der PowerShell-Prozess, faellt sie weg; der
+// Vorspann setzt sie beim Neustart wieder. Zusaetzlich wird sie regelmaessig bekraeftigt --
+// dieselbe Vorsicht wie beim Einschalten des Panels.
+const WACH_REASSERT_MS = 60 * 1000;
+
 const MEMBERS = [
   '[DllImport("user32.dll")] public static extern int SendMessageTimeout(int hWnd, int hMsg, int wParam, int lParam, int fuFlags, int uTimeout, out int lpdwResult);',
-  '[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, System.IntPtr dwExtraInfo);'
+  '[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, System.IntPtr dwExtraInfo);',
+  '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);'
 ].join(' ');
 
 // Der Rundruf an HWND_BROADCAST stellt die Nachricht JEDEM Fenster einzeln zu. Mit dem
@@ -86,6 +121,8 @@ const PRELUDE = [
   ADD_TYPE,
   `function Panel-Off { ${OFF_CALL} }`,
   `function Panel-On { ${ON_CALL} }`,
+  `function System-Wach { [Wall.PanelCtl]::SetThreadExecutionState([uint32]${ES_WACH}) | Out-Null }`,
+  `function System-Frei { [Wall.PanelCtl]::SetThreadExecutionState([uint32]${ES_FREI}) | Out-Null }`,
   `"${READY_MARKER}"`
 ].join('\n');
 
@@ -102,6 +139,8 @@ class Panel {
     this.lastDesired = null;
     this.lastOnAssert = 0;   // wann zuletzt "einschalten" gesendet wurde
     this.ready = false;      // hat der Prozess seine Bereitschaft gemeldet?
+    this.systemWach = null;  // zuletzt gewuenschter Zustand, null = noch nie gesetzt
+    this.wachZuletzt = 0;
     this.fallback = false;   // Dauerprozess aufgegeben, Einzelaufrufe verwenden
     this.readyTimer = null;
   }
@@ -221,6 +260,41 @@ class Panel {
     return this._send('Panel-Off', false);
   }
 
+  /**
+   * Das System wach halten (true) oder wieder freigeben (false).
+   *
+   * Wach heisst hier ausdruecklich NICHT hell: Das Panel darf und soll weiter abschalten.
+   * Gebraucht wird das, damit der Setup-Server und die Steuerung nachts erreichbar bleiben,
+   * waehrend das Panel dunkel ist -- siehe den Kopf dieser Datei.
+   *
+   * Wird regelmaessig bekraeftigt, auch ohne Aenderung: Die Anforderung haengt am Thread des
+   * PowerShell-Prozesses, und der kann zwischendurch neu gestartet worden sein.
+   */
+  setSystemWach(wach) {
+    if (!this.supported) return false;
+    const changed = this.systemWach !== wach;
+    this.systemWach = wach;
+    const faellig = Date.now() - this.wachZuletzt >= WACH_REASSERT_MS;
+    if (!changed && !faellig) return true;
+    this.wachZuletzt = Date.now();
+    if (changed) {
+      this.log('info', wach
+        ? 'System wird wachgehalten -- das Panel darf trotzdem abschalten'
+        : 'System darf schlafen (Akkubetrieb)');
+    }
+    // Kein Rueckfall auf einen Einzelaufruf: Ein eigener Prozess waere sofort wieder weg, und
+    // mit ihm die Anforderung. Ohne Dauerprozess gibt es dieses Merkmal schlicht nicht.
+    const proc = this._ensureProcess();
+    if (!proc || !proc.stdin.writable) return false;
+    try {
+      proc.stdin.write((wach ? 'System-Wach' : 'System-Frei') + '\n');
+      return true;
+    } catch (err) {
+      this._dropProcess();
+      return false;
+    }
+  }
+
   dispose() {
     clearTimeout(this.readyTimer);
     if (this.proc) {
@@ -230,4 +304,4 @@ class Panel {
   }
 }
 
-module.exports = { Panel, PRELUDE, READY_MARKER, oneShotCommand };
+module.exports = { Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS };

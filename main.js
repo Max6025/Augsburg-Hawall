@@ -262,23 +262,69 @@ function onConfigSaved() {
 // Sperrt Windows-eigene Rand-Wischgesten (Action Center, Task-Ansicht, Widgets, Taskleiste-
 // Reveal), die auf einem Touch-Geraet sonst VOR unserer App zugreifen und die Geste komplett
 // schlucken -- das ist derselbe Grund, warum eigene Wisch-Gesten im Dashboard nicht ankommen.
-// Registry-Aenderungen, nur fuer den aktuellen Benutzer (HKCU), best-effort/still bei Fehlern
-// (z.B. auf Nicht-Windows-Systemen zum Testen). Laeuft nur EINMAL (siehe Store-Flag), danach
-// wird der Explorer-Prozess einmalig neu gestartet, damit es sofort greift.
+// Dazu Benachrichtigungen: Ein Toast ueber dem Dashboard ist auf einer Wand nichts als Stoerung.
+//
+// ALLES UNTER HKCU -- UND ZWAR AUSSERHALB VON \Software\Policies.
+//
+// Das ist die Lehre vom 2026-09-22, gemessen auf dem Geraet: Drei der sechs Werte waren nie
+// angekommen, und niemand hat es gemerkt. `Get-Acl HKCU:\Software\Policies` gibt dem Konto
+// nur `ReadKey` -- dieser Zweig gehoert der Gruppenrichtlinie, und ein unelevierter Prozess
+// darf dort nicht schreiben. Dass das Konto Administrator IST, hilft nicht: Bei
+// eingeschalteter Benutzerkontensteuerung laeuft die App ohne erhoehte Rechte.
+//
+// Die Fehler waren doppelt unsichtbar: `exec` bekam einen Rueckruf, der jeden Fehler
+// verschluckt (`() => resolve()`), und das Erledigt-Flag wurde trotzdem gesetzt. Beim naechsten
+// Start lief es deshalb nie wieder an. Jetzt gilt:
+//
+//   1. Kein Wert aus \Software\Policies. Fuer die Benachrichtigungen gibt es mit
+//      PushNotifications\ToastEnabled einen Schluessel, der dem Benutzer gehoert.
+//   2. Jeder Fehlschlag wird protokolliert, mit dem Wortlaut von reg.exe.
+//   3. Das Flag wird NUR gesetzt, wenn wirklich alles durchging. Sonst versucht es der
+//      naechste Start erneut -- vielleicht ist die Ursache dann behoben.
+//   4. Das Flag traegt eine Nummer. Wer hier einen Wert ergaenzt, zaehlt sie hoch, sonst
+//      bekommen bestehende Installationen die Ergaenzung nie.
+const KIOSK_SPERREN_STAND = 2;
+
 function applyWindowsKioskLockdown() {
   if (process.platform !== 'win32') return;
-  if (store.get('kioskLockdownApplied')) return;
-  const cmds = [
-    'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\EdgeUI" /v AllowEdgeSwipe /t REG_DWORD /d 0 /f',
-    'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi" /v DisableTLcorner /t REG_DWORD /d 1 /f',
-    'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi" /v DisableTRcorner /t REG_DWORD /d 1 /f',
-    'reg add "HKCU\\Software\\Policies\\Microsoft\\Windows\\Explorer" /v DisableNotificationCenter /t REG_DWORD /d 1 /f',
-    'reg add "HKCU\\Software\\Policies\\Microsoft\\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f',
-    'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced" /v TaskbarDa /t REG_DWORD /d 0 /f'
+  if (Number(store.get('kioskLockdownStand')) >= KIOSK_SPERREN_STAND) return;
+
+  const sperren = [
+    ['Wischgeste vom Rand', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\EdgeUI', 'AllowEdgeSwipe', 0],
+    ['Ecke oben links', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi', 'DisableTLcorner', 1],
+    ['Ecke oben rechts', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi', 'DisableTRcorner', 1],
+    // Frueher DisableNotificationCenter unter \Software\Policies -- dort schreibgeschuetzt.
+    ['Benachrichtigungen', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications', 'ToastEnabled', 0],
+    ['Benachrichtigungen auf dem Sperrbildschirm', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications', 'LockScreenToastEnabled', 0],
+    // Frueher AllowNewsAndInterests unter \Software\Policies -- dort schreibgeschuetzt.
+    // TaskbarDa blendet den Widget-Knopf aus und gehoert dem Benutzer.
+    ['Widget-Knopf', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'TaskbarDa', 0],
+    ['Suchfeld in der Taskleiste', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', 'SearchboxTaskbarMode', 0]
   ];
-  const runAll = cmds.map(c => new Promise(resolve => exec(c, { timeout: 5000 }, () => resolve())));
-  Promise.all(runAll).then(() => {
-    store.set('kioskLockdownApplied', true);
+
+  const setzen = ([name, pfad, wert, zahl]) => new Promise((fertig) => {
+    const befehl = `reg add "${pfad}" /v ${wert} /t REG_DWORD /d ${zahl} /f`;
+    exec(befehl, { timeout: 5000 }, (err, stdout, stderr) => {
+      if (!err) return fertig({ name, ok: true });
+      const grund = String(stderr || stdout || err.message || '').trim().split('\n')[0];
+      fertig({ name, ok: false, grund });
+    });
+  });
+
+  Promise.all(sperren.map(setzen)).then((ergebnisse) => {
+    const kaputt = ergebnisse.filter(e => !e.ok);
+    kaputt.forEach(e => {
+      if (controller) controller.log('warn', `Sperre "${e.name}" konnte nicht gesetzt werden: ${e.grund}`);
+    });
+    if (kaputt.length) {
+      if (controller) {
+        controller.log('warn', `${kaputt.length} von ${ergebnisse.length} Windows-Sperren fehlgeschlagen -- `
+          + 'beim naechsten Start wird es erneut versucht.');
+      }
+      return;   // Flag NICHT setzen
+    }
+    store.set('kioskLockdownStand', KIOSK_SPERREN_STAND);
+    if (controller) controller.log('info', `Windows-Sperren gesetzt (Stand ${KIOSK_SPERREN_STAND})`);
     // Explorer neu starten, damit die Aenderungen sofort ohne Geraete-Neustart greifen
     exec('taskkill /f /im explorer.exe', { timeout: 5000 }, () => {
       exec('start explorer.exe', { timeout: 5000 }, () => {});

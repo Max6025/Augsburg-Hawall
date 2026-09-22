@@ -14,7 +14,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('child_process');
-const { Panel, PRELUDE, READY_MARKER, oneShotCommand } = require('../control/panel');
+const { Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS } = require('../control/panel');
 
 const isWindows = process.platform === 'win32';
 
@@ -171,4 +171,65 @@ test('Panel-Off kehrt in Sekundenbruchteilen zurueck', { skip: !isWindows && 'nu
   const gedauert = Date.now() - begonnen;
   assert.match(out, /AUFRUF-OK/, `Der Aufruf brach ab. Fehler: ${JSON.stringify(err)}`);
   assert.ok(gedauert < 10000, `Der Rundruf brauchte ${gedauert} ms -- das riecht nach einer fehlenden Zeitgrenze`);
+});
+
+// --- System wach halten, Bildschirm schlafen lassen -------------------------------------------
+//
+// Gemessen am 2026-09-22 auf dem Surface Go: In der Sekunde, in der das Panel abgeschaltet
+// wurde, begann Connected Standby -- Setup-Server weg, SSH weg, zurueck erst durch Beruehrung.
+// `powercfg /requests` zeigte, woran es lag: Die App hielt nur eine AWAYMODE-Anforderung
+// (Electrons prevent-app-suspension), und die wirkt auf einem Modern-Standby-Geraet nicht.
+
+test('Der Vorspann kennt beide Richtungen des Wachhaltens', () => {
+  assert.ok(PRELUDE.includes('function System-Wach'), 'System-Wach fehlt');
+  assert.ok(PRELUDE.includes('function System-Frei'), 'System-Frei fehlt');
+  assert.ok(PRELUDE.includes('SetThreadExecutionState'), 'der Win32-Aufruf fehlt');
+});
+
+test('Wachhalten fordert das SYSTEM an, NICHT den Bildschirm', () => {
+  // ES_DISPLAY_REQUIRED (0x2) wuerde das Panel wach halten -- genau das Gegenteil dessen,
+  // was dieses Projekt will. Die Zahl darf also kein gesetztes Bit 2 haben.
+  const ES_CONTINUOUS = 0x80000000, ES_SYSTEM_REQUIRED = 0x1, ES_DISPLAY_REQUIRED = 0x2;
+  assert.strictEqual(ES_WACH, ES_CONTINUOUS + ES_SYSTEM_REQUIRED);
+  assert.strictEqual(ES_WACH & ES_DISPLAY_REQUIRED, 0, 'der Bildschirm darf NICHT wachgehalten werden');
+  assert.strictEqual(ES_FREI, ES_CONTINUOUS, 'Freigeben heisst: nur ES_CONTINUOUS, ohne Anforderung');
+});
+
+test('Die Zahlen stehen dezimal im Vorspann', () => {
+  // PowerShell liest 0x80000001 als NEGATIVEN Int32; der Aufruf schluegt dann ohne
+  // Fehlermeldung fehl, und das Geraet schlaeft weiter ein, als waere nichts geschehen.
+  assert.ok(PRELUDE.includes(String(ES_WACH)), 'ES_WACH steht nicht dezimal im Vorspann');
+  assert.ok(!/0x8000000/i.test(PRELUDE), 'hexadezimale Schreibweise im Vorspann gefunden');
+  assert.ok(PRELUDE.includes('[uint32]'), 'ohne uint32-Umwandlung wird die Zahl negativ');
+});
+
+test('Wachhalten wird bekraeftigt, nicht nur einmal gesendet', () => {
+  // Die Anforderung haengt am Thread des PowerShell-Prozesses. Stirbt er und startet neu,
+  // faellt sie weg -- deshalb wird sie regelmaessig erneut geschickt, wie das Einschalten.
+  const p = new Panel(() => {});
+  p.supported = true;
+  const gesendet = [];
+  p._ensureProcess = () => ({ stdin: { writable: true, write: (t) => gesendet.push(t.trim()) } });
+
+  p.setSystemWach(true);
+  assert.deepStrictEqual(gesendet, ['System-Wach'], 'die erste Anforderung muss raus');
+
+  p.setSystemWach(true);
+  assert.strictEqual(gesendet.length, 1, 'unveraendert und nicht faellig: nichts senden');
+
+  p.wachZuletzt = Date.now() - WACH_REASSERT_MS - 1;
+  p.setSystemWach(true);
+  assert.deepStrictEqual(gesendet, ['System-Wach', 'System-Wach'], 'faellig: erneut bekraeftigen');
+
+  p.setSystemWach(false);
+  assert.strictEqual(gesendet[gesendet.length - 1], 'System-Frei', 'Freigeben muss ankommen');
+});
+
+test('Ohne Dauerprozess gibt es kein Wachhalten -- und keinen Absturz', () => {
+  // Bewusst KEIN Rueckfall auf einen Einzelaufruf: Ein eigener Prozess waere sofort wieder
+  // weg, und mit ihm die Anforderung. Eine Anforderung, die niemand haelt, ist keine.
+  const p = new Panel(() => {});
+  p.supported = true;
+  p._ensureProcess = () => null;
+  assert.strictEqual(p.setSystemWach(true), false);
 });

@@ -122,10 +122,14 @@ function controllerMitLeerlauf(values, idle) {
   return c;
 }
 
-// Eine Sperre ueber den ganzen Tag: Nur so liegt "jetzt" beim Testlauf sicher darin, egal
-// wann er laeuft. Um 3 Uhr nachts waere ein Test mit 23:00-06:30 sonst gruen, ohne etwas
-// geprueft zu haben.
-const IMMER_NACHT = { nightModeEnabled: true, nightStart: '00:00', nightEnd: '23:59' };
+// Eine Sperre, die unabhaengig von der Uhrzeit gilt. Dafuer ist der Test-Schalter da.
+//
+// Der erste Anlauf nahm statt dessen ein Fenster ueber den ganzen Tag (00:00 bis 23:59) -- und
+// schlug am 2026-09-22 um 23:59:39 fehl. Das Ende eines Fensters ist AUSSCHLIESSEND (cur < end,
+// wie bei 06:30 weiter oben), und damit fiel genau die letzte Minute des Tages heraus. Ein Test,
+// der einmal taeglich fuer eine Minute rot wird, ist schlimmer als keiner: Man sucht den Fehler
+// dort, wo keiner ist.
+const IMMER_NACHT = { nightModeEnabled: true, nightModeForceOn: true, nightStart: '23:00', nightEnd: '06:30' };
 
 test('Eine frische Eingabe in der Nacht pausiert, statt den Bildschirm wieder abzuschalten', () => {
   const c = controllerMitLeerlauf(IMMER_NACHT, 1); // vor einer Sekunde beruehrt

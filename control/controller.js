@@ -111,7 +111,9 @@ class Controller {
       nightStart: cfg.nightStart,
       nightEnd: cfg.nightEnd,
       pausedUntil: this.pausedUntil > now.getTime() ? this.pausedUntil : 0,
-      graceUntil: this.startedAt + GRACE_MS
+      graceUntil: this.startedAt + GRACE_MS,
+      // Damit die Einrichtungsseite erklaeren kann, warum das Geraet nachts nicht antwortet.
+      systemWach: this.panel.systemWach === true
     };
   }
 

@@ -84,6 +84,28 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   `test/panel.test.js` prüft das gegen einen echten PowerShell-Prozess.
 - **Zugangscode und Loopback**: Das Wall Display selbst ruft über `http://localhost` auf und ist
   vom Code ausgenommen. Diese Grenze nicht aufweichen, sonst sperrt sich das Gerät selbst aus.
+- **Electrons `prevent-app-suspension` hält ein Modern-Standby-Gerät NICHT wach.** Gemessen am
+  2026-09-22 auf dem Surface Go: In derselben Sekunde, in der das Panel abgeschaltet wurde,
+  begann Connected Standby (Kernel-Power 506) — Setup-Server weg, SSH weg, zurück erst durch
+  eine Berührung, zwei Minuten später (507). `powercfg /requests` sagte, warum:
+
+  ```
+  SYSTEM:    Keine.
+  AWAYMODE:  Augsburg Wall Display.exe
+  ```
+
+  Away Mode stammt aus der Zeit des klassischen S3-Schlafs und wirkt auf einem
+  Modern-Standby-Gerät nicht; gebraucht wird eine **SYSTEM**-Anforderung. Electron bietet dafür
+  keinen Weg — sein `prevent-display-sleep` würde zusätzlich den Bildschirm wach halten, also
+  genau das Gegenteil. Deshalb setzt `control/panel.js` `ES_CONTINUOUS | ES_SYSTEM_REQUIRED`
+  selbst, über den ohnehin offenen PowerShell-Prozess, **ohne** `ES_DISPLAY_REQUIRED`. Drei
+  Dinge hängen daran: Die Zahl steht **dezimal** im Vorspann (PowerShell liest `0x80000001` als
+  negativen Int32, und der Aufruf schlägt dann ohne Fehlermeldung fehl); die Anforderung hängt
+  am **Thread** des PowerShell-Prozesses und wird deshalb regelmäßig bekräftigt; und es gibt
+  **keinen Rückfall** auf einen Einzelaufruf — ein eigener Prozess wäre sofort wieder weg, und
+  mit ihm die Anforderung. Auf **Akku** wird bewusst nicht wachgehalten: Ein Gerät, das die
+  Nacht durchwacht, ist am Morgen leer, und ein leeres Gerät ist schlechter erreichbar als ein
+  schlafendes. Prüfen lässt sich das nur am Gerät, mit `powercfg /requests`.
 - **Modern Standby frisst die Anwendung.** Gemessen am 2026-09-09 auf dem Surface Go: eine
   Minute nach dem Abschalten des Panels ging das *Gerät* in Connected Standby (Kernel-Power 506),
   die App war weg, der Setup-Server unerreichbar, und der Wächter lief nicht mehr.
