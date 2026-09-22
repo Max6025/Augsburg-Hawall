@@ -125,6 +125,24 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Er läuft **nur auf dem Panel** (`IM_PANEL`): In der Live-Ansicht würde er dem, der von
   unterwegs nachsieht, genau das verdecken, wofür er die Seite geöffnet hat.
 
+- **Die Karten des Schoners werden bei JEDER Prüfung nachgezogen, nicht nur beim Hinlegen.**
+  In `schonerPruefen()` stand zuerst ein früher Ausstieg, sobald sich die Sichtbarkeit nicht
+  änderte. Die Karten entstanden dadurch genau einmal — beim Start, als noch kein einziger
+  Zustand abgerufen war. Auf der Wand stand daraufhin dauerhaft die Entitäts-ID statt des
+  Namens und ein Strich statt des Wertes, und zwar ohne dass irgendetwas nach einem Fehler
+  aussah. Teuer ist das Nachziehen nicht: `schonerKartenBauen()` vergleicht eine Signatur über
+  Zustände und Attribute und baut nur bei echter Änderung neu. Ohne Zustände baut es
+  **gar nichts** — eine Fläche voller Striche ist schlechter als die alten Karten.
+- **`buildCard()` braucht auf dem Schoner dieselben Optionen wie auf dem Dashboard.** Fehlt
+  `namen`, steht dort die Entitäts-ID statt des kurzen Namens aus der Entitätsregistrierung;
+  fehlt `settings`, ist jede im Editor gesetzte Einstellung wirkungslos — eingestellt, ohne
+  Wirkung, ohne Fehler. Dasselbe gilt für `apiBase`, `statesById`, `akzent` (Sensorfarben) und
+  `torZeiten`. Wer `render()` um eine Option ergänzt, ergänzt `schonerKartenBauen()` mit.
+- **Die Sensoren des Schoners stehen auf einem ANDEREN Dashboard.** `letzteAnzeigeEntitaeten`
+  filtert die Live-Verbindung nach dem gerade angezeigten Layout — die Entitäten des Schoners
+  fielen damit heraus, und ausgerechnet die Fläche, die am längsten zu sehen ist, zeigte Werte,
+  die sich stundenlang nicht rührten. `schonerLayout` gehört deshalb mit in die Menge, und eine
+  Live-Meldung baut bei liegendem Schoner **ihn** neu statt des verdeckten Dashboards.
 - **Die Kartenfläche des Schoners hat dasselbe Raster wie der Editor: 4 Spalten, 6 Zeilen.**
   Die erste Fassung hatte 6×6 (vom Abschiedsschirm der Vorlage übernommen); am Gerät nahmen die
   Karten dann nur zwei Drittel der Breite ein. Die Karten kommen aus

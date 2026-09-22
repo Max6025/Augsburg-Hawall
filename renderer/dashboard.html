@@ -678,10 +678,10 @@ async function render() {
   });
   if (config && config.sunEntity) letzteAnzeigeEntitaeten.add(config.sunEntity);
   if (config && config.notifyEntity) letzteAnzeigeEntitaeten.add(config.notifyEntity);
-  // Die Alarmanlage steht in aller Regel auf gar keinem Dashboard -- und ist trotzdem die
-  // einzige Entitaet, die waehrend der Abwesenheit noch zaehlt: An ihr haengt, wann alles
-  // wieder hell und aktuell wird. Ohne diese Zeile kaeme das erst beim naechsten Abruf.
-  if (config && config.ankunftEntity) letzteAnzeigeEntitaeten.add(config.ankunftEntity);
+  // Die Sensoren des BILDSCHIRMSCHONERS stehen auf einem anderen Dashboard und kaemen sonst
+  // nie durch diesen Filter -- und der Schoner ist genau die Flaeche, die am laengsten zu
+  // sehen ist. Ohne diese Zeile standen dort Werte, die sich stundenlang nicht ruehrten.
+  (schonerLayout || []).forEach(e => { if (e.entity_id) letzteAnzeigeEntitaeten.add(e.entity_id); });
 
   const signatur = zustandsSignatur(layout);
   if (!aufbauErzwingen && grid.children.length && signatur === letzteSignatur) return;
@@ -1299,11 +1299,20 @@ function schonerPruefen() {
     minuten: config.schonerMinuten,
     jetzt: new Date()
   });
+  // Die Karten werden bei JEDER Pruefung nachgezogen, nicht nur beim Hinlegen. Genau daran
+  // ist die erste Fassung gescheitert: Hier stand ein frueher Ausstieg, sobald sich die
+  // Sichtbarkeit nicht aenderte. Die Karten entstanden dadurch genau einmal -- beim Start, als
+  // noch kein einziger Zustand abgerufen war. Ergebnis auf der Wand: ueberall die Entitaets-ID
+  // statt des Namens und ein Strich statt des Wertes, dauerhaft.
+  //
+  // Teuer ist das nicht: schonerKartenBauen() vergleicht selbst eine Signatur ueber Zustaende
+  // und Attribute und baut nur bei echter Aenderung neu.
+  if (schonen) schonerKartenBauen();
+
   if (schonen === schoner.istSichtbar()) return;
 
   if (schonen) {
     schonerHintergrundAnwenden();
-    schonerKartenBauen();
     schoner.zeigen();
   } else {
     schoner.verbergen();
@@ -1360,16 +1369,53 @@ async function schonerKartenBauen() {
   if (stand === schonerKartenStand && flaeche.children.length) return;
   schonerKartenStand = stand;
 
+  // Ohne Zustaende gibt es nichts zu zeigen. Lieber die alten Karten stehen lassen als eine
+  // Flaeche voller Striche -- beim Start ist statesById noch leer.
+  const kartenEintraege = layout.filter(e => !e.unterleiste);   // die Unterleiste gibt es hier nicht
+  const ohneEntitaet = ['clock', 'navigate', 'energy', 'photo', 'quicktiles'];
+  const typVon = (e) => e.card_type || defaultCardType(e.entity_id, statesById[e.entity_id]);
+  if (!kartenEintraege.some(e => ohneEntitaet.includes(typVon(e)) || statesById[e.entity_id])) return;
+
+  // Symbole aus Home Assistant liegen in einer erzeugten 2,6-MB-Datei, die nur bei Bedarf
+  // nachgeladen wird. Ohne diesen Aufruf bleibt eine Sensorkarte hier ohne Symbol.
+  if (kartenEintraege.some(e => DashboardRender.brauchtMdi(
+      typVon(e), statesById[e.entity_id], e.settings || {}))) {
+    await mdiPfadeLaden();
+  }
+
+  // Wie auf dem Dashboard: Sensorkarten sind der Sammelfall und saehen sonst alle gleich aus.
+  // Die Zuordnung braucht die NACHBARN, kann also nicht in buildCard passieren.
+  const sensorFarben = DashboardRender.sensorAkzente(
+    kartenEintraege.filter(e => typVon(e) === 'sensor').map(e => e.entity_id),
+    document.body.classList.contains('light-theme'));
+
   flaeche.innerHTML = '';
-  for (const entry of layout) {
-    if (entry.unterleiste) continue;   // die Unterleiste gibt es hier nicht
-    const s = statesById[entry.entity_id];
-    const type = entry.type || defaultCardType(entry.entity_id, s);
+  for (const entry of kartenEintraege) {
+    const type = typVon(entry);
+    const s = ohneEntitaet.includes(type) ? null : statesById[entry.entity_id];
+    if (!ohneEntitaet.includes(type) && !s) continue;
     // Die Karten zeigen hier nur. Bedienbar sind sie nicht, weil der Schoner jeden
     // pointerdown abfaengt (stopPropagation in bildschirmschoner.js) -- wer im Vorbeigehen
     // die Wand streift, soll nicht das Licht ausschalten. Der erste Tipp weckt, immer.
+    //
+    // Diese Liste muss dieselbe sein wie in render(). Fehlte hier `namen`, stuende auf der
+    // Karte die Entitaets-ID statt des Namens; fehlte `settings`, waeren alle Einstellungen
+    // der Karte wirkungslos -- eingestellt im Editor, ohne Wirkung auf dem Schoner. Genau so
+    // war es in 1.0.2. Wer render() um eine Option ergaenzt, ergaenzt sie hier mit.
     flaeche.appendChild(buildCard(entry.entity_id, s, type,
-      DashboardRender.schonerSpanne(resolveSpan(entry, type)), await kartenZusatz(entry, type)));
+      DashboardRender.schonerSpanne(resolveSpan(entry, type)), {
+        editable: false,
+        ...(await kartenZusatz(entry, type)),
+        apiBase: API,
+        photoVersion: type === 'photo' ? (entry.settings || {}).photoVersion : null,
+        statesById,
+        namen: haNamen,
+        torZeiten: torZeiten[entry.entity_id],
+        akzent: sensorFarben[entry.entity_id],
+        settings: entry.settings || {}
+        // Bewusst OHNE callbacks: Was hier nicht schalten kann, schaltet auch nicht
+        // versehentlich, falls der Schoner einen Tipp einmal doch durchlaesst.
+      }));
   }
 }
 
@@ -1419,6 +1465,13 @@ function liveVerbinden() {
     // Minute; fuer die allermeisten gibt es hier keine Karte.
     if (!betrifftDiesesDashboard(aenderung.entity_id)) return;
 
+    // Liegt der Schoner, ist das Dashboard darunter verdeckt -- neu zu bauen ist dort
+    // verschenkte Rechenzeit. Der Schoner dagegen ist zu sehen und muss die Aenderung zeigen.
+    if (schoner && schoner.istSichtbar()) {
+      clearTimeout(liveSammler);
+      liveSammler = setTimeout(() => schonerKartenBauen(), 120);
+      return;
+    }
     // Nicht bei jeder einzelnen Meldung neu zeichnen: Eine Automation schaltet gern fuenf
     // Dinge in derselben Sekunde, und fuenf Neuaufbauten hintereinander sieht man.
     clearTimeout(liveSammler);
