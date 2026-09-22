@@ -857,9 +857,14 @@ body.ankuendigung-in-leiste .unterleiste > .card {
 /* Die Liste bekam bisher keine begrenzte Hoehe: overflow-y stand zwar auf auto, aber der
    Zwischencontainer #entityStep war ein normaler Block. Die Liste wuchs damit ueber den Dialog
    hinaus, statt zu scrollen -- bei vielen Entitaeten kam man an die unteren nicht heran.
-   Beide brauchen min-height: 0, sonst weigert sich ein Flex-Kind zu schrumpfen. */
-#entityStep { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-#entityStep[style*="display: none"], #entityStep[style*="display:none"] { display: none !important; }
+   Beide brauchen min-height: 0, sonst weigert sich ein Flex-Kind zu schrumpfen.
+   Das gilt fuer BEIDE Wege. Der Weg "Nach Entitaet" (#entitaetStep) kam spaeter dazu und bekam
+   die Korrektur nicht mit -- derselbe Fehler noch einmal, gemeldet am 2026-09-22: Die Liste lief
+   unten aus dem Dialog, und scrollen ging nicht. Wer einen dritten Weg anlegt, traegt ihn hier
+   ein. */
+#entityStep, #entitaetStep { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#entityStep[style*="display: none"], #entityStep[style*="display:none"],
+#entitaetStep[style*="display: none"], #entitaetStep[style*="display:none"] { display: none !important; }
 .picker-list { overflow-y: auto; flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
 .picker-item { display: flex; justify-content: space-between; align-items: center; gap: 1vh;
   padding: 1.4vh 0.8vh; min-height: 4.4vh; border-bottom: 1px solid #383b42;

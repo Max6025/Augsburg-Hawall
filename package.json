@@ -1,7 +1,7 @@
 {
   "name": "augsburg-wall-display",
   "productName": "Augsburg Wall Display",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Wall Display fuer Home Assistant im Dauerbetrieb: im Ruhezustand liegt der Bildschirmschoner, ein Tipp holt das Dashboard, nachts ist das Panel wirklich aus",
   "main": "main.js",
   "author": "Max",

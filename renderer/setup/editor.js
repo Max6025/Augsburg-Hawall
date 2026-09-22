@@ -1755,6 +1755,30 @@ $('saveBtn').addEventListener('click', async () => {
 loadAll();
 setInterval(refreshStates, 15000);
 
+// --- Escape schliesst den obersten Dialog ------------------------------------------------------
+//
+// Gemeldet: "Escape im Pop-up macht nichts". Geschlossen wird ueber den jeweiligen Knopf
+// (.click()) und nicht ueber classList: Die Knoepfe raeumen mehr auf als nur die Sichtbarkeit --
+// "Schliessen" im Auswahldialog setzt z. B. die Unterleisten-Wahl zurueck, sonst landete die
+// naechste Karte ungewollt dort. Zwei Wege zum Schliessen, die Verschiedenes tun, liefen
+// frueher oder spaeter auseinander.
+//
+// Reihenfolge = Stapelung: Die Verlassen-Warnung liegt ueber allem, die Einstellungen oeffnen
+// sich nach dem Anlegen ueber dem schon geschlossenen Auswahldialog.
+const ESCAPE_REIHENFOLGE = [
+  ['leaveWarnModal', 'leaveWarnCancel'],
+  ['settingsModal', 'settingsCancel'],
+  ['helpModal', 'helpModalClose'],
+  ['picker', 'pickerClose']
+];
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const offen = ESCAPE_REIHENFOLGE.find(([dialog]) => $(dialog) && $(dialog).classList.contains('show'));
+  if (!offen) return;
+  e.preventDefault();
+  $(offen[1]).click();
+});
+
 // --- Hilfe-Popup statt Fließtext, eigene Verlassen-Warnung statt Browser-Standarddialog ---
 $('helpBtn').addEventListener('click', () => $('helpModal').classList.add('show'));
 $('helpModalClose').addEventListener('click', () => $('helpModal').classList.remove('show'));
