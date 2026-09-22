@@ -207,7 +207,7 @@
   // --- Karten auf dem Bildschirmschoner --------------------------------------------------
   //
   // Die Karten kommen aus einem Unterdashboard und bringen von dort BEIDES mit: ihre Groesse
-  // und ihren Platz im 6x6-Raster der Wand. Beides wird behalten -- der Schoner zeigt das
+  // und ihren Platz im Raster des Editors. Beides wird behalten -- der Schoner zeigt das
   // Unterdashboard so, wie es im Editor angeordnet wurde.
   // Das ist die Regel, die man sich merken kann: Was du dort hinlegst, liegt hier auch dort.
   //
@@ -220,7 +220,13 @@
   // Geschnitten wird nur noch als Fangnetz: Ein Eintrag, der ueber den Rand hinausragt (aus
   // einem aelteren Layout, von Hand bearbeitet, aus einer Austauschdatei), wird
   // hereingeschoben statt hinausgeschrieben.
-  const SCHONER_SPALTEN = 6;
+  //
+  // Das Raster ist das des EDITORS: 4 Spalten, 6 Zeilen (MAX_ROWS in editor.js, .grid in
+  // dashboard.css). In der ersten Fassung stand hier 6x6, uebernommen vom Abschiedsschirm der
+  // Vorlage. Am Geraet sah das so aus: Die Karten nahmen nur zwei Drittel der Breite ein,
+  // rechts blieb ein Drittel leer, und gemeldet wurde es als "der Bildschirm ist groesser als
+  // im Editor" (2026-09-22). Was im Editor die ganze Flaeche fuellt, muss es hier auch tun.
+  const SCHONER_SPALTEN = 4;
   const SCHONER_ZEILEN = 6;
 
   function schonerSpanne(span, spalten, zeilen) {

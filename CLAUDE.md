@@ -125,7 +125,9 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Er läuft **nur auf dem Panel** (`IM_PANEL`): In der Live-Ansicht würde er dem, der von
   unterwegs nachsieht, genau das verdecken, wofür er die Seite geöffnet hat.
 
-- **Die Kartenfläche des Schoners hat dasselbe 6×6-Raster wie die Wand.** Die Karten kommen aus
+- **Die Kartenfläche des Schoners hat dasselbe Raster wie der Editor: 4 Spalten, 6 Zeilen.**
+  Die erste Fassung hatte 6×6 (vom Abschiedsschirm der Vorlage übernommen); am Gerät nahmen die
+  Karten dann nur zwei Drittel der Breite ein. Die Karten kommen aus
   einem Unterdashboard und bringen von dort **beides** mit: Größe *und* Platz
   (`grid-column: 4 / span 3`). Mit weniger Spalten zeigt das ins Leere — der Browser hängt
   stillschweigend weitere Spalten an, und was dahinter liegt, steht außerhalb des Bildschirms.

@@ -71,11 +71,11 @@ const verlauf = (basis, schwankung) => Array.from({ length: 30 }, (_, i) =>
   ({ t: Date.now() - (30 - i) * 600000, v: basis + Math.sin(i / 4) * schwankung }));
 const flaeche = schoner.kartenFlaeche();
 [
-  ['clock:gross', 'clock', null, { cols: 4, rows: 2, x: 1, y: 0 }, null],
-  ['sensor.aussen_temperatur', 'temperature', Z('8.2', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 1, y: 2 }, verlauf(8, 2)],
-  ['sensor.wohnzimmer_temperatur', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 3, y: 2 }, verlauf(21, 0.4)],
-  ['sensor.aussen_luftdruck', 'pressure', Z('1011', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 1, y: 4 }, verlauf(1011, 2)],
-  ['sensor.wohnzimmer_luftdruck', 'pressure', Z('1013', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 3, y: 4 }, verlauf(1013, 1)]
+  ['clock:gross', 'clock', null, { cols: 4, rows: 2, x: 0, y: 0 }, null],
+  ['sensor.aussen_temperatur', 'temperature', Z('8.2', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 0, y: 2 }, verlauf(8, 2)],
+  ['sensor.wohnzimmer_temperatur', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 2, y: 2 }, verlauf(21, 0.4)],
+  ['sensor.aussen_luftdruck', 'pressure', Z('1011', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 0, y: 4 }, verlauf(1011, 2)],
+  ['sensor.wohnzimmer_luftdruck', 'pressure', Z('1013', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 2, y: 4 }, verlauf(1013, 1)]
 ].forEach(([id, typ, zustand, span, history]) => {
   flaeche.appendChild(DashboardRender.buildCard(id, zustand, typ,
     DashboardRender.schonerSpanne(span), {

@@ -1534,16 +1534,29 @@ function openPicker() {
 function entitaetsWegRendern(query) {
   const q = String(query || '').toLowerCase();
   const vorhanden = currentLayout.map(l => l.entity_id);
+  const passt = e => e.name.toLowerCase().includes(q) || e.entity_id.toLowerCase().includes(q);
   const liste = allEntities
     .filter(e => !vorhanden.includes(e.entity_id))
-    .filter(e => e.name.toLowerCase().includes(q) || e.entity_id.toLowerCase().includes(q))
+    .filter(passt)
     .slice(0, 200);   // eine Liste mit tausend Zeilen sucht niemand durch
+  // Was schon eine Karte auf DIESEM Dashboard hat, steht nicht in der Liste -- eine Entitaet
+  // ist der Schluessel eines Layout-Eintrags, zweimal waere stiller Datenverlust. Nur zu sagen
+  // "keine passenden Entitaeten" war aber falsch: Gemeldet wurde am 2026-09-22 ein Sensor, der
+  // "nicht angezeigt wird", obwohl er schon als Karte auf dem Dashboard lag.
+  const schonDa = q ? allEntities.filter(e => vorhanden.includes(e.entity_id) && passt(e)) : [];
   const el = $('entitaetListe');
   el.innerHTML = '';
+  const hinweis = schonDa.length
+    ? '<p style="font-size:1.3vh; color:var(--muted); margin:0 0 0.8vh;">Schon als Karte auf diesem Dashboard: '
+      + schonDa.slice(0, 5).map(e => '<strong>' + DashboardRender.esc(e.name) + '</strong>').join(', ')
+      + (schonDa.length > 5 ? ' und ' + (schonDa.length - 5) + ' weitere' : '')
+      + '. Zu finden unter „Alle Karten“ unterhalb der Arbeitsfläche.</p>'
+    : '';
   if (!liste.length) {
-    el.innerHTML = '<p style="font-size:1.3vh; color:var(--muted);">Keine passenden Entitäten gefunden.</p>';
+    el.innerHTML = hinweis || '<p style="font-size:1.3vh; color:var(--muted);">Keine passenden Entitäten gefunden.</p>';
     return;
   }
+  if (hinweis) el.insertAdjacentHTML('beforeend', hinweis);
   liste.forEach(e => {
     const typ = DashboardRender.defaultCardType(e.entity_id, statesById[e.entity_id]);
     const row = document.createElement('div');

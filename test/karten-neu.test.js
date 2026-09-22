@@ -126,8 +126,8 @@ test('Fuer helles Design gibt es dunklere Sensorfarben', () => {
 //
 // Am 2026-09-14 stand auf der Wand eine riesige Alarmkarte und daneben ein Streifen einer
 // zweiten, halb ausserhalb des Bildschirms. Ursache: Die Karten kommen aus einem
-// Unterdashboard und bringen von dort ihren PLATZ im 6x6-Raster der Wand mit -- die Flaeche
-// auf dem Abschiedsschirm hatte aber nur zwei Spalten. "grid-column: 4 / span 3" haengt dort
+// Unterdashboard und bringen von dort ihren PLATZ im Raster des Editors mit -- die Flaeche
+// auf dem Abschiedsschirm der Vorlage hatte aber nur zwei Spalten. "grid-column: 4 / span 3" haengt dort
 // stillschweigend weitere Spalten an.
 //
 // Die Loesung ist NICHT, den Platz wegzuwerfen: Der Schirm soll das Unterdashboard so zeigen,
@@ -135,20 +135,32 @@ test('Fuer helles Design gibt es dunklere Sensorfarben', () => {
 // wird nur noch als Fangnetz.
 
 test('Eine passende Karte behaelt Groesse UND Platz', () => {
-  assert.deepStrictEqual(R.schonerSpanne({ cols: 3, rows: 4, x: 3, y: 0 }),
-    { cols: 3, rows: 4, x: 3, y: 0 });
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 2, rows: 4, x: 2, y: 0 }),
+    { cols: 2, rows: 4, x: 2, y: 0 });
+});
+
+test('Das Raster des Schoners ist das des Editors: 4 Spalten, 6 Zeilen', () => {
+  // Die erste Fassung hatte 6x6. Eine Karte, die im Editor die ganze Breite fuellt
+  // (x 0, 4 Spalten), fuellte auf dem Schoner nur zwei Drittel -- gemeldet am Geraet als
+  // "der Bildschirm ist groesser als im Editor".
+  assert.strictEqual(R.SCHONER_SPALTEN, 4);
+  assert.strictEqual(R.SCHONER_ZEILEN, 6);
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 4, rows: 2, x: 0, y: 0 }), { cols: 4, rows: 2, x: 0, y: 0 });
+  const editor = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'renderer', 'setup', 'editor.js'), 'utf8');
+  assert.match(editor, /const MAX_ROWS = 6;/, 'Zeilenzahl des Editors hat sich geaendert');
 });
 
 test('Was ueber den Rand ragt, wird hereingeschoben statt beschnitten', () => {
   // Eine Karte, die schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter
   // links liegt, nicht.
   assert.deepStrictEqual(R.schonerSpanne({ cols: 2, rows: 2, x: 5, y: 5 }),
-    { cols: 2, rows: 2, x: 4, y: 4 });
+    { cols: 2, rows: 2, x: 2, y: 4 });
 });
 
 test('Groesser als die Flaeche geht nicht', () => {
   assert.deepStrictEqual(R.schonerSpanne({ cols: 9, rows: 9, x: 0, y: 0 }),
-    { cols: 6, rows: 6, x: 0, y: 0 });
+    { cols: 4, rows: 6, x: 0, y: 0 });
 });
 
 test('Ohne Platzangabe fliesst die Karte', () => {
