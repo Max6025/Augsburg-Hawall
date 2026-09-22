@@ -64,7 +64,13 @@ jobs:
       # erzeugt das Release nebenbei mit -- existiert es noch nicht, koennen dabei zwei Releases
       # zur selben Markierung entstehen, auf die sich die Dateien dann verteilen. Genau das ist
       # beim ersten Versuch passiert. Gibt es das Release schon, laedt electron-builder nur hoch.
-      - name: Release anlegen
+      #
+      # Aber als ENTWURF. Ein veroeffentlichtes, aber noch leeres Release ist eine Falle: Die
+      # App auf dem Panel sieht die neue Fassung sofort, sucht latest.yml und bekommt 404 --
+      # mit einer Fehlerseite voller Stapelspuren. Genau das ist am 2026-09-22 passiert, weil
+      # jemand druckte, waehrend der Build noch lief. Ein Entwurf ist fuer den Updater
+      # unsichtbar; veroeffentlicht wird er erst, wenn alle Dateien oben sind.
+      - name: Release als Entwurf anlegen
         shell: bash
         run: |
           [ -n "$TAG" ] || TAG=$(node -p "require('./package.json').version")
@@ -72,7 +78,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG existiert bereits."
           else
-            gh release create "$TAG" --title "$TAG" --generate-notes
+            gh release create "$TAG" --title "$TAG" --generate-notes --draft
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -90,5 +96,21 @@ jobs:
         run: |
           git archive --format=zip --prefix=augsburg-wall-exe/ HEAD -o augsburg-wall-exe.zip
           gh release upload "$TAG" augsburg-wall-exe.zip --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Erst jetzt sichtbar. Vorher pruefen, dass latest.yml WIRKLICH oben ist -- ohne sie
+      # findet der Updater die Fassung nicht, und ein veroeffentlichtes Release ohne sie waere
+      # genau die Falle, die der Entwurf verhindern soll.
+      - name: Veroeffentlichen, sobald alles oben ist
+        shell: bash
+        run: |
+          DATEIEN=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "$DATEIEN"
+          for pflicht in latest.yml "Augsburg-Wall-Display-Setup-$TAG.exe"; do
+            echo "$DATEIEN" | grep -qx "$pflicht" || { echo "FEHLT: $pflicht"; exit 1; }
+          done
+          gh release edit "$TAG" --draft=false --latest
+          echo "Release $TAG ist jetzt sichtbar."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
