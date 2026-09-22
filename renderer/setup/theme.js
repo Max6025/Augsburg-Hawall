@@ -63,6 +63,7 @@ async function load() {
   $('nightStart').value = configRes.nightStart || '23:00';
   $('nightEnd').value = configRes.nightEnd || '06:30';
   $('nightForceOn').checked = !!configRes.nightModeForceOn;
+  $('systemWachhalten').checked = configRes.systemWachhalten !== false;
 
   // Bildschirmschoner
   $('schonerEnabled').checked = configRes.schonerEnabled !== false;
@@ -130,6 +131,9 @@ async function refreshPanelStatus() {
   if (s.nightModeEnabled) lines.push(`Nachtsperre: ${s.nightStart} bis ${s.nightEnd}.`);
   else lines.push('Nachtsperre ist aus – das Panel läuft durch.');
   if (s.pausedUntil) lines.push(`Pause läuft bis ${fmt(new Date(s.pausedUntil).toISOString())}.`);
+  lines.push(s.systemWach
+    ? 'Das Gerät wird wachgehalten – diese Seite bleibt auch bei ausgeschaltetem Panel erreichbar.'
+    : 'Das Gerät darf schlafen – bei ausgeschaltetem Panel ist diese Seite nicht erreichbar.');
   el.innerHTML = lines.join('<br>');
 }
 
@@ -232,6 +236,7 @@ function alleFelder() {
     nightStart: $('nightStart').value || '23:00',
     nightEnd: $('nightEnd').value || '06:30',
     nightModeForceOn: $('nightForceOn').checked,
+    systemWachhalten: $('systemWachhalten').checked,
 
     schonerEnabled: $('schonerEnabled').checked,
     schonerMinuten: zahl('schonerMinuten', 3),

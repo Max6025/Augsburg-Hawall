@@ -281,3 +281,24 @@ test('main.js reicht den Akkuzustand ueberhaupt herein', () => {
   assert.match(main, /aufAkku:/, 'main.js uebergibt kein aufAkku an den Controller');
   assert.match(main, /isOnBatteryPower/, 'main.js fragt den Akkuzustand nicht ab');
 });
+
+test('Die Einstellung entscheidet ueber das Wachhalten, nicht der Akku', () => {
+  // Am Netz beherrscht das Surface "Standby mit verbundenem Netzwerk" -- dann ist Schlafen
+  // sparsamer und die Seite trotzdem erreichbar. Am Akku trennt Windows das WLAN. Was richtig
+  // ist, weiss nur, wer das Geraet aufgehaengt hat.
+  const aus = new Controller({ store: fakeStore({ ...IMMER_NACHT, systemWachhalten: false }), logDir: null });
+  aus.panel.supported = true; aus.panel.setPower = () => true;
+  const g = []; aus.panel.setSystemWach = (w) => { g.push(w); return true; };
+  aus.startedAt = Date.now() - 2 * GRACE_MS;
+  aus.tick();
+  assert.deepStrictEqual(g, [false], 'abgeschaltet heisst: schlafen lassen');
+  assert.strictEqual(aus.state.systemWachhalten, false);
+});
+
+test('Ohne Einstellung wird wachgehalten', () => {
+  // Ab Werk an: lieber ein erreichbares Geraet als ein sparsames, das nachts schweigt.
+  const c = controllerMitAkku(() => true);
+  c.tick();
+  assert.deepStrictEqual(c.gesendet, [true]);
+  assert.strictEqual(c.state.systemWachhalten, true);
+});

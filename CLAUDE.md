@@ -103,12 +103,19 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   negativen Int32, und der Aufruf schlägt dann ohne Fehlermeldung fehl); die Anforderung hängt
   am **Thread** des PowerShell-Prozesses und wird deshalb regelmäßig bekräftigt; und es gibt
   **keinen Rückfall** auf einen Einzelaufruf — ein eigener Prozess wäre sofort wieder weg, und
-  mit ihm die Anforderung. Wachgehalten wird **ohne Ausnahme, auch im Akkubetrieb**.
+  mit ihm die Anforderung. Wachgehalten wird ab Werk **ohne Ausnahme, auch im Akkubetrieb**, und die Einstellung
+  `systemWachhalten` schaltet es ab.
   Das ist eine ausdrückliche Entscheidung und kein Versehen: Ein Wandpanel, dessen
   Weboberfläche nachts nicht antwortet, ist von einem kaputten nicht zu unterscheiden — und wer
   dann nachsehen will, muss hingehen. Der Preis steht im Protokoll (`akkuWarnen()` meldet den
-  Wechsel, nicht jeden Takt): Am Akku entlädt sich das Gerät deutlich schneller. Wer das ändert,
-  ändert die Entscheidung, nicht heimlich die Bedingung. Prüfen lässt sich das Ganze nur am
+  Wechsel, nicht jeden Takt): Am Akku entlädt sich das Gerät deutlich schneller. Abschaltbar ist es trotzdem, denn die richtige Antwort hängt am Gerät: Das Surface beherrscht
+  „Standby mit verbundenem Netzwerk" — **am Netz** bleibt die Weboberfläche also auch im Schlaf
+  erreichbar, und dann ist Schlafenlassen das Sparsamere. **Am Akku** wirft Windows das WLAN in
+  einen tieferen Sparzustand, und nur Wachhalten hilft. Gemessen am 2026-09-23 auf dem Surface
+  Go: auf Akku war der Setup-Server im Standby zwei Minuten lang tot.
+  Eine Randnotiz, die Zeit spart: Die Vorlage hat dafür **keine Lösung**, auch wenn es dort so
+  aussieht. `.scratch/aufwecken-und-echtes-ausschalten/spec.md` dort trägt den Status
+  „erfasst, nicht entschieden, nicht gebaut". Prüfen lässt sich das Ganze nur am
   Gerät, mit `powercfg /requests` — unter **SYSTEM** muss die App stehen, nicht „Keine".
 - **Eine Funktion, die niemand aufruft, ist dasselbe wie eine, die es nicht gibt.** In 1.0.4
   steckte `setSystemWach()` vollständig in `panel.js` — der Aufruf im Controller fehlte, weil

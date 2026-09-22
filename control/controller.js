@@ -18,11 +18,14 @@
 // Panel aus ist, soll der Setup-Server erreichbar bleiben und die Steuerung weiterlaufen.
 // Siehe den Kopf von control/panel.js: Ohne das geht mit dem Panel das ganze Geraet schlafen.
 //
-// OHNE Ausnahme, auch im Akkubetrieb. Das war eine ausdrueckliche Entscheidung: Ein
-// Wandpanel, dessen Weboberflaeche nachts nicht antwortet, ist von einem kaputten nicht zu
-// unterscheiden -- und wer dann nachsehen will, muss hingehen. Der Preis steht im Protokoll:
-// Am Akku entlaedt sich das Geraet dadurch deutlich schneller. Wer das aendern will, aendert
-// die Entscheidung, nicht heimlich die Bedingung.
+// Ab Werk AN, und zwar ohne Ausnahme fuer den Akku: Ein Wandpanel, dessen Weboberflaeche
+// nachts nicht antwortet, ist von einem kaputten nicht zu unterscheiden.
+//
+// Abschaltbar ist es trotzdem, denn die richtige Antwort haengt am Geraet und nicht am Code:
+// Das Surface beherrscht "Standby mit verbundenem Netzwerk" -- AM NETZ bleibt der Server also
+// auch im Standby erreichbar, und dann ist Schlafenlassen das Sparsamere. Am AKKU wirft
+// Windows das WLAN in einen tieferen Sparzustand, und nur Wachhalten hilft. Das kann diese
+// Datei nicht entscheiden, das weiss nur, wer das Geraet aufgehaengt hat.
 //
 // Was dadurch NICHT hierher gehoert: Der Bildschirmschoner. Er ist ein Overlay und schaltet
 // nichts am Panel (siehe renderer/shared/bildschirmschoner.js und CONTEXT.md). Ueber das Panel
@@ -105,7 +108,8 @@ class Controller {
       nightModeEnabled: !!g('nightModeEnabled', false),
       nightStart: g('nightStart', '23:00'),
       nightEnd: g('nightEnd', '06:30'),
-      nightModeForceOn: !!g('nightModeForceOn', false)
+      nightModeForceOn: !!g('nightModeForceOn', false),
+      systemWachhalten: g('systemWachhalten', true) !== false
     };
   }
 
@@ -128,7 +132,8 @@ class Controller {
       pausedUntil: this.pausedUntil > now.getTime() ? this.pausedUntil : 0,
       graceUntil: this.startedAt + GRACE_MS,
       // Damit die Einrichtungsseite erklaeren kann, warum das Geraet nachts nicht antwortet.
-      systemWach: this.panel.systemWach === true
+      systemWach: this.panel.systemWach === true,
+      systemWachhalten: cfg.systemWachhalten
     };
   }
 
@@ -154,6 +159,7 @@ class Controller {
 
   tick() {
     const now = new Date();
+    const cfgJetzt = this.config();
     let decision = this.decide(now);
 
     // Nur pruefen, wenn tatsaechlich abgeschaltet wuerde. Sonst wuerde das Mauszeiger-Wackeln
@@ -164,9 +170,10 @@ class Controller {
 
     this.panel.setPower(decision.on);
 
-    // Unabhaengig davon, ob das Panel an oder aus ist -- und unabhaengig vom Akku.
-    this.panel.setSystemWach(true);
-    this.akkuWarnen();
+    // Unabhaengig davon, ob das Panel an oder aus ist.
+    const wach = cfgJetzt.systemWachhalten;
+    this.panel.setSystemWach(wach);
+    if (wach) this.akkuWarnen();
 
     const next = this.buildState(decision, now);
     const changed = !this.state || JSON.stringify(this.state) !== JSON.stringify(next);

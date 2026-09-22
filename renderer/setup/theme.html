@@ -232,6 +232,15 @@
       </summary>
       <div class="eb-inhalt">
     <div id="panelStatus" class="note" style="line-height:1.7;">– wird geladen –</div>
+
+    <label style="margin-top:1.2rem;"><input type="checkbox" id="systemWachhalten" style="width:auto; margin-right:0.5rem;">Gerät wach halten, auch wenn das Panel aus ist</label>
+    <p class="hint-text">Ab Werk an. Ohne das legt Windows beim Abschalten des Panels das
+      <strong>ganze Gerät</strong> schlafen – diese Seite ist dann nicht mehr erreichbar, bis
+      jemand das Panel berührt.</p>
+    <p class="hint-text"><strong>Am Stromnetz</strong> kannst du es abschalten: Das Surface
+      beherrscht „Standby mit verbundenem Netzwerk“, die Seite bleibt dann auch im Schlaf
+      erreichbar und das Gerät braucht weniger Strom. <strong>Am Akku</strong> nicht: Dort
+      trennt Windows im Schlaf das WLAN, und ohne diesen Haken ist nachts niemand zu Hause.</p>
     <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.8rem;">
       <button id="panelPauseBtn" style="max-width:260px;">30 Minuten pausieren</button>
       <button id="panelResumeBtn" style="max-width:260px;">Pause beenden</button>

@@ -375,6 +375,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       nightStart: store.get('nightStart') || '23:00',
       nightEnd: store.get('nightEnd') || '06:30',
       nightModeForceOn: store.get('nightModeForceOn') || false,
+      // Ab Werk an: lieber ein erreichbares Geraet als ein sparsames, das nachts schweigt.
+      systemWachhalten: store.get('systemWachhalten') !== false,
       customTheme: store.get('customTheme') || null,
       // Bildschirmschoner: der Ruhezustand dieses Geraets. Das Dashboard ist die Ausnahme,
       // nicht umgekehrt -- siehe renderer/shared/bildschirmschoner.js.
@@ -405,7 +407,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     const {
       haUrl, token, title, entities, layout, sunEntity,
       notifyEntity, batteryThreshold, batterySound, batteryVolume, nightModeEnabled, nightStart, nightEnd, nightModeForceOn,
-      notifyTitel, notifySekunden,
+      notifyTitel, notifySekunden, systemWachhalten,
       setupCode,
       hintergrundBewegung, rueckkehrSekunden, desktopHintergrund,
       schonerEnabled, schonerMinuten, schonerHelligkeit, schonerDashboard, schonerHintergrund
@@ -437,6 +439,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (nightStart !== undefined) store.set('nightStart', nightStart);
     if (nightEnd !== undefined) store.set('nightEnd', nightEnd);
     if (nightModeForceOn !== undefined) store.set('nightModeForceOn', nightModeForceOn);
+    if (systemWachhalten !== undefined) store.set('systemWachhalten', !!systemWachhalten);
 
     if (hintergrundBewegung !== undefined) store.set('hintergrundBewegung', !!hintergrundBewegung);
     if (rueckkehrSekunden !== undefined) {
