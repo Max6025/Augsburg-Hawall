@@ -12,11 +12,11 @@ const path = require('node:path');
 const H = require('../control/hintergrund.js');
 const R = require('../renderer/shared/dashboard-render.js');
 
-// "Italien Wall Display" steht im Pfad jedes Geraets -- mit Leerzeichen.
-const ORDNER = 'C:\\Users\\max\\AppData\\Roaming\\Italien Wall Display';
+// "Augsburg Wall Display" steht im Pfad jedes Geraets -- mit Leerzeichen.
+const ORDNER = 'C:\\Users\\max\\AppData\\Roaming\\Augsburg Wall Display';
 
 test('Pfade mit Leerzeichen werden in Anfuehrungszeichen gesetzt', () => {
-  // Ohne sie sucht PowerShell eine Datei namens "Italien" und meldet, sie sei nicht da.
+  // Ohne sie sucht PowerShell eine Datei namens "Augsburg" und meldet, sie sei nicht da.
   const b = H.befehl(ORDNER + '\\x.ps1', ORDNER + '\\desktop.png');
   assert.ok(b.includes('-File "' + ORDNER + '\\x.ps1"'), b);
   assert.ok(b.includes('-Bild "' + ORDNER + '\\desktop.png"'), b);

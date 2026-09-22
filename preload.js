@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('wallApi', {
   systemLautstaerkeAnheben: (prozent) => ipcRenderer.invoke('system-lautstaerke-anheben', prozent),
   // Windows-Hintergrund setzen -- sichtbar nur waehrend eines Updates, wenn die App weg ist.
   desktopHintergrundSetzen: (art) => ipcRenderer.invoke('desktop-hintergrund-setzen', art),
-  // Kalendersteuerung: Zustand abfragen, Zustandswechsel abonnieren, Pause ausloesen.
+  // Panelsteuerung: Zustand abfragen, Zustandswechsel abonnieren, Pause ausloesen.
   getControlState: () => ipcRenderer.invoke('get-control-state'),
   pausePanelControl: (minutes) => ipcRenderer.invoke('pause-panel-control', minutes),
   onControlState: (callback) => {

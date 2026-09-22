@@ -18,7 +18,6 @@ const TYP = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript'
 const ZUSTAENDE = [
   ['input_button.alle_tore', 'Tor Normal', 'off'],
   ['input_boolean.tor_dauerhaft_offen', 'Tor Dauerhaft', 'off'],
-  ['alarm_control_panel.alarmo', 'Alarmo Überwachungskamera', 'armed_home', { supported_features: 7 }],
   ['climate.klima', 'Klimaanlage', 'off', { hvac_modes: ['off', 'heat', 'cool'], current_temperature: 22 }],
   ['sensor.aussen', 'Außentemperatur', '21.4', { unit_of_measurement: '°C' }],
   ['light.wohnzimmer', 'Wohnzimmer', 'on', { brightness: 180 }],
@@ -38,7 +37,6 @@ const LAYOUT = [
     settings: { name: 'Tor Normal', gateButtons: [{ label: 'Tor öffnen', entity: 'input_button.alle_tore' }] } },
   { entity_id: 'input_boolean.tor_dauerhaft_offen', card_type: 'gate', x: 2, y: 0, cols: 2, rows: 2,
     settings: { name: 'Tor Dauerhaft', gateButtons: [{ label: 'Tor Dauerhaft', entity: 'input_boolean.tor_dauerhaft_offen' }] } },
-  { entity_id: 'alarm_control_panel.alarmo', card_type: 'alarm', x: 0, y: 2, cols: 3, rows: 2, settings: {} },
   { entity_id: 'climate.klima', card_type: 'climate', x: 3, y: 2, cols: 1, rows: 2, settings: {} },
   { entity_id: 'clock:probe', card_type: 'clock', unterleiste: true, settings: {} }
 ];
@@ -51,7 +49,6 @@ const ANTWORTEN = {
     entities: ZUSTAENDE.map(z => z[0]),
     // Damit sich auch die Einstellungsseite (/setup/theme.html) ansehen laesst
     ankunftEnabled: true,
-    ankunftEntity: 'alarm_control_panel.alarmo',
     ankunftZuhause: 'disarmed, armed_home',
     ankunftNachMinuten: 60
   },

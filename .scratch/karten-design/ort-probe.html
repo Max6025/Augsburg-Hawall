@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Innen/Außen – Vorschau</title>
+<!--
+  Temperatur und Luftdruck, jeweils innen und aussen, so wie sie auf der Wand nebeneinander
+  stehen. Ohne Home Assistant, ohne Electron, ohne Geraet.
+
+  Die Frage, die diese Probe beantworten soll, ist nicht "sieht es gut aus", sondern "erkennt
+  man es aus der Entfernung". Deshalb:
+
+    ?weit   -- verkleinert und leicht unscharf, ungefaehr wie aus vier bis fuenf Metern.
+               Wenn man hier innen und aussen nicht mehr auseinanderhaelt, ist es zu schwach.
+    ?hell   -- helles Design
+    ?ohne   -- dieselben Karten OHNE Ort, zum Vergleich: so sah es vorher aus.
+
+  Bei 1280x854 ansehen, das ist die echte Panelgroesse.
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  .raster { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr);
+    gap: 1.2vh; height: 100%; padding: 1.6vh; box-sizing: border-box; }
+  body.weit .raster { transform: scale(0.34); transform-origin: center; filter: blur(1.2px); }
+  .stand { position: fixed; left: 1vh; bottom: 1vh; z-index: 99999;
+    font: 500 1.5vh system-ui, sans-serif; color: #9aa; background: rgba(0,0,0,0.55);
+    padding: 0.6vh 1.2vh; border-radius: 0.8vh; pointer-events: none; }
+</style>
+</head>
+<body class="wandanzeige">
+  <div class="raster" id="raster"></div>
+  <div class="stand" id="stand"></div>
+
+<script src="../../renderer/shared/dashboard-render.js"></script>
+<script>
+const P = new URLSearchParams(location.search);
+DashboardRender.applyCustomTheme(DashboardRender.DEFAULT_THEME);
+if (P.has('hell')) document.body.classList.add('light-theme');
+if (P.has('weit')) document.body.classList.add('weit');
+
+const Z = (state, attributes = {}) => ({ state, attributes });
+// Absichtlich KEINE Ortswoerter in den Namen der ersten beiden: So sieht man, dass die
+// Einstellung wirkt und nicht nur das Raten. Die anderen beiden werden geraten.
+const ort = (w) => P.has('ohne') ? { ort: 'kein' } : (w ? { ort: w } : {});
+const verlauf = (basis, schwankung) => Array.from({ length: 30 }, (_, i) =>
+  ({ t: Date.now() - (30 - i) * 600000, v: basis + Math.sin(i / 4) * schwankung }));
+
+const karten = [
+  ['sensor.temp_1', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('innen'), { x: 0, y: 0 }, verlauf(21, 0.4)],
+  ['sensor.temp_2', 'temperature', Z('8.2',  { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('aussen'), { x: 3, y: 0 }, verlauf(8, 2)],
+  ['sensor.luftdruck_innen', 'pressure', Z('1013', { friendly_name: 'Luftdruck Wohnzimmer', unit_of_measurement: 'hPa' }), ort(), { x: 0, y: 3 }, verlauf(1013, 1)],
+  ['sensor.luftdruck_aussen', 'pressure', Z('1011', { friendly_name: 'Luftdruck Garten', unit_of_measurement: 'hPa' }), ort(), { x: 3, y: 3 }, verlauf(1011, 2)]
+];
+const raster = document.getElementById('raster');
+karten.forEach(([id, typ, zustand, settings, pos, history]) => {
+  raster.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: 3, rows: 3, ...pos }, {
+    editable: false, apiBase: '', statesById: {}, settings, callbacks: {}, history
+  }));
+});
+document.getElementById('stand').textContent =
+  (P.has('ohne') ? 'OHNE Ort (so war es vorher)' : 'Mit Ort') + (P.has('weit') ? ' – aus der Entfernung' : '');
+</script>
+</body>
+</html>

@@ -15,14 +15,14 @@ const L = require('../control/lautstaerke.js');
 test('Der Aufruf bleibt weit unter der Laengengrenze von Windows', () => {
   // cmd.exe nimmt 8191 Zeichen. Das Skript gehoert deshalb in eine Datei und nicht in den
   // Aufruf -- Base64 von UTF-16 blaeht es auf das Vierfache.
-  const b = L.befehl('C:\\Users\\jemand\\AppData\\Roaming\\Italien Wall Display\\wall-lautstaerke.ps1', 60);
+  const b = L.befehl('C:\\Users\\jemand\\AppData\\Roaming\\Augsburg Wall Display\\wall-lautstaerke.ps1', 60);
   assert.ok(b.length < 500, 'Aufruf ist ' + b.length + ' Zeichen lang');
 });
 
 test('Der Pfad wird in Anfuehrungszeichen gesetzt', () => {
-  // "Italien Wall Display" enthaelt Leerzeichen. Ohne Anfuehrungszeichen sucht PowerShell eine
-  // Datei namens "Italien" und meldet, sie sei nicht da.
-  assert.match(L.befehl('C:\\Programme\\Italien Wall Display\\x.ps1', 50), /-File "C:\\Programme\\Italien Wall Display\\x\.ps1"/);
+  // "Augsburg Wall Display" enthaelt Leerzeichen. Ohne Anfuehrungszeichen sucht PowerShell eine
+  // Datei namens "Augsburg" und meldet, sie sei nicht da.
+  assert.match(L.befehl('C:\\Programme\\Augsburg Wall Display\\x.ps1', 50), /-File "C:\\Programme\\Augsburg Wall Display\\x\.ps1"/);
 });
 
 test('Die Ausfuehrungsrichtlinie wird umgangen', () => {

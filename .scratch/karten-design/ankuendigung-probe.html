@@ -35,7 +35,7 @@
 </div>
 
 <script src="../../renderer/shared/dashboard-render.js"></script>
-<script src="../../renderer/shared/ankunftsschirm.js"></script>
+<script src="../../renderer/shared/markdown.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 DashboardRender.applyCustomTheme(DashboardRender.DEFAULT_THEME);
@@ -86,7 +86,7 @@ function geometrie(zielIstLeiste) {
 }
 
 function vollbild() {
-  $('notifyText').innerHTML = AnkunftsschirmModul.markdown(TEXT, DashboardRender.esc);
+  $('notifyText').innerHTML = MarkdownModul.markdown(TEXT, DashboardRender.esc);
   $('notifyKopf').textContent = 'Ankündigung';
   $('notifyKurz').textContent = kurzfassung(TEXT);
   const o = $('notifyOverlay');

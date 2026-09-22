@@ -594,17 +594,19 @@ function settingsFieldsForType(type) {
   const mitZahl = ['gauge', 'graph', 'wind', 'rain', 'temperature', 'sensor', 'pressure', 'humidity', 'solar'];
   // Karten ohne eigenes Symbol (Uhr, Foto, Kacheln, Energiefluss, Media Player) haben nichts
   // zu tauschen -- ein Auswahlfeld dort waere eine Einstellung ohne Wirkung.
-  const ohneSymbol = ['clock', 'photo', 'quicktiles', 'energy', 'media_player', 'navigate', 'gate', 'light', 'switch', 'climate', 'cover', 'lock', 'alarm', 'fluegeltor'];
+  const ohneSymbol = ['clock', 'photo', 'quicktiles', 'energy', 'media_player', 'navigate', 'gate', 'light', 'switch', 'climate', 'cover', 'lock', 'fluegeltor'];
   // Karten ohne Home-Assistant-Entitaet (Uhr, Energiefluss, Foto, Kacheln, Wechsel-Karte)
   // haben nichts zu tauschen -- sie tragen eine selbst vergebene Kennung.
   const ohneEntitaet = ['clock', 'energy', 'photo', 'quicktiles', 'navigate'];
   return {
     entitaetWechseln: !ohneEntitaet.includes(type),
     decimals: mitZahl.includes(type),
+    // Innen/aussen nur dort, wo dieselbe Messgroesse an beiden Orten vorkommt -- die Liste
+    // steht im Renderer, damit Editor und Karte nicht auseinanderlaufen.
+    ortWahl: DashboardRender.ORT_TYPEN.includes(type),
     verlaufOpts: mitZahl.includes(type) && type !== 'graph' && type !== 'gauge',
     iconWahl: !ohneSymbol.includes(type),
     radarOpts: type === 'radar',
-    alarmOpts: type === 'alarm',
     clockOpts: type === 'clock',
     name: type !== 'navigate',
     suffix: withSuffix.includes(type),
@@ -694,6 +696,23 @@ function openSettings(entityId) {
     html += `<label>Einheit / Suffix (leer = automatisch${attrs.unit_of_measurement ? ': ' + attrs.unit_of_measurement : ''})</label>
       <input type="text" id="setSuffix" value="${settings.suffix || ''}" placeholder="${attrs.unit_of_measurement || ''}">`;
   }
+  if (fields.ortWahl) {
+    const w = settings.ort || '';
+    const opt = (wert, text) => `<option value="${wert}" ${w === wert ? 'selected' : ''}>${text}</option>`;
+    html += `<label>Ort des Messpunkts</label>
+      <select id="setOrt">
+        ${opt('', 'Automatisch (aus Name und Entität)')}
+        ${opt('aussen', 'Außen')}
+        ${opt('innen', 'Innen')}
+        ${opt('kein', 'Keine Angabe')}
+      </select>
+      <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
+        Zwei Temperaturkarten sahen bisher gleich aus – der Unterschied stand nur in der
+        kleinsten Schrift. Mit Ort bekommt die Karte ein Zeichen, das man aus der Entfernung
+        an der <strong>Form</strong> erkennt: Haus oder Tanne, und ein Chip „INNEN“ (Ring)
+        bzw. „AUSSEN“ (gefüllt). Automatisch erkennt Wörter wie „außen“, „outdoor“, „Garten“,
+        „Wohnzimmer“ oder „innen“ in Name und Entität.</p>`;
+  }
   if (fields.decimals) {
     html += `<label>Nachkommastellen (leer = Wert unverändert übernehmen)</label>
       <input type="number" id="setDecimals" min="0" max="6" placeholder="unverändert" value="${settings.decimals ?? ''}">
@@ -720,51 +739,6 @@ function openSettings(entityId) {
         ${namen.map(n => `<option value="${n}" ${settings.icon === n ? 'selected' : ''}>${n}</option>`).join('')}
       </select>
       <div id="iconVorschau" style="margin:0.6vh 0 1vh; width:3.4vh; height:3.4vh; color:var(--fg);"></div>`;
-  }
-  if (fields.alarmOpts) {
-    const gewaehlt = Array.isArray(settings.alarmModi) ? settings.alarmModi : ['home', 'away', 'night', 'disarm'];
-    const zeile = (id, text, zusatz) => `
-      <label style="display:flex; align-items:center; gap:0.6vh; margin-top:0.4rem;">
-        <input type="checkbox" class="alarmModus" data-modus="${id}" style="width:auto; margin:0;"
-               ${gewaehlt.includes(id) ? 'checked' : ''}>
-        ${text}${zusatz ? ` <span style="color:var(--muted); font-size:1.1vh;">${zusatz}</span>` : ''}
-      </label>`;
-    html += `
-      <label>Welche Knöpfe die Karte zeigt</label>
-      ${zeile('home', 'Zuhause')}
-      ${zeile('away', 'Abwesend')}
-      ${zeile('night', 'Nacht')}
-      ${zeile('disarm', 'Unscharf', '– zum Entschärfen')}
-      <p style="font-size:1.1vh; color:var(--muted); margin:0.6vh 0 1vh;">
-        Es erscheint ohnehin nur, was die Anlage laut Home Assistant beherrscht – der Haken
-        blendet zusätzlich aus, was du nicht auf der Wand haben willst. Wer „Nacht“ nie
-        benutzt, trifft den Knopf sonst nur versehentlich.</p>
-      <p style="font-size:1.1vh; color:var(--muted); margin:0.6vh 0 1vh;">
-        <strong>„Unscharf“ abwählen heißt: von dieser Karte aus lässt sich die Anlage nicht
-        mehr entschärfen.</strong> Das kann gewollt sein, wenn das Panel für Gäste zugänglich
-        ist – dann braucht es aber einen anderen Weg zum Entschärfen.</p>
-
-      <label style="margin-top:1rem;">Knopf-Beschriftungen (leer = Vorgabe)</label>
-      <div class="row2">
-        <div><input type="text" class="alarmKnopfText" data-id="home" placeholder="Zuhause"
-             value="${((settings.alarmKnopfTexte || {}).home || '').replace(/"/g, '&quot;')}"></div>
-        <div><input type="text" class="alarmKnopfText" data-id="away" placeholder="Abwesend"
-             value="${((settings.alarmKnopfTexte || {}).away || '').replace(/"/g, '&quot;')}"></div>
-      </div>
-      <div class="row2">
-        <div><input type="text" class="alarmKnopfText" data-id="night" placeholder="Nacht"
-             value="${((settings.alarmKnopfTexte || {}).night || '').replace(/"/g, '&quot;')}"></div>
-        <div><input type="text" class="alarmKnopfText" data-id="disarm" placeholder="Unscharf"
-             value="${((settings.alarmKnopfTexte || {}).disarm || '').replace(/"/g, '&quot;')}"></div>
-      </div>
-
-      <label style="margin-top:1rem;">Zustände: Text und Farbe</label>
-      <p style="font-size:1.1vh; color:var(--muted); margin:0 0 0.6vh;">
-        <code>armed_home</code> heißt nicht überall dasselbe. In der einen Anlage ist es scharf
-        mit freiem Innenbereich, in der anderen der ganz normale Zustand, wenn jemand da ist –
-        also eher unscharf. Die App kann das nicht wissen, deshalb steht es hier.
-        Die Farbe entscheidet auch, wie auffällig die Karte wird.</p>
-      <div id="alarmZustandListe"></div>`;
   }
   if (fields.radarOpts) {
     html += `<label>Bild neu laden alle … Sekunden</label>
@@ -1049,23 +1023,7 @@ function openSettings(entityId) {
   // ACHTUNG: Alles, was Elemente aus `html` anfasst, MUSS hinter dieser Zeile stehen.
   // Davor gibt es sie noch nicht, und $() liefert null -- die Einstellungen liessen sich
   // dann gar nicht mehr oeffnen, weil der Fehler den ganzen Aufbau abbricht. Genau das
-  // ist bei der Alarm-Karte passiert.
-  if (fields.alarmOpts) {
-    const liste = $('alarmZustandListe');
-    const texte = settings.alarmTexte || {};
-    const toene = settings.alarmToene || {};
-    liste.innerHTML = DashboardRender.ALARM_ZUSTAENDE.map(z => `
-      <div style="display:flex; align-items:center; gap:0.6vh; margin-bottom:0.5vh;">
-        <code style="flex:0 0 8.5vh; font-size:1.05vh; color:var(--muted);">${z.id}</code>
-        <input type="text" class="alarmText" data-id="${z.id}" placeholder="${z.text}"
-               value="${(texte[z.id] || '').replace(/"/g, '&quot;')}" style="flex:1;">
-        <select class="alarmTon" data-id="${z.id}" style="flex:0 0 auto; width:auto; margin:0;">
-          ${DashboardRender.ALARM_TOENE.map(t =>
-            `<option value="${t.id}" ${(toene[z.id] || z.ton) === t.id ? 'selected' : ''}>${t.text}</option>`).join('')}
-        </select>
-      </div>`).join('');
-  }
-
+  // ist in der Vorlage einer Karte passiert, und zwar unbemerkt ueber zwei Versionen.
   if (fields.iconWahl) {
     // Eine Liste von Namen ohne Bild waere Raten. Die Vorschau zeigt sofort, was man waehlt.
     const zeigeSymbol = () => {
@@ -1448,6 +1406,12 @@ $('settingsSave').addEventListener('click', () => {
     const v = ($('setSuffix') && $('setSuffix').value.trim()) || '';
     if (v) settings.suffix = v; else delete settings.suffix;
   }
+  if (settingsFields.ortWahl) {
+    // Leer heisst "automatisch" und wird NICHT gespeichert: Nur so bekommt eine Karte, die nie
+    // jemand angefasst hat, spaeter verbesserte Ratewoerter mit.
+    const v = ($('setOrt') && $('setOrt').value) || '';
+    if (['innen', 'aussen', 'kein'].includes(v)) settings.ort = v; else delete settings.ort;
+  }
   if (settingsFields.decimals) {
     const v = ($('setDecimals') && $('setDecimals').value.trim()) || '';
     if (v !== '' && !isNaN(parseInt(v, 10))) settings.decimals = Math.max(0, Math.min(6, parseInt(v, 10)));
@@ -1462,33 +1426,6 @@ $('settingsSave').addEventListener('click', () => {
   if (settingsFields.iconWahl) {
     const v = ($('setIcon') && $('setIcon').value) || '';
     if (v) settings.icon = v; else delete settings.icon;
-  }
-  if (settingsFields.alarmOpts) {
-    const an = Array.from(document.querySelectorAll('.alarmModus'))
-      .filter(el => el.checked).map(el => el.dataset.modus);
-    settings.alarmModi = an;
-
-    // Nur abweichende Werte speichern. Wer nichts eintraegt, bekommt weiterhin die Vorgabe --
-    // auch wenn sich die spaeter einmal aendert.
-    const sammle = (klasse, pruefe) => {
-      const raus = {};
-      document.querySelectorAll('.' + klasse).forEach(el => {
-        const v = (el.value || '').trim();
-        if (v && pruefe(v, el)) raus[el.dataset.id] = v;
-      });
-      return Object.keys(raus).length ? raus : undefined;
-    };
-    const texte = sammle('alarmText', () => true);
-    if (texte) settings.alarmTexte = texte; else delete settings.alarmTexte;
-    const knopf = sammle('alarmKnopfText', () => true);
-    if (knopf) settings.alarmKnopfTexte = knopf; else delete settings.alarmKnopfTexte;
-
-    const toene = {};
-    document.querySelectorAll('.alarmTon').forEach(el => {
-      const vorgabe = (DashboardRender.ALARM_ZUSTAENDE.find(z => z.id === el.dataset.id) || {}).ton;
-      if (el.value && el.value !== vorgabe) toene[el.dataset.id] = el.value;
-    });
-    if (Object.keys(toene).length) settings.alarmToene = toene; else delete settings.alarmToene;
   }
   if (settingsFields.radarOpts) {
     const v = ($('setRadarSeconds') && $('setRadarSeconds').value.trim()) || '';

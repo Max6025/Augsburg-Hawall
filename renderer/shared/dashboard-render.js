@@ -116,7 +116,6 @@
     fan: { label: 'Ventilator', defaultSize: 'md' },
     vacuum: { label: 'Saugroboter', defaultSize: 'md' },
     humidity: { label: 'Luftfeuchtigkeit', defaultSize: 'lg' },
-    alarm: { label: 'Alarmanlage', defaultSize: 'md' },
     waste: { label: 'Mülltermine', defaultSize: 'lg' },
     gate: { label: 'Tor öffnen', defaultSize: 'md' },
     photo: { label: 'Foto-Bereich', defaultSize: 'xl' },
@@ -144,7 +143,6 @@
       case 'lock': return ['lock'];
       case 'fan': return ['fan'];
       case 'vacuum': return ['vacuum'];
-      case 'alarm': return ['alarm_control_panel'];
       case 'waste': return ['calendar'];
       // Die Karten-Entitaet ist hier die Melde-Entitaet ("Tor dauerhaft offen"). Die Knoepfe
       // haengen in den Einstellungen und koennen aus jeder Domain kommen.
@@ -206,28 +204,28 @@
     return base;
   }
 
-  // --- Karten auf dem Abschiedsschirm ---------------------------------------------------
+  // --- Karten auf dem Bildschirmschoner --------------------------------------------------
   //
   // Die Karten kommen aus einem Unterdashboard und bringen von dort BEIDES mit: ihre Groesse
-  // und ihren Platz im 6x6-Raster der Wand. Beides wird behalten -- der Schirm zeigt das
-  // Unterdashboard so, wie es im Editor angeordnet wurde, nur in einer schmaleren Flaeche.
+  // und ihren Platz im 6x6-Raster der Wand. Beides wird behalten -- der Schoner zeigt das
+  // Unterdashboard so, wie es im Editor angeordnet wurde.
   // Das ist die Regel, die man sich merken kann: Was du dort hinlegst, liegt hier auch dort.
   //
   // Die Flaeche muss deshalb DASSELBE Raster haben. Vorher hatte sie zwei Spalten, und eine
   // Karte mit "grid-column: 4 / span 3" zeigte ins Leere: Der Browser haengt stillschweigend
   // weitere Spalten an, und was dahinter kommt, steht halb ausserhalb des Bildschirms. Genau
-  // so sah es am 2026-09-14 auf der Wand aus -- eine riesige Alarmkarte und daneben der
-  // Streifen einer zweiten.
+  // so sah es am 2026-09-14 auf der Wand der Vorlage aus -- eine riesige Karte und daneben
+  // der Streifen einer zweiten.
   //
   // Geschnitten wird nur noch als Fangnetz: Ein Eintrag, der ueber den Rand hinausragt (aus
   // einem aelteren Layout, von Hand bearbeitet, aus einer Austauschdatei), wird
   // hereingeschoben statt hinausgeschrieben.
-  const ABSCHIED_SPALTEN = 6;
-  const ABSCHIED_ZEILEN = 6;
+  const SCHONER_SPALTEN = 6;
+  const SCHONER_ZEILEN = 6;
 
-  function abschiedSpanne(span, spalten, zeilen) {
-    const maxS = Number(spalten) > 0 ? Number(spalten) : ABSCHIED_SPALTEN;
-    const maxZ = Number(zeilen) > 0 ? Number(zeilen) : ABSCHIED_ZEILEN;
+  function schonerSpanne(span, spalten, zeilen) {
+    const maxS = Number(spalten) > 0 ? Number(spalten) : SCHONER_SPALTEN;
+    const maxZ = Number(zeilen) > 0 ? Number(zeilen) : SCHONER_ZEILEN;
     const ganz = (w, kleinstes, groesstes) => {
       const n = Math.round(Number(w));
       if (!Number.isFinite(n)) return kleinstes;
@@ -321,7 +319,6 @@
     if (domain === 'media_player') return 'media_player';
     if (domain === 'lock') return 'lock';
     if (domain === 'vacuum') return 'vacuum';
-    if (domain === 'alarm_control_panel') return 'alarm';
     if (domain === 'calendar') return 'waste';
     if (domain === 'fan') return 'fan';
     if (domain === 'input_select' || domain === 'select') return 'select';
@@ -872,7 +869,6 @@
     [['schloss', 'lock', 'riegel'], 'lockClosed'],
     [['rollladen', 'rolladen', 'jalousie', 'markise'], 'cover'],
     [['licht', 'lampe', 'light'], 'light'],
-    [['alarm', 'sirene'], 'shield'],
     [['szene', 'scene'], 'sun2'],
     [['auf', 'open', 'hoch'], 'arrowUp'],
     [['zu', 'close', 'runter'], 'arrowDown'],
@@ -888,43 +884,79 @@
     return 'button';
   }
 
-  // --- Alarmanlage: Beschriftung und Farbe sind Sache der Anlage, nicht der App ------------------
+  // --- Innen oder aussen? ---------------------------------------------------------------------
   //
-  // "armed_home" heisst nicht ueberall dasselbe. In der einen Anlage ist es scharf mit
-  // Innenbereich frei, in der anderen der ganz normale Zustand, wenn jemand da ist -- also
-  // eher unscharf. Die App kann das nicht wissen; wer es fest verdrahtet, liegt bei der
-  // Haelfte der Anlagen falsch und erzaehlt dem Nutzer etwas Unwahres ueber seine Sicherheit.
+  // Zwei Temperaturkarten nebeneinander sahen bis hierher gleich aus: dasselbe Thermometer,
+  // dieselbe grosse Zahl, und der Unterschied stand allein in der Bildunterschrift -- der
+  // kleinsten Schrift auf der Karte. Aus zwei Metern las man "21,4" und "8,2" und musste raten,
+  // welche Zahl die draussen ist. Beim Luftdruck ist es noch schlimmer, da liegen die Werte
+  // innen und aussen fast gleich.
   //
-  // Deshalb nur Vorgaben, die sich je Karte ueberschreiben lassen -- Text UND Farbe.
+  // Die Regel, die sich merken laesst: **Die Zahl sagt WAS, das Zeichen sagt WO.** Die Einheit
+  // (°C, hPa, %) unterscheidet die Messgroesse; der Ort bekommt ein eigenes Zeichen, das man an
+  // der FORM erkennt, nicht an der Schrift:
+  //
+  //   - ein grosses Wort im Chip oben rechts ("INNEN" / "AUSSEN"),
+  //   - das Symbol oben links wird zum Haus bzw. zur Tanne,
+  //   - und dieselbe Silhouette liegt gross und blass im Kartenhintergrund.
+  //
+  // Die Silhouette ist das, was aus der Entfernung traegt: Ein Haus und eine Tanne sind auch
+  // dann noch auseinanderzuhalten, wenn man kein Wort mehr lesen kann.
+  //
+  // Bewusst NICHT ueber die Farbe. Die Temperaturkarte faerbt ihren Akzent schon nach dem Wert
+  // (tempAkzent: blau kalt, rot warm) -- eine zweite Farbbedeutung auf derselben Karte hiesse,
+  // dass man nicht mehr weiss, ob "blau" kalt oder draussen bedeutet. Und Farbe als Flaeche
+  // verbietet ohnehin ADR 0004.
 
-  const ALARM_ZUSTAENDE = [
-    { id: 'disarmed',    text: 'Unscharf',           ton: 'ruhig' },
-    { id: 'armed_home',  text: 'Scharf (Zuhause)',   ton: 'scharf' },
-    { id: 'armed_away',  text: 'Scharf (Abwesend)',  ton: 'scharf' },
-    { id: 'armed_night', text: 'Scharf (Nacht)',     ton: 'scharf' },
-    { id: 'arming',      text: 'Aktiviert…',         ton: 'achtung' },
-    { id: 'pending',     text: 'Ausstehend…',        ton: 'achtung' },
-    { id: 'triggered',   text: 'ALARM!',             ton: 'alarm' }
+  const ORTE = {
+    innen: {
+      text: 'Innen',
+      symbol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></svg>',
+      silhouette: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5 1.5 11.2l1.4 1.6L4.5 11.5V21h15v-9.5l1.6 1.3 1.4-1.6z"/></svg>'
+    },
+    aussen: {
+      text: 'Außen',
+      symbol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 11h2.5L3.5 16h11L11.5 11H14z"/><path d="M9 16v5"/><circle cx="18.5" cy="6" r="2.5"/></svg>',
+      silhouette: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 5.5 10h3L4.5 16h5.5v2.5h4V16h5.5l-4-6h3z"/><rect x="10.5" y="18" width="3" height="5"/></svg>'
+    }
+  };
+
+  // Woerter, an denen sich der Ort erkennen laesst. Geprueft wird in Beschriftung UND Kennung --
+  // "sensor.aussentemperatur" genuegt, auch wenn die Karte "Temperatur" heisst.
+  const ORT_WOERTER = [
+    [['aussen', 'außen', 'outdoor', 'outside', 'draussen', 'draußen', 'garten', 'balkon',
+      'terrasse', 'wetterstation', 'weather_station'], 'aussen'],
+    [['innen', 'indoor', 'inside', 'wohnzimmer', 'schlafzimmer', 'kinderzimmer', 'kueche',
+      'küche', 'bad', 'buero', 'büro', 'flur', 'keller', 'zimmer', 'wohnung'], 'innen']
   ];
 
-  const ALARM_TOENE = [
-    { id: 'ruhig',   text: 'ruhig (gedämpft)' },
-    { id: 'scharf',  text: 'scharf (grün)' },
-    { id: 'achtung', text: 'Achtung (gelb)' },
-    { id: 'alarm',   text: 'Alarm (rot)' }
-  ];
-
-  /** Text und Farbton fuer einen Zustand -- eigene Einstellung vor Vorgabe. */
-  function alarmDarstellung(zustand, settings) {
-    const st = settings || {};
-    const eigen = (st.alarmTexte || {})[zustand];
-    const eigenTon = (st.alarmToene || {})[zustand];
-    const vorgabe = ALARM_ZUSTAENDE.find(z => z.id === zustand);
-    return {
-      text: (eigen && String(eigen).trim()) || (vorgabe ? vorgabe.text : zustand),
-      ton: eigenTon || (vorgabe ? vorgabe.ton : 'ruhig')
-    };
+  /**
+   * Der Ort einer Messkarte: 'innen', 'aussen' oder '' (keiner).
+   *
+   * Eine ausdrueckliche Einstellung gewinnt immer, auch 'kein' -- wer die Markierung abschaltet,
+   * soll sie nicht zurueckbekommen, weil zufaellig "bad" im Namen steht ("Badewasser"...).
+   * Ohne Einstellung wird geraten, und zwar AB WERK: Eine Verbesserung, die man erst
+   * einschalten muss, ist fuer die meisten keine (siehe CLAUDE.md, symbolErraten).
+   *
+   * "Aussen" wird zuerst geprueft. "Aussenwand Wohnzimmer" ist ein Messpunkt aussen, und ein
+   * Sensor, der "outdoor" heisst, ist selten falsch benannt.
+   */
+  function ortErmitteln(settings, beschriftung, entitaet) {
+    const w = settings && settings.ort;
+    if (w === 'innen' || w === 'aussen') return w;
+    if (w === 'kein') return '';
+    const heu = (String(beschriftung || '') + ' ' + String(entitaet || '')).toLowerCase();
+    for (const [woerter, ort] of ORT_WOERTER) {
+      if (woerter.some(x => heu.includes(x))) return ort;
+    }
+    return '';
   }
+
+  // Nur dort, wo dieselbe Messgroesse innen UND aussen vorkommt. Wind, Regen und
+  // Sonneneinstrahlung gibt es nur draussen -- ein "AUSSEN" darauf waere Rauschen.
+  // Der Ring der Gauge-Karte hat keinen Platz fuer einen Chip und traegt sein eigenes Bild;
+  // wer dort innen und aussen braucht, nimmt die Temperatur- oder Luftdruckkarte.
+  const ORT_TYPEN = ['temperature', 'pressure', 'humidity', 'sensor'];
 
   // --- Hat es geklappt? ---------------------------------------------------------------------------
   //
@@ -1386,6 +1418,16 @@
     card.dataset.cols = cols;
     card.dataset.rows = rows;
 
+    // Der Ort gilt fuer die ganze Karte. Das Symbol oben links wird zum Haus bzw. zur Tanne,
+    // der Chip oben rechts nennt ihn, und die Silhouette kommt am Ende hinzu (siehe
+    // ortAnbringen) -- erst dann steht innerHTML, und sie darf von keinem Zweig ueberschrieben
+    // werden.
+    const ort = ORT_TYPEN.includes(type)
+      ? ortErmitteln(settings, (settings.name && String(settings.name).trim()) || (opts.namen && opts.namen[entity_id]) || attrs.friendly_name, entity_id)
+      : '';
+    const ortSymbol = (standard) => (ort && !(settings && settings.icon)) ? ORTE[ort].symbol : symbolFuer(settings, standard);
+    const ortChip = ort ? `<span class="ort-chip">${ORTE[ort].text}</span>` : '';
+
     if (type === 'climate') {
       const cur = attrs.current_temperature;
       const target = attrs.temperature;
@@ -1611,7 +1653,7 @@
       card.style.setProperty('--kachel-akzent', tempAkzent(isNaN(numVal) ? null : numVal, attrs.unit_of_measurement));
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.temperature)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(ICONS.temperature)}</span><span class="row-rechts">${tendenzTeil}${ortChip}</span></div>
         <div class="value">${fmt(zahlFormatieren(isNaN(numVal) ? (rawVal ?? '–') : numVal, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
     } else if (type === 'wind') {
@@ -1643,7 +1685,7 @@
       const val = state ? state.state : '–';
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.pressure)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(ICONS.pressure)}</span><span class="row-rechts">${tendenzTeil}${ortChip}</span></div>
         <div class="value">${fmt(zahlFormatieren(val, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
     } else if (type === 'radar') {
@@ -1962,112 +2004,9 @@
       const val = state ? state.state : '–';
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.humidity)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(ICONS.humidity)}</span><span class="row-rechts">${tendenzTeil}${ortChip}</span></div>
         <div class="value">${fmt(zahlFormatieren(val, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
-    } else if (type === 'alarm') {
-      const s = state ? state.state : 'disarmed';
-      const isArmed = s.startsWith('armed');
-      const darstellung = alarmDarstellung(s, settings);
-      const label = darstellung.text;
-      // Nur anbieten, was die Anlage kann. HA meldet die Faehigkeiten in supported_features:
-      // 1 = ARM_HOME, 2 = ARM_AWAY, 4 = ARM_NIGHT. Bisher standen hier drei feste Knoepfe, und
-      // "Scharf (Nacht)" wurde als Zustand angezeigt, war aber nicht schaltbar.
-      const koennen = Number(attrs.supported_features);
-      const kann = (bit) => isNaN(koennen) ? true : !!(koennen & bit);
-      // Was die Anlage KANN, heisst nicht, dass man es auf der Wand haben will. Wer nie
-      // "Nacht" benutzt, hat sonst dauerhaft einen Knopf, den er nur versehentlich trifft.
-      // Ohne Einstellung bleibt alles sichtbar -- bestehende Karten aendern sich nicht.
-      const gewaehlt = Array.isArray(settings.alarmModi) ? settings.alarmModi : null;
-      const gewuenscht = (id) => !gewaehlt || gewaehlt.includes(id);
-      // Auch die Knopfbeschriftungen sind frei: Wer "Zuhause" anders nennt, nennt den Knopf
-      // dazu anders.
-      const knopfText = (id, vorgabe) => {
-        const eigen = (settings.alarmKnopfTexte || {})[id];
-        return (eigen && String(eigen).trim()) || vorgabe;
-      };
-      const knoepfe = [
-        { id: 'home', bit: 1, text: knopfText('home', 'Zuhause'), dienst: 'alarm_arm_home' },
-        { id: 'away', bit: 2, text: knopfText('away', 'Abwesend'), dienst: 'alarm_arm_away' },
-        { id: 'night', bit: 4, text: knopfText('night', 'Nacht'), dienst: 'alarm_arm_night' }
-      ].filter(b => kann(b.bit) && gewuenscht(b.id));
-      const zeigeUnscharf = gewuenscht('disarm');
-      const unscharfText = knopfText('disarm', 'Unscharf');
-
-      // Verlangt die Anlage einen Code, hat der Druck bisher schlicht nichts bewirkt -- ohne
-      // Fehlermeldung. Jetzt klappt die Karte eine Eingabe auf.
-      const codeFormat = attrs.code_format || '';
-      const codeZumScharfschalten = !!attrs.code_arm_required && !!codeFormat;
-      const codeZumEntschaerfen = !!codeFormat;
-
-      const knopfHtml = knoepfe.map(b =>
-        `<button data-act="${b.id}" ${dis} class="${s === 'armed_' + b.id ? 'ist-zustand' : ''}">${b.text}</button>`).join('') +
-        (zeigeUnscharf ? `<button data-act="disarm" ${dis} class="${s === 'disarmed' ? 'ist-zustand' : ''}">${esc(unscharfText)}</button>` : '');
-
-      // Der Zustand ist bei einer Alarmanlage die Hauptaussage, nicht der Name der Karte.
-      // Er stand bisher klein unter dem Namen; aus zwei Metern Abstand las man ihn nicht.
-      // Jetzt steht er gross an der Stelle, an der auf jeder anderen Karte der Wert steht.
-      // Die Farbe folgt der EINSTELLUNG, nicht der Zustandskennung. Wessen "armed_home" der
-      // normale Zustand mit Leuten im Haus ist, stellt dort "ruhig" ein und bekommt kein
-      // gruenes "scharf" mehr angezeigt, das nicht stimmt.
-      const zustandsKlasse = {
-        ruhig: 'alarm-unscharf', scharf: 'alarm-scharf',
-        achtung: 'alarm-wartet', alarm: 'alarm-ausgeloest'
-      }[darstellung.ton] || 'alarm-unscharf';
-
-      card.classList.add(zustandsKlasse);
-      card.innerHTML = `
-        <div class="row"><span class="icon">${isArmed ? ICONS.shield : ICONS.shieldOff}</span></div>
-        <div class="value alarm-zustand">${esc(label)}</div>
-        <div class="name">${name}</div>
-        <div class="controls alarm-buttons" style="display:flex; gap:0.5vh; margin-top:0.4vh; flex-wrap:wrap;">${knopfHtml}</div>
-        <div class="alarm-code" style="display:none;">
-          <input type="${codeFormat === 'number' ? 'tel' : 'password'}" inputmode="${codeFormat === 'number' ? 'numeric' : 'text'}"
-                 class="alarm-code-input" placeholder="Code" autocomplete="off">
-          <button class="alarm-code-ok">OK</button>
-          <button class="alarm-code-ab">×</button>
-        </div>`;
-
-      if (!editable && cb.onAlarmControl) {
-        const feld = card.querySelector('.alarm-code');
-        const eingabe = card.querySelector('.alarm-code-input');
-        const knopfleiste = card.querySelector('.alarm-buttons');
-        let offenerDienst = null;
-
-        const schliessen = () => {
-          offenerDienst = null;
-          feld.style.display = 'none';
-          knopfleiste.style.display = '';
-          eingabe.value = '';
-        };
-        const ausloesen = (dienst, code) => { schliessen(); cb.onAlarmControl(entity_id, dienst, code); };
-
-        const act = (n, dienst, brauchtCode) => {
-          const el = card.querySelector(`[data-act="${n}"]`);
-          if (!el) return;
-          el.addEventListener('click', e => {
-            e.stopPropagation();
-            if (!brauchtCode) return ausloesen(dienst);
-            offenerDienst = dienst;
-            knopfleiste.style.display = 'none';
-            feld.style.display = 'flex';
-            eingabe.focus();
-          });
-        };
-        knoepfe.forEach(b => act(b.id, b.dienst, codeZumScharfschalten));
-        act('disarm', 'alarm_disarm', codeZumEntschaerfen);
-
-        card.querySelector('.alarm-code-ok').addEventListener('click', e => {
-          e.stopPropagation();
-          if (offenerDienst) ausloesen(offenerDienst, eingabe.value);
-        });
-        card.querySelector('.alarm-code-ab').addEventListener('click', e => { e.stopPropagation(); schliessen(); });
-        eingabe.addEventListener('click', e => e.stopPropagation());
-        eingabe.addEventListener('keydown', e => {
-          if (e.key === 'Enter' && offenerDienst) ausloesen(offenerDienst, eingabe.value);
-          if (e.key === 'Escape') schliessen();
-        });
-      }
     } else if (type === 'waste') {
       // Dieselbe Anatomie wie jede andere Karte: Symbolzeile, Wert, Name als Bildunterschrift.
       // Vorher war der KARTENNAME die groesste Schrift und die naechste Abfuhr klein darunter --
@@ -2222,9 +2161,20 @@
       const unit = (settings.suffix !== undefined && settings.suffix !== '') ? settings.suffix : attrs.unit_of_measurement;
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, mdiSymbol(attrs.icon) || ICONS[domain] || ICONS.sensor)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(mdiSymbol(attrs.icon) || ICONS[domain] || ICONS.sensor)}</span><span class="row-rechts">${tendenzTeil}${ortChip}</span></div>
         <div class="value">${fmt(zahlFormatieren(val, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
+    }
+
+    // Die Silhouette als letztes Kind VOR allen anderen: Sie liegt unter Zahl und Schrift
+    // (z-index in dashboard.css) und darf von keinem Zweig oben ueberschrieben werden.
+    if (ort) {
+      card.classList.add('ort-' + ort);
+      const umriss = document.createElement('div');
+      umriss.className = 'ort-silhouette';
+      umriss.setAttribute('aria-hidden', 'true');
+      umriss.innerHTML = ORTE[ort].silhouette;
+      card.insertBefore(umriss, card.firstChild);
     }
 
     if (editable) {
@@ -2515,15 +2465,15 @@
   global.DashboardRender = {
     ICONS, DOMAIN_LABEL, CARD_TYPES, TOGGLE_DOMAINS, PRESS_DOMAINS,
     defaultCardType, allowedCardTypes, defaultSize, buildCard,
-    sizeToSpan, minSpanFor, clampSpan, resolveSpan, abschiedSpanne, ABSCHIED_SPALTEN, ABSCHIED_ZEILEN, thresholdColor,
+    sizeToSpan, minSpanFor, clampSpan, resolveSpan, schonerSpanne, SCHONER_SPALTEN, SCHONER_ZEILEN, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
-    mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen,
+    mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen, ortErmitteln, ORT_TYPEN,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, wasteDatum, wasteTage, wasteBald, wasteTagesschluessel, wasteDateLabel, zahlFormatieren, symbolFuer, symbolNamen,
     quickTileAktion, quickTileAktiv, quickTileText,
     kachelRegler, miniVerlaufSvg, tendenz, rueckmeldung,
-    ALARM_ZUSTAENDE, ALARM_TOENE, alarmDarstellung, symbolErraten,
+    symbolErraten,
     HVAC_SYMBOL, hvacSymbol, hvacReihenfolge, animationsPhase, hvacPhasenStil,
     ankuendigungsText, ankuendigungKurz, NICHTS_ANZUZEIGEN,
     fotoBildId, fotoVersionen, fotoUrls,

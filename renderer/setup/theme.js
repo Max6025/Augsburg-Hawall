@@ -64,104 +64,22 @@ async function load() {
   $('nightEnd').value = configRes.nightEnd || '06:30';
   $('nightForceOn').checked = !!configRes.nightModeForceOn;
 
-  // Kalendersteuerung
-  $('calEnabled').checked = !!configRes.calendarEnabled;
-  $('calKeywords').value = configRes.calendarKeywords || '';
-  $('calLead').value = configRes.calendarLeadMinutes || 0;
-  $('calTrail').value = configRes.calendarTrailMinutes || 0;
-
-  const calSelect = $('calEntity');
-  calSelect.innerHTML = '<option value="">– kein Kalender ausgewählt –</option>';
-  const calRes = await fetch('/api/entities?domain=calendar').then(r => r.json()).catch(() => ({ ok: false }));
-  if (calRes.ok && calRes.entities.length) {
-    calRes.entities.forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.entity_id;
-      opt.textContent = `${e.name} (${e.entity_id})`;
-      if (e.entity_id === configRes.calendarEntity) opt.selected = true;
-      calSelect.appendChild(opt);
-    });
-  } else {
-    calSelect.innerHTML = '<option value="">– keine Kalender in Home Assistant gefunden –</option>';
-  }
-
-  // Auf Ankunft warten
-  $('ankunftEnabled').checked = !!configRes.ankunftEnabled;
-  $('ankunftEntity').value = configRes.ankunftEntity || '';
-  $('ankunftZuhause').value = configRes.ankunftZuhause || 'disarmed, armed_home';
-  $('ankunftNachMinuten').value = configRes.ankunftNachMinuten === undefined ? 60 : configRes.ankunftNachMinuten;
-  $('abwesendEnabled').checked = !!configRes.abwesendEnabled;
-  $('abwesendHelligkeit').value = configRes.abwesendHelligkeit === undefined ? 20 : configRes.abwesendHelligkeit;
-  $('abwesendSekunden').value = configRes.abwesendSekunden === undefined ? 20 : configRes.abwesendSekunden;
-  ankunftEntitaetenLaden();
-
-  // Ankunftsschirm
-  $('ruheEnabled').checked = !!configRes.ruheEnabled;
-  $('ruheMinuten').value = configRes.ruheMinuten === undefined ? 3 : configRes.ruheMinuten;
-  $('ruheHelligkeit').value = configRes.ruheHelligkeit === undefined ? 12 : configRes.ruheHelligkeit;
-  $('ruheText').value = configRes.ruheText || '';
-
-  $('abschiedEnabled').checked = !!configRes.abschiedEnabled;
-  // Der Testmodus wird ueber eine eigene Route gespeichert und faehrt beim Neustart nicht von
-  // allein herunter -- der Schalter muss also zeigen, was wirklich laeuft.
-  if ($('abschiedTestmodus')) $('abschiedTestmodus').checked = !!configRes.abschiedTestmodus;
-  $('abschiedHeading').value = configRes.abschiedHeading || '';
-  $('abschiedText').value = configRes.abschiedText || '';
-  $('abschiedAbStunde').value = configRes.abschiedAbStunde === undefined ? 0 : configRes.abschiedAbStunde;
-  abschiedDashboardsLaden(configRes.abschiedDashboard || '');
-
-  $('welcomeEnabled').checked = !!configRes.welcomeEnabled;
-  $('welcomeHeading').value = configRes.welcomeHeading || '';
-  $('welcomeText').value = configRes.welcomeText || '';
-  $('welcomeCaption').value = configRes.welcomeCaption || '';
-  $('welcomeCaption2').value = configRes.welcomeCaption2 || '';
-  $('welcomeImageSeconds').value = configRes.welcomeImageSeconds === undefined ? 8 : configRes.welcomeImageSeconds;
-  $('hintergrundBewegung').checked = configRes.hintergrundBewegung !== false;
-  $('desktopHintergrund').checked = !!configRes.desktopHintergrund;
-  $('rueckkehrSekunden').value = configRes.rueckkehrSekunden === undefined ? 90 : configRes.rueckkehrSekunden;
-  $('welcomeTestmodus').checked = !!configRes.welcomeTestmodus;
-  $('welcomeTestSekunden').value = configRes.welcomeTestSekunden || 10;
-  $('welcomeHours').value = configRes.welcomeHours === undefined ? 5 : configRes.welcomeHours;
-
-  const bildRes = await fetch('/api/entities?domain=image').then(r => r.json()).catch(() => ({ ok: false }));
-  const bildListe = (selectId, leerText, gewaehlt) => {
-    const sel = $(selectId);
-    sel.innerHTML = `<option value="">${leerText}</option>`;
-    if (!bildRes.ok || !bildRes.entities.length) {
-      sel.innerHTML = '<option value="">– keine Bild-Entitäten in Home Assistant gefunden –</option>';
-      return;
-    }
-    bildRes.entities.forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.entity_id;
-      opt.textContent = `${e.name} (${e.entity_id})`;
-      if (e.entity_id === gewaehlt) opt.selected = true;
-      sel.appendChild(opt);
-    });
-  };
-  bildListe('welcomeImageEntity', '– kein Bild –', configRes.welcomeImageEntity);
-  bildListe('welcomeImageEntity2', '– keine Entität gewählt –', configRes.welcomeImageEntity2);
-
-  $('welcomeImage2Quelle').value = configRes.welcomeImage2Quelle || '';
-  if (configRes.welcomeImage2Version) {
-    $('welcomeImage2Preview').src = `/api/photo-card/welcome-2/background?v=${configRes.welcomeImage2Version}`;
-    $('welcomeImage2Preview').style.display = 'block';
-    $('welcomeImage2Remove').style.display = 'inline-block';
-  }
-  zweiteBildQuelleAnzeigen();
+  // Bildschirmschoner
+  $('schonerEnabled').checked = configRes.schonerEnabled !== false;
+  $('schonerMinuten').value = configRes.schonerMinuten === undefined ? 3 : configRes.schonerMinuten;
+  $('schonerHelligkeit').value = configRes.schonerHelligkeit === undefined ? 40 : configRes.schonerHelligkeit;
+  const art = configRes.schonerHintergrund === 'bild' ? 'bild' : 'wolken';
+  const radio = document.querySelector(`input[name="schonerHintergrund"][value="${art}"]`);
+  if (radio) radio.checked = true;
+  schonerBildAnzeigen(configRes.schonerBildVersion || 0);
+  hintergrundBereichAnzeigen();
+  schonerDashboardsLaden(configRes.schonerDashboard || '');
 
   $('codeState').textContent = configRes.hasSetupCode
     ? 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.'
     : 'Es ist noch KEIN Zugangscode gesetzt – diese Seite ist derzeit für jeden im Netzwerk offen.';
 
-  refreshCalStatus();
-}
-
-// Zeigt je nach gewaehlter Quelle das Entitaets-Auswahlfeld oder den Hochladen-Bereich.
-function zweiteBildQuelleAnzeigen() {
-  const q = $('welcomeImage2Quelle').value;
-  $('welcomeImage2Entity').style.display = q === 'entity' ? '' : 'none';
-  $('welcomeImage2Upload').style.display = q === 'upload' ? '' : 'none';
+  refreshPanelStatus();
 }
 
 // Verkleinert ein gewaehltes Bild im Browser, bevor es hochgeladen wird -- ein Handyfoto mit
@@ -195,111 +113,95 @@ function fmt(iso) {
 }
 
 const REASON_TEXT = {
-  'nicht-konfiguriert': 'Kalendersteuerung ist aus oder unvollständig – der Bildschirm bleibt an.',
   'karenzzeit': 'Karenzzeit nach dem Start – es wird vorerst nicht abgeschaltet.',
   'pause': 'Pausiert – der Bildschirm bleibt an.',
-  'nachtsperre': 'Nachtsperre aktiv – der Bildschirm bleibt aus.',
-  'anzeigefenster': 'Ein passender Termin läuft – der Bildschirm ist an.',
-  'kein-treffer': 'Kein passender Termin – der Bildschirm ist aus.'
+  'nachtsperre': 'Nachtsperre aktiv – der Bildschirm ist wirklich aus (Hintergrundbeleuchtung aus). Berühren weckt ihn für zwei Minuten.',
+  'dauerbetrieb': 'Dauerbetrieb – der Bildschirm ist an. Was darauf zu sehen ist, entscheidet der Bildschirmschoner.'
 };
 
-async function refreshCalStatus() {
-  const el = $('calStatus');
-  const res = await fetch('/api/calendar/state').then(r => r.json()).catch(() => ({ ok: false }));
+async function refreshPanelStatus() {
+  const el = $('panelStatus');
+  if (!el) return;
+  const res = await fetch('/api/panel/state').then(r => r.json()).catch(() => ({ ok: false }));
   if (!res.ok || !res.state) { el.textContent = 'Status nicht verfügbar.'; return; }
   const s = res.state;
   const lines = [];
   lines.push(`<strong>Bildschirm ist ${s.panelOn ? 'an' : 'aus'}.</strong> ${REASON_TEXT[s.reason] || ''}`);
-  if (s.activeWindow) {
-    lines.push(`Laufender Treffer: „${s.activeWindow.title}“ bis ${fmt(s.activeWindow.end)}`);
-  }
-  if (s.nextWindow) {
-    lines.push(`Nächster Treffer: „${s.nextWindow.title}“ ab ${fmt(s.nextWindow.start)}`);
-  } else if (s.configured) {
-    lines.push('Kein weiterer Treffer in den nächsten 30 Tagen.');
-  }
+  if (s.nightModeEnabled) lines.push(`Nachtsperre: ${s.nightStart} bis ${s.nightEnd}.`);
+  else lines.push('Nachtsperre ist aus – das Panel läuft durch.');
   if (s.pausedUntil) lines.push(`Pause läuft bis ${fmt(new Date(s.pausedUntil).toISOString())}.`);
-  if (s.error) lines.push(`<span style="color:#f28b82">Home Assistant nicht erreichbar: ${s.error.message}</span>`);
-  else if (s.lastPollOk) lines.push(`Zuletzt erfolgreich abgerufen: ${fmt(s.lastPollOk)}`);
   el.innerHTML = lines.join('<br>');
 }
 
-$('welcomeImage2Quelle').addEventListener('change', zweiteBildQuelleAnzeigen);
-$('welcomeImage2Btn').addEventListener('click', () => $('welcomeImage2File').click());
-$('welcomeImage2File').addEventListener('change', async () => {
-  const datei = $('welcomeImage2File').files[0];
-  const ergebnis = $('welcomeImage2Result');
+// --- Das eigene Hintergrundbild des Schoners ---------------------------------------------------
+//
+// Es liegt auf dem GERAET, nicht in Home Assistant -- ueber dieselbe Route wie die Bilder der
+// Foto-Karten, unter der Kennung "schoner". Es reist deshalb bei einem Dashboard-Export nicht
+// mit; das ist gewollt, ein Export darf nichts enthalten, was nicht mitreist.
+
+function hintergrundBereichAnzeigen() {
+  const gewaehlt = document.querySelector('input[name="schonerHintergrund"]:checked');
+  const bild = gewaehlt && gewaehlt.value === 'bild';
+  $('schonerBildBereich').style.display = bild ? '' : 'none';
+}
+
+function schonerBildAnzeigen(version) {
+  const bild = $('schonerBildVorschau');
+  const weg = $('schonerBildWeg');
+  if (version) {
+    bild.src = `/api/photo-card/schoner/background?v=${version}`;
+    bild.style.display = 'block';
+    weg.style.display = 'inline-block';
+  } else {
+    bild.removeAttribute('src');
+    bild.style.display = 'none';
+    weg.style.display = 'none';
+  }
+}
+
+document.querySelectorAll('input[name="schonerHintergrund"]').forEach(el =>
+  el.addEventListener('change', hintergrundBereichAnzeigen));
+
+$('schonerBildDatei').addEventListener('change', async () => {
+  const datei = $('schonerBildDatei').files[0];
   if (!datei) return;
+  const ergebnis = $('saveAllResult');
   ergebnis.className = 'result';
-  ergebnis.textContent = 'Wird hochgeladen …';
+  ergebnis.textContent = 'Bild wird hochgeladen …';
   try {
-    const dataUrl = await bildVerkleinern(datei, 1600);
-    const r = await fetch('/api/photo-card/welcome-2/background', {
+    // Auf 1920 statt 1600: Dies ist eine vollflaechige Wand, kein Kartenausschnitt.
+    const dataUrl = await bildVerkleinern(datei, 1920);
+    const r = await fetch('/api/photo-card/schoner/background', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dataUrl })
     });
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'Fehler beim Hochladen');
-    const v = Date.now();
-    $('welcomeImage2Preview').src = `/api/photo-card/welcome-2/background?v=${v}`;
-    $('welcomeImage2Preview').style.display = 'block';
-    $('welcomeImage2Remove').style.display = 'inline-block';
+    schonerBildAnzeigen(Date.now());
     ergebnis.className = 'result ok';
-    ergebnis.textContent = 'Hochgeladen. Nicht vergessen: unten speichern.';
+    ergebnis.textContent = 'Bild hochgeladen. Nicht vergessen: unten speichern, damit es auch benutzt wird.';
   } catch (e) {
     ergebnis.className = 'result err';
     ergebnis.textContent = 'Fehler: ' + e.message;
   }
-  $('welcomeImage2File').value = '';
-});
-$('welcomeImage2Remove').addEventListener('click', async () => {
-  await fetch('/api/photo-card/welcome-2/background/remove', { method: 'POST' });
-  $('welcomeImage2Preview').removeAttribute('src');
-  $('welcomeImage2Preview').style.display = 'none';
-  $('welcomeImage2Remove').style.display = 'none';
-  $('welcomeImage2Result').className = 'result';
-  $('welcomeImage2Result').textContent = 'Entfernt.';
+  $('schonerBildDatei').value = '';
 });
 
-
-$('showWelcomeBtn').addEventListener('click', async () => {
-  const resultEl = $('showWelcomeResult');
-  const r = await fetch('/api/welcome/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  const data = await r.json();
-  resultEl.textContent = data.ok
-    ? `Der Ankunftsschirm erscheint gleich auf dem Display – auch ohne laufenden Termin. `
-      + `Er bleibt ${data.minuten || 10} Minuten stehen oder bis jemand ihn wegtippt.`
-    : 'Fehler: ' + data.error;
-  resultEl.className = data.ok ? 'result ok' : 'result err';
+$('schonerBildWeg').addEventListener('click', async () => {
+  await fetch('/api/photo-card/schoner/background/remove', { method: 'POST' });
+  schonerBildAnzeigen(0);
+  $('saveAllResult').className = 'result';
+  $('saveAllResult').textContent = 'Bild entfernt. Ohne Bild zeigt der Schoner wieder die Farbwolken.';
 });
 
-$('calPauseBtn').addEventListener('click', async () => {
-  await fetch('/api/calendar/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshCalStatus();
+$('panelPauseBtn').addEventListener('click', async () => {
+  await fetch('/api/panel/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  refreshPanelStatus();
 });
 
-$('calResumeBtn').addEventListener('click', async () => {
-  await fetch('/api/calendar/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshCalStatus();
-});
-
-// Vorschau gegen die AKTUELLEN Eingabefelder, nicht gegen das Gespeicherte -- so laesst sich eine
-// Keyword-Aenderung pruefen, bevor man sie festschreibt.
-$('calPreviewBtn').addEventListener('click', async () => {
-  const el = $('calPreview');
-  el.className = 'result';
-  el.textContent = 'Suche Treffer …';
-  const q = new URLSearchParams({
-    entity: $('calEntity').value,
-    keywords: $('calKeywords').value,
-    lead: String(parseInt($('calLead').value, 10) || 0),
-    trail: String(parseInt($('calTrail').value, 10) || 0)
-  });
-  const res = await fetch('/api/calendar/preview?' + q).then(r => r.json()).catch(() => ({ ok: false, error: 'Netzwerkfehler' }));
-  if (!res.ok) { el.className = 'result err'; el.textContent = 'Fehler: ' + res.error; return; }
-  if (!res.windows.length) { el.className = 'result'; el.textContent = 'Keine Treffer in den nächsten 30 Tagen.'; return; }
-  el.className = 'result ok';
-  el.innerHTML = res.windows.map(w => `„${w.title}“: ${fmt(w.start)} – ${fmt(w.end)}`).join('<br>');
+$('panelResumeBtn').addEventListener('click', async () => {
+  await fetch('/api/panel/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  refreshPanelStatus();
 });
 
 // --- Speichern -------------------------------------------------------------------------------
@@ -331,40 +233,11 @@ function alleFelder() {
     nightEnd: $('nightEnd').value || '06:30',
     nightModeForceOn: $('nightForceOn').checked,
 
-    calendarEnabled: $('calEnabled').checked,
-    calendarEntity: $('calEntity').value,
-    calendarKeywords: $('calKeywords').value,
-    calendarLeadMinutes: zahl('calLead', 0),
-    calendarTrailMinutes: zahl('calTrail', 0),
-
-    ruheEnabled: $('ruheEnabled').checked,
-    ruheMinuten: zahl('ruheMinuten', 3),
-    ruheHelligkeit: zahl('ruheHelligkeit', 12),
-    ruheText: $('ruheText').value,
-    abschiedEnabled: $('abschiedEnabled').checked,
-    abschiedHeading: $('abschiedHeading').value,
-    abschiedText: $('abschiedText').value,
-    abschiedDashboard: $('abschiedDashboard').value,
-    abschiedAbStunde: zahl('abschiedAbStunde', 0),
-    welcomeEnabled: $('welcomeEnabled').checked,
-    welcomeHeading: $('welcomeHeading').value,
-    welcomeText: $('welcomeText').value,
-    welcomeImageEntity: $('welcomeImageEntity').value,
-    welcomeCaption: $('welcomeCaption').value,
-    welcomeCaption2: $('welcomeCaption2').value,
-    welcomeHours: zahl('welcomeHours', 0),
-    welcomeImage2Quelle: $('welcomeImage2Quelle').value,
-    welcomeImageEntity2: $('welcomeImage2Quelle').value === 'entity' ? $('welcomeImageEntity2').value : '',
-    welcomeImageSeconds: zahl('welcomeImageSeconds', 8),
-    welcomeTestmodus: $('welcomeTestmodus').checked,
-    welcomeTestSekunden: zahl('welcomeTestSekunden', 10),
-    ankunftEnabled: $('ankunftEnabled').checked,
-    ankunftEntity: $('ankunftEntity').value.trim(),
-    ankunftZuhause: $('ankunftZuhause').value.trim(),
-    ankunftNachMinuten: zahl('ankunftNachMinuten', 60),
-    abwesendEnabled: $('abwesendEnabled').checked,
-    abwesendHelligkeit: zahl('abwesendHelligkeit', 20),
-    abwesendSekunden: zahl('abwesendSekunden', 20)
+    schonerEnabled: $('schonerEnabled').checked,
+    schonerMinuten: zahl('schonerMinuten', 3),
+    schonerHelligkeit: zahl('schonerHelligkeit', 40),
+    schonerDashboard: $('schonerDashboard').value,
+    schonerHintergrund: (document.querySelector('input[name="schonerHintergrund"]:checked') || {}).value || 'wolken'
   };
 
   // Der Zugangscode NUR, wenn wirklich etwas eingegeben wurde. Ein leeres Feld heisst
@@ -400,7 +273,7 @@ async function speichereAlles() {
         $('setupCode').value = '';
         $('codeState').textContent = 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.';
       }
-      setTimeout(refreshCalStatus, 1200); // dem sofortigen Neuabruf kurz Zeit geben
+      setTimeout(refreshPanelStatus, 1200); // dem sofortigen Neuabruf kurz Zeit geben
     } else {
       el.className = 'result err';
       el.textContent = 'Fehler: ' + data.error;
@@ -415,7 +288,7 @@ async function speichereAlles() {
 $('saveAllBtn').addEventListener('click', speichereAlles);
 
 // Strg+S ist an dieser Stelle keine Spielerei: Die Seite ist lang, der Knopf steht unten,
-// und wer oben in der Kalendersteuerung tippt, sieht ihn nicht.
+// und wer oben beim Bildschirmschoner tippt, sieht ihn nicht.
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
@@ -425,50 +298,7 @@ document.addEventListener('keydown', (e) => {
 
 load();
 // Status live halten, solange die Seite offen ist
-setInterval(refreshCalStatus, 10000);
-
-// --- Auf Ankunft warten: Auswahlliste und Zustandsanzeige --------------------------------------
-//
-// Die Zustandsnamen einer Alarmanlage gehoeren der Anlage, nicht dieser App: armed_home heisst
-// nicht ueberall dasselbe, und manche Integrationen melden ganz eigene Namen. Wer sie raten muss,
-// traegt frueher oder spaeter einen ein, den es nicht gibt -- und merkt es erst, wenn die Wand
-// einen ganzen Termin lang dunkel bleibt. Deshalb steht hier, was die gewaehlte Entitaet GERADE
-// meldet, und ob dieser Zustand als "zu Hause" zaehlt.
-let ankunftEntitaeten = [];
-
-async function ankunftEntitaetenLaden() {
-  const liste = document.getElementById('ankunftListe');
-  const res = await fetch('/api/entities?domain=alarm_control_panel').then(r => r.json()).catch(() => ({ ok: false }));
-  ankunftEntitaeten = (res.ok && res.entities) ? res.entities : [];
-  liste.innerHTML = ankunftEntitaeten
-    .map(e => `<option value="${e.entity_id}">${e.name} — ${e.zustand}</option>`).join('');
-  ankunftZustandZeigen();
-}
-
-function ankunftZustandZeigen() {
-  const feld = document.getElementById('ankunftZustandAnzeige');
-  const id = document.getElementById('ankunftEntity').value.trim();
-  if (!id) {
-    feld.textContent = 'Ohne Entität wird nie gewartet – der Bildschirm geht wie bisher zu Terminbeginn an.';
-    return;
-  }
-  const treffer = ankunftEntitaeten.find(e => e.entity_id === id);
-  if (!treffer) {
-    feld.textContent = 'Diese Entität ist keine Alarmanlage in Home Assistant. Das kann richtig sein '
-      + '(z. B. ein Schalter), nur lässt sich ihr Zustand hier nicht anzeigen.';
-    return;
-  }
-  const zuhause = document.getElementById('ankunftZuhause').value.trim() || 'disarmed, armed_home';
-  const liste = zuhause.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-  const passt = liste.includes(String(treffer.zustand).toLowerCase());
-  feld.textContent = `Steht gerade auf „${treffer.zustand}“ – das zählt hier als `
-    + (passt ? 'ZU HAUSE (Bildschirm ginge an).' : 'abwesend (es würde gewartet).');
-}
-
-['ankunftEntity', 'ankunftZuhause'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', ankunftZustandZeigen);
-});
+setInterval(refreshPanelStatus, 10000);
 
 // --- Warnton auf der Wand ausprobieren --------------------------------------------------------
 //
@@ -520,57 +350,23 @@ if (tonTestBtn) {
   });
 }
 
-// --- Die Unterdashboards fuer den Abschiedsschirm ----------------------------------------------
+// --- Die Unterdashboards fuer den Bildschirmschoner --------------------------------------------
 //
-// Der Schirm zeigt die Karten eines Unterdashboards. Ein zweiter Karten-Editor waere derselbe
+// Der Schoner zeigt die Karten eines Unterdashboards. Ein zweiter Karten-Editor waere derselbe
 // Editor noch einmal -- und der zweite waere der, den niemand pflegt.
-async function abschiedDashboardsLaden(gewaehlt) {
-  const feld = document.getElementById('abschiedDashboard');
+async function schonerDashboardsLaden(gewaehlt) {
+  const feld = document.getElementById('schonerDashboard');
   if (!feld) return;
   let liste = [];
   try {
     const d = await fetch('/api/dashboards').then(r => r.json());
     liste = (d && d.ok && d.dashboards) ? d.dashboards : [];
-  } catch (e) { /* dann bleibt nur "keine Karten" */ }
-  feld.innerHTML = '<option value="">\u2013 keine Karten \u2013</option>'
+  } catch (e) { /* dann bleibt nur "nichts anzeigen" */ }
+  feld.innerHTML = '<option value="">\u2013 nichts anzeigen \u2013</option>'
     + liste.map(x => '<option value="' + x.id + '">' + x.name + '</option>').join('');
   feld.value = gewaehlt || '';
   if (!liste.length) {
     feld.insertAdjacentHTML('beforeend',
       '<option value="" disabled>\u2013 noch kein Unterdashboard angelegt \u2013</option>');
   }
-}
-
-// --- Abschiedsschirm dauerhaft zum Testen ------------------------------------------------------
-//
-// Eigene Route statt eines Feldes im grossen Speichern-Knopf: Der Schalter soll sofort wirken,
-// und /api/config wuerde die ganze Anzeige neu laden -- beim Ausschalten wuerde der Neuaufbau
-// gerade das verdecken, was man pruefen will.
-const abschiedTestmodus = document.getElementById('abschiedTestmodus');
-if (abschiedTestmodus) {
-  abschiedTestmodus.addEventListener('change', async () => {
-    const ziel = document.getElementById('abschiedTestmodusResult');
-    const an = abschiedTestmodus.checked;
-    ziel.className = 'result';
-    ziel.textContent = 'Wird übernommen …';
-    try {
-      const d = await fetch('/api/abschied/testmodus', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ an })
-      }).then(r => r.json());
-      ziel.className = d.ok ? 'result ok' : 'result err';
-      ziel.textContent = d.ok
-        ? (d.an
-          ? 'Der Abschiedsschirm steht jetzt dauerhaft auf dem Display – spätestens nach einer '
-            + 'halben Minute. Wegtippen geht nicht; zum Beenden diesen Schalter wieder ausschalten.'
-          : 'Testmodus aus. Das Display geht innerhalb einer halben Minute zurück in den Normalbetrieb.')
-        : 'Fehler: ' + d.error;
-      // Der Schalter zeigt, was der Server wirklich gespeichert hat -- nicht, was angeklickt wurde.
-      if (d.ok) abschiedTestmodus.checked = !!d.an;
-    } catch (e) {
-      ziel.className = 'result err';
-      ziel.textContent = 'Fehler: ' + e.message;
-      abschiedTestmodus.checked = !an;
-    }
-  });
 }

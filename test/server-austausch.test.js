@@ -105,7 +105,7 @@ test('Der Import-Pfad kollidiert nicht mit der Dashboard-Kennung', async () => {
   // die Route wieder von /api/dashboards/:id verschluckt worden.
   const r = await fetch(U('/api/dashboard-import'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ datei: { format: 'italien-wall-display/dashboard', version: 1, name: 'X', karten: [] } })
+    body: JSON.stringify({ datei: { format: 'augsburg-wall-display/dashboard', version: 1, name: 'X', karten: [] } })
   });
   const text = await r.text();
   assert.ok(!text.includes('Dashboard nicht gefunden'),
@@ -115,7 +115,7 @@ test('Der Import-Pfad kollidiert nicht mit der Dashboard-Kennung', async () => {
 test('Eine kaputte Datei wird mit Begruendung abgelehnt', async () => {
   const r = await fetch(U('/api/dashboard-import'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ datei: { format: 'italien-wall-display/dashboard', version: 1, karten: [
+    body: JSON.stringify({ datei: { format: 'augsburg-wall-display/dashboard', version: 1, karten: [
       { entitaet: 'climate.bad', art: 'thermostat' }
     ] } })
   });
@@ -130,50 +130,3 @@ test('Ein Export eines unbekannten Dashboards meldet das sauber', async () => {
   assert.strictEqual(r.status, 404);
 });
 
-// --- Ankunftsschirm "jetzt anzeigen" ----------------------------------------------------------
-//
-// Der Knopf loeschte frueher nur den Verworfen-Zustand. Ohne laufenden Termin passierte damit
-// gar nichts -- und wer den Schirm ansehen will, hat in aller Regel keinen Termin laufen.
-
-test('"Jetzt anzeigen" setzt ein Zeitfenster, nicht nur den Verworfen-Zustand', async () => {
-  store.set('welcomeDismissedFor', '2026-01-01T00:00:00.000Z');
-  const vorher = Date.now();
-
-  const r = await fetch(U('/api/welcome/show'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
-  });
-  const d = await r.json();
-  assert.strictEqual(d.ok, true);
-  assert.ok(d.minuten > 0, 'die Dauer gehoert in die Antwort, damit die Oberflaeche sie nennen kann');
-
-  assert.strictEqual(store.get('welcomeDismissedFor'), undefined, 'Verworfen-Zustand nicht geloescht');
-  const bis = store.get('welcomeErzwungenBis');
-  assert.ok(bis > vorher, 'kein Zeitfenster gesetzt -- der Schirm erschiene wieder nicht');
-});
-
-test('Das Zeitfenster steht auch in der Konfiguration', async () => {
-  // Sonst erfaehrt das Dashboard nie davon.
-  await fetch(U('/api/welcome/show'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  const cfg = await (await fetch(U('/api/config'))).json();
-  assert.ok(cfg.welcomeErzwungenBis > Date.now(), JSON.stringify(cfg.welcomeErzwungenBis));
-});
-
-test('Wegtippen beendet das erzwungene Anzeigen', async () => {
-  await fetch(U('/api/welcome/show'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  const r = await fetch(U('/api/welcome/dismiss'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ windowStart: '' })   // ohne Termin gibt es keinen Fensterbeginn
-  });
-  assert.strictEqual(r.status, 200, 'ein leerer Fensterbeginn darf nicht abgelehnt werden');
-  assert.strictEqual((await r.json()).ok, true);
-  assert.strictEqual(store.get('welcomeErzwungenBis'), undefined,
-    'ohne das Loeschen kaeme der Schirm beim naechsten Konfigurationsabruf sofort zurueck');
-});
-
-test('Wegtippen bei laufendem Termin merkt sich weiterhin das Fenster', async () => {
-  await fetch(U('/api/welcome/dismiss'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ windowStart: '2026-06-03T10:00:00.000Z' })
-  });
-  assert.strictEqual(store.get('welcomeDismissedFor'), '2026-06-03T10:00:00.000Z');
-});

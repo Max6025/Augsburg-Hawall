@@ -78,41 +78,13 @@
     <span class="akku-stumm" id="akkuStumm">Antippen: 3 Min. still</span>
   </div>
 
-  <div class="night-overlay" id="nightOverlay"></div>
-
-  <!-- Fehlerseite: erscheint, wenn Home Assistant dreimal in Folge nicht erreichbar war.
-       Sie wird ausschliesslich vom Hauptprozess gesteuert und nie eingeblendet, waehrend das
-       Panel aus ist -- ein Netzausfall darf das Geraet nicht wecken (ADR 0003). -->
-  <div id="haErrorOverlay" style="display:none;position:fixed;inset:0;z-index:9998;
-       background:#12151a;color:#e8eaed;font-family:Segoe UI,system-ui,sans-serif;
-       flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6vw">
-    <div style="font-size:9vw;line-height:1;margin-bottom:3vh">⚠</div>
-    <div style="font-size:4.4vw;font-weight:600;margin-bottom:2vh">Home Assistant nicht erreichbar</div>
-    <div id="haErrorDetail" style="font-size:2.4vw;color:#9aa0a6;max-width:80vw;line-height:1.6"></div>
-    <div id="haErrorSince" style="font-size:2vw;color:#6b7075;margin-top:3vh"></div>
-    <div style="font-size:2vw;color:#6b7075;margin-top:1vh">
-      Die Anzeige wird automatisch fortgesetzt, sobald die Verbindung wieder steht.
-    </div>
-  </div>
-
-  <!-- Ankunftsschirm: Vollbild vor dem Dashboard zu Beginn eines Anzeigefensters.
-       Inhalt und Animation baut shared/ankunftsschirm.js selbst auf. -->
-  <div class="ankunftsschirm" id="ankunftsschirm"></div>
-  <!-- Das Gegenstueck fuer den letzten Tag. Gleiche Buehne, kuehle Farben, mit Karten.
-       Inhalt und Animation baut shared/ankunftsschirm.js selbst auf. -->
-  <div class="ankunftsschirm abschiedsschirm" id="abschiedsschirm"></div>
-  <!-- Steht dauerhaft am Rand, solange ein mehrtaegiger Termin laeuft. Nicht als Meldung,
-       die man wegtippt: Wer sie weggetippt hat, sieht am naechsten Morgen nicht mehr,
-       dass heute abgereist wird. -->
-  <div class="terminverlauf" id="terminverlauf" hidden></div>
   <!-- Der Weg zurueck zum Hauptdashboard. Erscheint NUR auf einem Unterdashboard und liegt
        oben links, gegenueber der Termin-Anzeige. -->
   <button class="zurueck-knopf" id="zurueckKnopf" hidden aria-label="Zurück zum Hauptdashboard"></button>
-  <div class="terminankuendigung" id="terminankuendigung"></div>
-  <!-- Waehrend eines Termins haelt die Steuerung das Panel durchgehend an. Wenn niemand da
-       ist, muss es deshalb nicht leuchten: ein fast schwarzer Schirm mit einer grossen
-       Aufforderung, ein Tipp bringt das Dashboard sofort zurueck. -->
-  <div class="ruheschirm" id="ruheschirm"></div>
+  <!-- Der Bildschirmschoner: der RUHEZUSTAND dieses Geraets. Er liegt, solange niemand das
+       Panel anfasst; ein Tipp holt das Dashboard, und nach einer Weile legt er sich wieder
+       hin. Buehne und Karten baut shared/bildschirmschoner.js selbst auf. -->
+  <div class="bildschirmschoner" id="bildschirmschoner"></div>
 
   <!-- Ankuendigung. Der weisse Rahmen als SVG ist entfallen: Er wurde per Animation
        gezeichnet und blieb mit `forwards` stehen -- beim Ausblenden verschwand nur der
@@ -130,11 +102,11 @@
 
 <script src="shared/dashboard-render.js"></script>
 <script src="shared/akku.js"></script>
-<script src="shared/alarm.js"></script>
-<script src="shared/ankunftsschirm.js"></script>
-<script src="shared/ruheschirm.js"></script>
+<script src="shared/markdown.js"></script>
+<script src="shared/buehne.js"></script>
+<script src="shared/bildschirmschoner.js"></script>
 <script>
-const { ICONS, defaultCardType, buildCard, resolveSpan, abschiedSpanne } = DashboardRender;
+const { ICONS, defaultCardType, buildCard, resolveSpan } = DashboardRender;
 const params = new URLSearchParams(location.search);
 
 // Laeuft diese Seite AUF dem Panel oder im Browser eines anderen Geraets?
@@ -195,14 +167,12 @@ async function loadConfig() {
   DashboardRender.applyCustomTheme(config.customTheme || DashboardRender.DEFAULT_THEME);
   // Bewegung ab Werk an -- sie ist der sichtbare Teil. Wem es zu unruhig ist, schaltet sie ab.
   document.body.classList.toggle('ohne-bewegung', config.hintergrundBewegung === false);
-  testmodusTaktAnpassen();
   rueckkehrTaktAnpassen();
   namenLaden();
   torZeitenLaden();
-  abwesenheitAnwenden();
   helligkeitAnpassen();
   await loadDashboardOrder();
-  ankunftsschirmPruefen();
+  schonerPruefen();
 }
 
 // Reihenfolge aller Dashboards (Haupt + Unterdashboards) fuers Wischen und den Punkte-Indikator.
@@ -434,9 +404,9 @@ async function ensureForecast(entityId, forecastType) {
  * Energiequellen.
  *
  * Steht hier EINMAL, weil zwei Flaechen Karten bauen -- das Dashboard und der
- * Abschiedsschirm. Der Abschiedsschirm holte anfangs nur den Verlauf; eine Muellkarte dort
- * zeigte deshalb immer "Keine Termine gefunden", obwohl im Unterdashboard alles stimmte.
- * Zwei Kopien dieser Liste laufen beim naechsten Kartentyp wieder auseinander.
+ * Bildschirmschoner. In der Vorlage holte die zweite Flaeche anfangs nur den Verlauf; eine
+ * Muellkarte dort zeigte deshalb immer "Keine Termine gefunden", obwohl im Unterdashboard
+ * alles stimmte. Zwei Kopien dieser Liste laufen beim naechsten Kartentyp wieder auseinander.
  */
 async function kartenZusatz(entry, type) {
   const zusatz = {};
@@ -696,7 +666,7 @@ async function render() {
   layout.forEach(e => {
     const st = e.settings || {};
     ['gridEntity', 'gridReturnEntity', 'solarEntity', 'batteryEntity', 'batterySocEntity',
-     'welcomeImageEntity'].forEach(f => { if (st[f]) letzteAnzeigeEntitaeten.add(st[f]); });
+    ].forEach(f => { if (st[f]) letzteAnzeigeEntitaeten.add(st[f]); });
     (st.gateButtons || []).forEach(b => { if (b.entity) letzteAnzeigeEntitaeten.add(b.entity); });
     // Der Dauer-Auf-Melder steht auf keiner eigenen Karte -- ohne diese Zeile kaeme sein
     // Umschalten erst beim naechsten Abruf an, und die Karte warnte in der Zwischenzeit.
@@ -804,11 +774,11 @@ function wirdGeradeBedient() {
     ['pointerdown', 'input', 'change', 'keydown'].forEach(ev =>
       raster.addEventListener(ev, bedienungGemerkt, { passive: true, capture: true }));
   }
-  // Fuer den Ruheschirm zaehlt JEDE Beruehrung, nicht nur eine im Kartenraster: Auch wer nur
-  // den Streifen unten antippt oder zurueckgeht, ist offensichtlich da.
+  // Fuer den Bildschirmschoner zaehlt JEDE Beruehrung, nicht nur eine im Kartenraster: Auch
+  // wer nur den Streifen unten antippt oder zurueckgeht, ist offensichtlich da.
   //
   // Ausdruecklich NICHT auf mousemove: Das Aufwecken des Panels wackelt mit dem Mauszeiger
-  // (panel.js), und das wuerde sich hier als Bedienung zurueckmelden -- der Ruheschirm kaeme
+  // (panel.js), und das wuerde sich hier als Bedienung zurueckmelden -- der Schoner laege
   // dann nie wieder.
   ['pointerdown', 'keydown'].forEach(ev =>
     document.addEventListener(ev, () => { letzteBedienung = Date.now(); },
@@ -821,16 +791,13 @@ async function refresh() {
   if (!data.ok) return;
   statesById = Object.fromEntries(data.states.map(s => [s.entity_id, s]));
   erwartungenAnwenden();
-  abwesenheitAnwenden();
   applyTheme();
   applyNotify();
-  if (!nightActive) {
-    const dashInfo = dashboardOrder.find(d => d.id === currentDashboardId);
-    if (dashInfo && dashInfo.type === 'tracker') {
-      await renderTrackerView(currentDashboardId); // aktualisiert Position/Akku/Zonen, nicht das (versteckte) Karten-Raster
-    } else {
-      await render();
-    }
+  const dashInfo = dashboardOrder.find(d => d.id === currentDashboardId);
+  if (dashInfo && dashInfo.type === 'tracker') {
+    await renderTrackerView(currentDashboardId); // aktualisiert Position/Akku/Zonen, nicht das (versteckte) Karten-Raster
+  } else {
+    await render();
   }
 }
 
@@ -925,11 +892,11 @@ function applyNotify() {
   // Begruendung, warum die Liste laenger ist als nur unknown/unavailable.
   const text = DashboardRender.ankuendigungsText(s ? s.state : '');
   const hasText = !!text;
-  // Markdown wie beim Ankunftsschirm: dieselbe Funktion, dieselbe Sicherheitsregel -- erst
+  // Markdown aus shared/markdown.js: erst
   // wird ALLES maskiert, danach werden ausschliesslich die eigenen Auszeichnungen zu Tags.
   // Aus einem Text, den jemand in Home Assistant eintippt, kann so nie HTML entstehen.
   if (hasText && text !== notifyText) {
-    $('notifyText').innerHTML = AnkunftsschirmModul.markdown(text, DashboardRender.esc);
+    $('notifyText').innerHTML = MarkdownModul.markdown(text, DashboardRender.esc);
     $('notifyKopf').textContent = config.notifyTitel || 'Ankündigung';
     $('notifyKurz').textContent = DashboardRender.ankuendigungKurz(text);
     notifyText = text;
@@ -1216,35 +1183,22 @@ function akkuMelden(prozent, laedt) {
   }).catch(() => { akkuMeldungZeit = 0; });   // beim naechsten Mal neu versuchen
 }
 
-// --- Nachtmodus: in einem konfigurierten Zeitfenster (z.B. 23:00-06:30) rein schwarzer,
-// inhaltsloser Bildschirm zum Energiesparen (kein Kartenrefresh waehrend dieser Zeit).
-// Beruehrung zeigt sofort das normale Dashboard, nach kurzer Inaktivitaet geht es automatisch
-// zurueck ins Schwarz, solange die Nachtzeit andauert. ---
-let nightActive = false;
-let nightWakeTimer = null;
-
-function parseHM(str) {
-  const parts = String(str || '').split(':').map(Number);
-  if (isNaN(parts[0])) return null;
-  return parts[0] * 60 + (parts[1] || 0);
-}
-
-function isNightTime() {
-  // In der Live-Ansicht gibt es keinen Nachtmodus: Wer sie oeffnet, will etwas sehen.
-  if (!IM_PANEL) return false;
-  // Sobald die Kalendersteuerung aktiv ist, liegt die Nachtsperre im Hauptprozess: sie schaltet
-  // das Panel wirklich ab, statt nur ein schwarzes Overlay darueberzulegen. Beides gleichzeitig
-  // laufen zu lassen wuerde sich gegenseitig ins Gehege kommen.
-  if (panelControlActive) return false;
-  if (!config || !config.nightModeEnabled) return false;
-  if (config.nightModeForceOn) return true; // Test-Schalter: ignoriert die Uhrzeit komplett
-  const start = parseHM(config.nightStart || '23:00');
-  const end = parseHM(config.nightEnd || '06:30');
-  if (start === null || end === null) return false;
-  const now = new Date();
-  const cur = now.getHours() * 60 + now.getMinutes();
-  return start > end ? (cur >= start || cur < end) : (cur >= start && cur < end);
-}
+// --- Helligkeit -------------------------------------------------------------------------------
+//
+// In der Vorlage griffen hier drei Dinge auf dieselbe Schraube: Nachtschwarz, Abwesenheit und
+// der Ruheschirm. Zwei davon sind weg.
+//
+// Das Nachtschwarz (ein schwarzes Overlay ueber einem weiter leuchtenden Panel) ist ersatzlos
+// entfallen: Die Nachtsperre im Hauptprozess schaltet das Panel WIRKLICH ab (siehe
+// control/controller.js und CONTEXT.md). Beides nebeneinander laufen zu lassen fuehrte in der
+// Vorlage zu Flackern und war dort nur deshalb ungefaehrlich, weil eines von beiden immer
+// stillgelegt war. Wer das Overlay hier wieder einbaut, hat zwei Stellen, die dasselbe tun.
+//
+// Die Abwesenheitserkennung ist mit der Alarmanlage gegangen: In einem bewohnten Haus ist
+// "niemand da" kein Zustand, auf den sich eine Anzeige einstellen muesste.
+//
+// Uebrig bleibt der Bildschirmschoner -- und der rechnet weiterhin aus dem GESAMTEN Zustand,
+// nicht aus dem letzten Ereignis.
 
 function setBrightnessSafe(pct) {
   try {
@@ -1252,118 +1206,15 @@ function setBrightnessSafe(pct) {
   } catch (e) { /* Geraet/Plattform unterstuetzt das evtl. nicht -- unkritisch, Overlay bleibt */ }
 }
 
-// --- Abwesenheit: niemand da, also niemand, der hinsieht ---------------------------------------
-//
-// Steht die Alarmanlage auf abwesend, ist das Haus leer. Ein Dashboard, das dann in voller
-// Helligkeit leuchtet und im Sekundentakt nachfragt, arbeitet fuer niemanden -- es kostet nur
-// Strom, Bildschirmlebensdauer und Anfragen an Home Assistant.
-//
-// Die Entitaet ist DIESELBE wie beim Warten auf die Ankunft (siehe shared/alarm.js): Zwei
-// Auslegungen von "zu Hause" waeren eine zu viel.
-//
-// Unbekannt heisst ausdruecklich NICHT abwesend. Ein Tippfehler in der Entitaets-ID wuerde
-// sonst den Bildschirm dauerhaft herunterdimmen, und wer davorsteht, sucht den Fehler am
-// Geraet statt in einem Textfeld.
-let abwesend = false;
-
-function abwesendPruefen() {
-  if (!config || !config.abwesendEnabled) return false;
-  const id = String(config.ankunftEntity || '').trim();
-  if (!id) return false;
-  const s = statesById[id];
-  return AlarmModul.istAbwesend(s ? s.state : null, config.ankunftZuhause);
-}
-
-/**
- * Setzt die Helligkeit aus dem GESAMTEN Zustand, nicht aus dem letzten Ereignis.
- *
- * Nacht und Abwesenheit greifen beide auf dieselbe Schraube zu. Wer sie an zwei Stellen
- * einzeln dreht, bekommt einen Bildschirm, der nach dem Ende der Nacht auf volle Helligkeit
- * springt, obwohl noch niemand zu Hause ist -- und niemand sieht, warum.
- */
 function helligkeitAnpassen() {
-  if (nightActive && $('nightOverlay').classList.contains('show')) return setBrightnessSafe(5);
-  // Der Ruheschirm dimmt mit. Ein schwarzer Schirm bei voller Hintergrundbeleuchtung ist in
-  // einem dunklen Raum immer noch eine leuchtende Flaeche -- und genau darum ging die Frage,
-  // warum der Bildschirm die ganze Zeit an ist.
-  if (ruheschirm && ruheschirm.istSichtbar()) {
-    return setBrightnessSafe(RuheschirmModul.ruheHelligkeit(config && config.ruheHelligkeit));
+  // Der Schoner dimmt mit. Eine helle Flaeche bei voller Hintergrundbeleuchtung ist in einem
+  // dunklen Raum immer noch eine Lampe -- und genau darum ging die Frage, warum der
+  // Bildschirm die ganze Zeit an ist.
+  if (schoner && schoner.istSichtbar()) {
+    return setBrightnessSafe(BildschirmschonerModul.schonerHelligkeit(config && config.schonerHelligkeit));
   }
-  if (abwesend) return setBrightnessSafe(abwesendHelligkeit());
   setBrightnessSafe(100);
 }
-
-function abwesendHelligkeit() {
-  const v = config ? Number(config.abwesendHelligkeit) : NaN;
-  return Number.isFinite(v) ? Math.max(5, Math.min(100, v)) : 20;
-}
-
-/**
- * Nach jedem Abruf: Hat sich die Anwesenheit geaendert?
- *
- * Der Rueckweg ist der wichtigere: Wer heimkommt und die Anlage entschaerft, soll ein
- * Dashboard vorfinden, das SOFORT wieder hell und aktuell ist -- nicht eins, das noch zwanzig
- * Sekunden ueber den Stand von vorhin nachdenkt.
- */
-function abwesenheitAnwenden() {
-  const jetztAbwesend = abwesendPruefen();
-  if (jetztAbwesend === abwesend) return false;
-  abwesend = jetztAbwesend;
-  helligkeitAnpassen();
-  if (!abwesend) {
-    // Zurueck zu Hause: alles auf einmal nachziehen, nicht beim naechsten Takt.
-    aufbauErzwingen = true;
-    refresh();
-  }
-  return true;
-}
-
-function showNightBlack() {
-  $('nightOverlay').classList.add('show');
-  setBrightnessSafe(5);
-}
-
-async function wakeFromNight() {
-  if (!nightActive) return;
-  $('nightOverlay').classList.remove('show');
-  helligkeitAnpassen();
-  clearTimeout(nightWakeTimer);
-  // render() war waehrend der Nacht pausiert -- kurz "Tag" simulieren, damit refresh()
-  // wirklich das echte, aktuelle Dashboard zeichnet statt der letzten alten Anzeige.
-  nightActive = false;
-  await refresh();
-  nightActive = true;
-  nightWakeTimer = setTimeout(showNightBlack, 10000); // 10s beruehrt -> danach wieder schwarz
-}
-
-function enterNightMode() {
-  if (nightActive) return;
-  nightActive = true;
-  showNightBlack();
-}
-
-function leaveNightMode() {
-  if (!nightActive) return;
-  nightActive = false;
-  clearTimeout(nightWakeTimer);
-  $('nightOverlay').classList.remove('show');
-  helligkeitAnpassen();
-  refresh(); // Refresh war waehrend der Nacht pausiert -- sofort aktuell holen
-}
-
-function checkNightMode() {
-  const night = isNightTime();
-  if (night && !nightActive) enterNightMode();
-  else if (!night && nightActive) leaveNightMode();
-}
-
-function onActivity() {
-  if (nightActive) wakeFromNight();
-}
-
-['pointerdown', 'pointermove', 'touchstart', 'mousedown', 'keydown', 'wheel'].forEach(evt => {
-  document.addEventListener(evt, onActivity, { passive: true });
-});
 
 /**
  * Schickt einen Dienstaufruf an Home Assistant. Liefert true, wenn er angekommen ist.
@@ -1420,65 +1271,113 @@ window.addEventListener('resize', () => {
   if (notifyVisible) notifyGeometrie($('notifyOverlay').classList.contains('leiste'));
 });
 
-// --- Kalendersteuerung: Anzeigeseite der im Hauptprozess laufenden Logik --------------------
+// --- Panelsteuerung: Anzeigeseite der im Hauptprozess laufenden Logik -----------------------
 //
 // Der Renderer entscheidet hier nichts. Er zeigt nur, was der Controller meldet, und bietet
 // einen von drei Wegen in die Pause an.
 
-let panelControlActive = false;
-
-// --- Ankunftsschirm --------------------------------------------------------------------------
-let ankunftsschirm = null;
-let abschiedsschirm = null;
-let ruheschirm = null;
-// Beim Start gilt der Moment des Ladens als Bedienung: Nach einem Update soll das Dashboard
-// erst einmal dastehen, statt sich sofort hinzulegen -- sonst sieht ein frisch installiertes
-// Update aus wie ein schwarzer Bildschirm.
-let letzteBedienung = Date.now();
-let abschiedKartenStand = '';   // woraus die Karten zuletzt gebaut wurden
-let terminankuendigung = null;
 let letzterSteuerungszustand = null;
-let angekuendigtesFenster = null;   // Beginn des Fensters, das bereits angekuendigt wurde
-let ersterZustand = true;           // der allererste Zustand kuendigt nichts an
 
-// --- Ruheschirm: warum leuchtet die Wand den ganzen Tag? ---------------------------------------
+// --- Bildschirmschoner: der Ruhezustand ------------------------------------------------------
 //
-// Waehrend eines Termins haelt die Steuerung das Panel durchgehend an, damit jemand, der
-// vorbeigeht, sein Dashboard sieht. Die meiste Zeit geht aber niemand vorbei.
-//
-// Der Schirm entscheidet NICHTS ueber das Panel -- das bleibt allein Sache von decide().
-// Hier wird nur anders angezeigt und dunkler gestellt.
-function ruhePruefen() {
-  if (!ruheschirm || !config) return;
-  const zustand = letzterSteuerungszustand;
-  const ruhen = RuheschirmModul.sollRuhen({
-    aktiviert: !!config.ruheEnabled,
-    imTermin: !!(zustand && zustand.activeWindow),
-    schirmSichtbar: !!((ankunftsschirm && ankunftsschirm.istSichtbar())
-      || (abschiedsschirm && abschiedsschirm.istSichtbar())),
-    nacht: !!(nightActive && $('nightOverlay').classList.contains('show')),
+// Siehe shared/bildschirmschoner.js -- dort steht, warum der Schoner der Normalfall ist und
+// das Dashboard die Ausnahme.
+let schoner = null;
+
+// Beim Start gilt der Moment des Ladens NICHT als Bedienung: Das Geraet soll nach einem
+// Neustart in den Ruhezustand kommen, nicht stundenlang ein Dashboard zeigen, das niemand
+// angefordert hat. Null heisst fuer sollSchonen() ausdruecklich "schonen".
+let letzteBedienung = 0;
+let schonerKartenStand = '';   // woraus die Karten zuletzt gebaut wurden
+let schonerLayout = null;
+
+function schonerPruefen() {
+  if (!schoner || !config) return;
+  const schonen = BildschirmschonerModul.sollSchonen({
+    aktiviert: config.schonerEnabled !== false,
     letzteBedienung,
-    minuten: config.ruheMinuten,
+    minuten: config.schonerMinuten,
     jetzt: new Date()
   });
-  if (ruhen === ruheschirm.istSichtbar()) return;
+  if (schonen === schoner.istSichtbar()) return;
 
-  if (ruhen) {
-    ruheschirm.textSetzen(config.ruheText);
-    ruheschirm.zeigen();
+  if (schonen) {
+    schonerHintergrundAnwenden();
+    schonerKartenBauen();
+    schoner.zeigen();
   } else {
-    ruheschirm.verbergen();
+    schoner.verbergen();
   }
   // Erst umschalten, dann rechnen: helligkeitAnpassen() liest den GESAMTEN Zustand, nicht das
-  // letzte Ereignis -- sonst springt die Helligkeit, sobald Nacht und Ruhe zusammentreffen.
+  // letzte Ereignis.
   helligkeitAnpassen();
 }
 
+function schonerHintergrundAnwenden() {
+  if (!schoner || !config) return;
+  // Das eigene Bild liegt auf dem Geraet, nicht in Home Assistant -- es wird ueber dieselbe
+  // Route ausgeliefert wie die Bilder der Foto-Karten. Die Version im Pfad ist der Grund,
+  // warum ein neu hochgeladenes Bild sofort erscheint: Ohne sie zeigte der Browser bis zum
+  // naechsten Neustart das alte aus seinem Zwischenspeicher.
+  const url = config.schonerBildVersion
+    ? `${API}/api/photo-card/schoner/background?v=${config.schonerBildVersion}`
+    : '';
+  schoner.hintergrundSetzen(config.schonerHintergrund, url);
+}
+
+/**
+ * Die Karten des Schoners. Sie kommen aus einem Unterdashboard und bringen von dort Groesse
+ * UND Platz mit -- siehe schonerSpanne() in dashboard-render.js.
+ *
+ * Kein zweiter Karten-Editor: Ein eigener waere derselbe Editor noch einmal, und der zweite
+ * waere der, den niemand pflegt.
+ */
+async function schonerKartenBauen() {
+  const flaeche = schoner.kartenFlaeche();
+  const id = String(config.schonerDashboard || '').trim();
+  if (!id) { flaeche.innerHTML = ''; schonerKartenStand = ''; return; }
+
+  let layout = schonerLayout;
+  if (!layout) {
+    try {
+      const d = await (await fetch(`${API}/api/dashboards/${encodeURIComponent(id)}`)).json();
+      layout = schonerLayout = (d && d.ok && d.dashboard && d.dashboard.layout) || [];
+    } catch (e) {
+      return;   // Netz weg: lieber die alten Karten stehen lassen als eine leere Flaeche
+    }
+  }
+  if (!layout.length) {
+    flaeche.innerHTML = '<div class="bs-leer">Für den Bildschirmschoner ist noch kein Dashboard mit Karten gewählt.</div>';
+    return;
+  }
+
+  // Nur bei echter Aenderung neu bauen. Der Schoner wird alle fuenf Sekunden geprueft; ohne
+  // diese Sperre baute er sich dauernd neu auf, und eine Uhr darin spraenge sichtbar.
+  const stand = JSON.stringify(layout.map(e => {
+    const s = statesById[e.entity_id];
+    return [e.entity_id, s && s.state, s && s.attributes];
+  }));
+  if (stand === schonerKartenStand && flaeche.children.length) return;
+  schonerKartenStand = stand;
+
+  flaeche.innerHTML = '';
+  for (const entry of layout) {
+    if (entry.unterleiste) continue;   // die Unterleiste gibt es hier nicht
+    const s = statesById[entry.entity_id];
+    const type = entry.type || defaultCardType(entry.entity_id, s);
+    // Die Karten zeigen hier nur. Bedienbar sind sie nicht, weil der Schoner jeden
+    // pointerdown abfaengt (stopPropagation in bildschirmschoner.js) -- wer im Vorbeigehen
+    // die Wand streift, soll nicht das Licht ausschalten. Der erste Tipp weckt, immer.
+    flaeche.appendChild(buildCard(entry.entity_id, s, type,
+      DashboardRender.schonerSpanne(resolveSpan(entry, type)), await kartenZusatz(entry, type)));
+  }
+}
+
 /** Aufwecken: Dashboard sofort zeigen, frisch, und die Frist neu starten. */
-function ruheWecken() {
+function schonerWecken() {
   letzteBedienung = Date.now();
-  if (!ruheschirm || !ruheschirm.istSichtbar()) return;
-  ruheschirm.verbergen();
+  if (!schoner || !schoner.istSichtbar()) return;
+  schoner.verbergen();
   helligkeitAnpassen();
   // Wer aufweckt, soll aktuelle Zahlen sehen und nicht den Stand von vor einer Stunde. Der
   // Bedien-Schutz wuerde den Neuaufbau sonst verschieben -- genau wie beim Dashboardwechsel.
@@ -1486,182 +1385,6 @@ function ruheWecken() {
   refresh();
 }
 
-// --- Abschiedsschirm: der letzte Tag ----------------------------------------------------------
-//
-// Dieselbe Buehne wie beim Ankunftsschirm, aber kuehl statt warm -- und mit Karten. Ein
-// ankommender Gast wird begruesst und soll nichts tun; ein abreisender hat eine Liste und
-// will dabei sehen, wie das Wetter auf der Fahrt wird.
-//
-// Welche Karten, sagt die Einstellung: die eines Unterdashboards. Ein zweiter Editor waere
-// derselbe Editor noch einmal.
-async function abschiedPruefen() {
-  if (!abschiedsschirm || !config) return;
-  const zustand = letzterSteuerungszustand;
-  const zeigen = AnkunftsschirmModul.sollAbschiedZeigen({
-    aktiviert: !!config.abschiedEnabled,
-    verlauf: zustand ? zustand.verlauf : null,
-    anzeigefenster: zustand ? zustand.activeWindow : null,
-    verworfenFuer: config.abschiedDismissedFor || '',
-    abStunde: config.abschiedAbStunde,
-    testmodus: !!config.abschiedTestmodus,
-    ankunftSichtbar: !!(ankunftsschirm && ankunftsschirm.istSichtbar()),
-    jetzt: new Date()
-  });
-  if (!zeigen) return abschiedsschirm.verbergen();
-
-  abschiedsschirm.inhaltSetzen({
-    ueberschrift: config.abschiedHeading || 'Gute Heimreise',
-    text: config.abschiedText || '',
-    testmodus: !!config.abschiedTestmodus,
-    // Die Abhakliste merkt sich je Termin, was schon erledigt ist -- dafuer muss sie wissen,
-    // welcher Termin das ist. inhaltSetzen laeuft vor zeigen(), also hier mitgeben.
-    fensterStart: (zustand && zustand.activeWindow) ? zustand.activeWindow.start : null
-  });
-  await abschiedKartenBauen();
-  abschiedsschirm.zeigen(zustand && zustand.activeWindow ? zustand.activeWindow.start : null);
-}
-
-/**
- * Baut die Karten des gewaehlten Unterdashboards auf den Schirm.
- *
- * Neu gebaut wird nur, wenn sich wirklich etwas geaendert hat -- sonst liefe hier bei jedem
- * Zustandswechsel ein kompletter Neuaufbau, und der Schirm steht unter Umstaenden Stunden.
- */
-async function abschiedKartenBauen() {
-  const flaeche = abschiedsschirm.kartenFlaeche();
-  const id = String(config.abschiedDashboard || '').trim();
-  if (!id) { flaeche.innerHTML = ''; abschiedKartenStand = ''; return; }
-
-  let layout = abschiedLayout;
-  if (!layout) {
-    try {
-      const d = await fetch(`${API}/api/dashboards/${encodeURIComponent(id)}`).then(r => r.json());
-      layout = abschiedLayout = (d && d.ok && d.dashboard && d.dashboard.layout) || [];
-    } catch (e) {
-      flaeche.innerHTML = '';
-      return;
-    }
-  }
-  if (!layout.length) {
-    flaeche.innerHTML = '<div class="ab-leer">Für den Abschiedsschirm ist noch kein Dashboard mit Karten gewählt.</div>';
-    return;
-  }
-
-  const stand = zustandsSignatur(layout);
-  if (stand === abschiedKartenStand && flaeche.children.length) return;
-  abschiedKartenStand = stand;
-
-  flaeche.innerHTML = '';
-  for (const entry of layout.filter(e => !e.unterleiste)) {
-    const type = entry.card_type || defaultCardType(entry.entity_id, statesById[entry.entity_id]);
-    const ohneZustand = ['clock', 'navigate', 'energy', 'photo', 'quicktiles'].includes(type);
-    const s = ohneZustand ? null : statesById[entry.entity_id];
-    if (!ohneZustand && !s) continue;
-    const zusatz = await kartenZusatz(entry, type);
-    flaeche.appendChild(buildCard(entry.entity_id, s, type, abschiedSpanne(resolveSpan(entry, type)), {
-      editable: false, ...zusatz, apiBase: API, statesById, namen: haNamen,
-      torZeiten: torZeiten[entry.entity_id],
-      settings: entry.settings || {}, callbacks: dashboardRueckrufe()
-    }));
-  }
-}
-
-let abschiedLayout = null;
-
-/**
- * Fragt nach, ob der Testmodus umgelegt wurde.
- *
- * Der Schalter speichert ueber eine eigene Route und laedt die Anzeige deshalb NICHT neu --
- * sonst wuerde ein Neuaufbau verdecken, ob der Schirm von selbst kommt und geht. Also muss
- * die Anzeige selbst nachsehen. Alle 30 Sekunden reicht: Wer den Schalter umlegt, geht
- * anschliessend zur Wand.
- *
- * In BEIDE Richtungen -- auch waehrend der Testmodus laeuft. Sonst bekaeme die Anzeige das
- * Ausschalten nie mit, und der Schirm stuende bis zum naechsten Neustart.
- */
-let abschiedKonfigGeholt = 0;
-async function abschiedKonfigNachsehen() {
-  if (!config) return;
-  if (Date.now() - abschiedKonfigGeholt < 30000) return;
-  abschiedKonfigGeholt = Date.now();
-  try {
-    const d = await fetch(`${API}/api/config`).then(r => r.json());
-    if (d && typeof d.abschiedTestmodus === 'boolean') {
-      config.abschiedTestmodus = d.abschiedTestmodus;
-      config.abschiedDismissedFor = d.abschiedDismissedFor || '';
-    }
-  } catch (e) { /* dann beim naechsten Mal */ }
-}
-
-function ankunftsschirmPruefen() {
-  if (!ankunftsschirm || !config) return;
-  const zustand = letzterSteuerungszustand;
-  const zeigen = AnkunftsschirmModul.sollAnzeigen({
-    aktiviert: !!config.welcomeEnabled,
-    anzeigefenster: zustand ? zustand.activeWindow : null,
-    verworfenFuer: config.welcomeDismissedFor || '',
-    stunden: config.welcomeHours,
-    // Die Anzeigedauer zaehlt ab der Ankunft, nicht ab Terminbeginn -- bei ganztaegigen
-    // Terminen waere sie sonst um Mitternacht losgelaufen.
-    ankunftZeit: (zustand && zustand.ankunft) ? zustand.ankunft.erkannt : 0,
-    erzwungenBis: config.welcomeErzwungenBis || 0,
-    testmodus: !!config.welcomeTestmodus,
-    testSekunden: config.welcomeTestSekunden,
-    leerlaufSekunden: (Date.now() - letzteBeruehrung) / 1000,
-    jetzt: new Date()
-  });
-  if (!zeigen) return ankunftsschirm.verbergen();
-
-  ankunftsschirm.inhaltSetzen({
-    ueberschrift: config.welcomeHeading || '',
-    text: config.welcomeText || '',
-    bildtext: config.welcomeCaption || '',
-    bildtext2: config.welcomeCaption2 || '',
-    // Der Bildweg existiert bereits: /api/ha/media bedient auch image.*-Entitaeten.
-    bildUrl: config.welcomeImageEntity
-      ? `${API}/api/ha/media?entity_id=${encodeURIComponent(config.welcomeImageEntity)}`
-      : '',
-    // Das zweite Bild kommt entweder aus Home Assistant oder wurde hochgeladen. Fuers Hochladen
-    // werden die vorhandenen Foto-Routen mitbenutzt, mit fester Kennung statt einer Karten-ID.
-    bildUrl2: config.welcomeImage2Quelle === 'upload'
-      ? (config.welcomeImage2Version ? `${API}/api/photo-card/welcome-2/background?v=${config.welcomeImage2Version}` : '')
-      : (config.welcomeImageEntity2 ? `${API}/api/ha/media?entity_id=${encodeURIComponent(config.welcomeImageEntity2)}` : ''),
-    wechselSekunden: config.welcomeImageSeconds
-  });
-  // Ohne laufenden Termin gibt es keinen Fensterbeginn -- beim erzwungenen Anzeigen ist das
-  // der Normalfall. Eine eigene Kennung, damit das Wegtippen trotzdem etwas zu melden hat.
-  ankunftsschirm.zeigen((zustand && zustand.activeWindow) ? zustand.activeWindow.start : '');
-}
-
-function ankunftsschirmAufbauen() {
-  if (ankunftsschirm) return;
-  ankunftsschirm = new AnkunftsschirmModul.Ankunftsschirm($('ankunftsschirm'), {
-    beimWegtippen: async (fensterStart) => {
-      // Sofort verbergen -- der Gast soll nicht auf das Netz warten. Scheitert das Speichern,
-      // erscheint der Schirm beim naechsten Neustart erneut; das ist der harmlosere Fehler.
-      ankunftsschirm.verbergen();
-      // Auch ohne Fensterbeginn muss das Wegtippen gemeldet werden: Beim erzwungenen Anzeigen
-      // gibt es keinen Termin, und ohne diese Meldung kaeme der Schirm beim naechsten
-      // Konfigurationsabruf sofort zurueck -- er liesse sich nicht wegtippen.
-      // Im Testmodus wird NICHTS gemerkt: Der Schirm soll ja gleich wiederkommen. Wuerde
-      // hier verworfen, waere der Testmodus nach dem ersten Antippen wirkungslos.
-      if (config.welcomeTestmodus) { letzteBeruehrung = Date.now(); return; }
-      if (fensterStart) config.welcomeDismissedFor = fensterStart;
-      config.welcomeErzwungenBis = 0;
-      try {
-        await fetch(`${API}/api/welcome/dismiss`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ windowStart: fensterStart || '' })
-        });
-      } catch (e) { /* siehe oben */ }
-    }
-  });
-}
-
-// Zeigt bei einem mehrtaegigen Termin, der wievielte Tag laeuft -- und hebt den letzten
-// hervor. Bei eintaegigen Terminen erscheint nichts: Da waere "Tag 1 von 1" kein Hinweis,
-// sondern Rauschen auf einer Wand, die man den ganzen Tag ansieht.
 // --- Live-Verbindung zu Home Assistant ---------------------------------------------------------
 //
 // Der regelmaessige Abruf bleibt das Netz -- ein verpasster Anstoss wird nie nachgeholt, ein
@@ -1692,23 +1415,10 @@ function liveVerbinden() {
     try { aenderung = JSON.parse(e.data); } catch (err) { return; }
     if (!aenderung || !aenderung.entity_id) return;
 
-    // Waehrend der Abwesenheit zaehlt genau EINE Entitaet: die Alarmanlage. Alles andere darf
-    // bis zum naechsten Abruf warten -- sonst waere der langsamere Takt wirkungslos, weil
-    // jede Lampe im Haus weiterhin sofort einen Neuaufbau ausloest.
-    const alarmId = String((config && config.ankunftEntity) || '').trim();
-    if (abwesend && aenderung.entity_id !== alarmId) return;
-
-    // Sonst: nur, was auf DIESEM Dashboard steht. Ein Haushalt meldet hunderte Aenderungen pro
+    // Nur, was auf DIESEM Dashboard steht. Ein Haushalt meldet hunderte Aenderungen pro
     // Minute; fuer die allermeisten gibt es hier keine Karte.
     if (!betrifftDiesesDashboard(aenderung.entity_id)) return;
 
-    // Die Alarmanlage wird nicht gesammelt: Wer heimkommt, soll nicht auf einen Sammeltakt
-    // warten, sondern auf einen hellen Bildschirm treffen.
-    if (alarmId && aenderung.entity_id === alarmId) {
-      clearTimeout(liveSammler);
-      aufbauErzwingen = true;
-      return void refresh();
-    }
     // Nicht bei jeder einzelnen Meldung neu zeichnen: Eine Automation schaltet gern fuenf
     // Dinge in derselben Sekunde, und fuenf Neuaufbauten hintereinander sieht man.
     clearTimeout(liveSammler);
@@ -1744,7 +1454,7 @@ function rueckkehrPruefen() {
   if (currentDashboardId === 'main') return;
   const sekunden = Number(config && config.rueckkehrSekunden);
   if (!(sekunden > 0)) return;                       // 0 oder leer heisst: gar nicht
-  if (ankunftsschirm && ankunftsschirm.istSichtbar && ankunftsschirm.istSichtbar()) return;
+  if (schoner && schoner.istSichtbar()) return;   // liegt der Schoner, ist die Rueckkehr sein Job
   if ((Date.now() - letzteBedienungAufUnterdashboard) / 1000 >= sekunden) navigateTo('main');
 }
 
@@ -1754,96 +1464,13 @@ function rueckkehrTaktAnpassen() {
   if (!noetig && rueckkehrTakt) { clearInterval(rueckkehrTakt); rueckkehrTakt = null; }
 }
 
-// --- Testmodus fuer den Ankunftsschirm ---------------------------------------------------------
-//
-// Nach ein paar Sekunden ohne Beruehrung kommt der Schirm von allein wieder. Zum Ausprobieren
-// gedacht: So laesst sich das Aussehen immer wieder ansehen, ohne jedes Mal in die
-// Einstellungen zu gehen.
-//
-// Gezaehlt werden NUR echte Beruehrungen (pointerdown), keine Mausbewegungen. Das Aufwecken
-// des Panels wackelt mit dem Mauszeiger (panel.js) -- ein mousemove-Zaehler wuerde sich davon
-// selbst dauernd zuruecksetzen und der Schirm kaeme nie.
-let letzteBeruehrung = Date.now();
-let testmodusTakt = null;
-
 document.addEventListener('pointerdown', () => {
-  letzteBeruehrung = Date.now();
   letzteBedienungAufUnterdashboard = Date.now();
 }, { capture: true, passive: true });
-
-// Im Testmodus muss oft genug nachgesehen werden, damit "nach zehn Sekunden" auch ungefaehr
-// zehn Sekunden heisst -- der normale Takt liegt bei einer Minute. Ausserhalb des Testmodus
-// laeuft dieser Takt nicht: eine Sekunde Takt fuer nichts waere auf einem Wandpanel
-// verschwendete Rechenzeit.
-function testmodusTaktAnpassen() {
-  const anAn = !!(config && config.welcomeTestmodus);
-  if (anAn && !testmodusTakt) testmodusTakt = setInterval(ankunftsschirmPruefen, 1000);
-  if (!anAn && testmodusTakt) { clearInterval(testmodusTakt); testmodusTakt = null; }
-}
-
-function verlaufAnzeigen(verlauf) {
-  const el = $('terminverlauf');
-  if (!el) return;
-  if (!verlauf || !verlauf.mehrtaegig) { el.hidden = true; return; }
-
-  const bis = new Date(verlauf.endet);
-  // Endet der Termin um Mitternacht, ist das die Grenze zum Folgetag -- "bis 00:00" liesse
-  // sich als "bis heute Nacht" missverstehen. Dann lieber gar keine Uhrzeit.
-  const umMitternacht = bis.getHours() === 0 && bis.getMinutes() === 0;
-  const uhrzeit = umMitternacht ? '' : bis.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-
-  el.classList.toggle('ist-letzter-tag', !!verlauf.letzterTag);
-  el.innerHTML = verlauf.letzterTag
-    ? `<span class="tv-stark">Letzter Tag</span>${uhrzeit ? `<span class="tv-klein">bis ${uhrzeit}</span>` : ''}`
-    : `<span class="tv-stark">Tag ${verlauf.tag} von ${verlauf.gesamt}</span>`;
-  el.hidden = false;
-}
 
 function applyControlState(state) {
   if (!state) return;
   letzterSteuerungszustand = state;
-
-  // Faengt gerade ein Termin an? Dann erst ankuendigen, danach uebernimmt der Ankunftsschirm.
-  //
-  // Der allererste Zustand nach dem Start kuendigt bewusst nichts an: Laeuft beim Hochfahren
-  // schon ein Termin, ist sein Beginn laengst vorbei -- eine Ankuendigung dafuer waere gelogen.
-  const fenster = state.activeWindow;
-  const start = fenster ? fenster.start : null;
-  if (ersterZustand) {
-    ersterZustand = false;
-    angekuendigtesFenster = start;
-  } else if (start && start !== angekuendigtesFenster) {
-    angekuendigtesFenster = start;
-    // Nur ankuendigen, wenn der Termin WIRKLICH gerade beginnt. Dass wir ein Fenster zum ersten
-    // Mal sehen, heisst nicht, dass es neu ist -- nach einem Update oder wenn eine andere Regel
-    // (Karenzzeit, Pause, Nachtsperre) es zwischenzeitlich verdeckt hat, ist der Beginn laengst
-    // vorbei. Eine Ankuendigung dafuer waere gelogen.
-    const beginn = new Date(start).getTime();
-    const geradeBegonnen = !isNaN(beginn) && Math.abs(Date.now() - beginn) < 3 * 60000;
-    if (terminankuendigung && geradeBegonnen) {
-      ankunftsschirm && ankunftsschirm.verbergen();
-      terminankuendigung.zeigen(fenster, ankunftsschirmPruefen);
-      panelControlActive = !!state.configured;
-      return; // Ankunftsschirm erst nach der Ankuendigung
-    }
-  }
-
-  verlaufAnzeigen(state.verlauf);
-  ankunftsschirmPruefen();
-  // Nach dem Ankunftsschirm, nicht davor: Er hat Vorrang, und sollAbschiedZeigen() fragt ihn.
-  abschiedPruefen();
-  panelControlActive = !!state.configured;
-
-  const overlay = $('haErrorOverlay');
-  if (state.showError && state.error) {
-    $('haErrorDetail').textContent = state.error.message || '';
-    $('haErrorSince').textContent = state.error.since
-      ? 'Seit ' + new Date(state.error.since).toLocaleString('de-DE')
-      : '';
-    overlay.style.display = 'flex';
-  } else {
-    overlay.style.display = 'none';
-  }
 }
 
 // Dritter Weg in die Pause: fuenfmal schnell in die obere linke Ecke tippen. Das ist der
@@ -2036,40 +1663,19 @@ function uhrenKartenAktualisieren() {
     if (window.wallApi.onControlState) window.wallApi.onControlState(applyControlState);
   }
   initCornerEscapeGesture();
-  ankunftsschirmAufbauen();
-  terminankuendigung = new AnkunftsschirmModul.Terminankuendigung($('terminankuendigung'));
-  // Nur auf dem Panel: In der Live-Ansicht im Browser wuerde ein Ruheschirm dem, der von
+  // Nur auf dem Panel: In der Live-Ansicht im Browser wuerde der Schoner dem, der von
   // unterwegs nachsieht, genau das verdecken, wofuer er die Seite geoeffnet hat.
   if (IM_PANEL) {
-    ruheschirm = new RuheschirmModul.Ruheschirm($('ruheschirm'), { beimWecken: ruheWecken });
+    schoner = new BildschirmschonerModul.Bildschirmschoner($('bildschirmschoner'), {
+      beimWecken: schonerWecken
+    });
+    schonerHintergrundAnwenden();
+    // Eigener, kurzer Takt: Das Hinlegen darf sich nicht um eine halbe Minute verspaeten,
+    // sonst wirkt die eingestellte Frist ungenau.
+    setInterval(schonerPruefen, 5000);
+    schonerPruefen();
   }
-  abschiedsschirm = new AnkunftsschirmModul.Abschiedsschirm($('abschiedsschirm'), {
-    beimWegtippen: async (fensterStart) => {
-      // Im Testmodus tippt ihn nichts weg. Er wuerde sonst verschwinden und beim naechsten
-      // Takt von selbst wiederkommen -- ein Flackern, das aussieht wie ein Fehler. Aus ist
-      // er erst, wenn der Schalter in den Einstellungen wieder umgelegt wird.
-      if (config && config.abschiedTestmodus) return;
-      abschiedsschirm.verbergen();
-      if (fensterStart) config.abschiedDismissedFor = fensterStart;
-      try {
-        await fetch(`${API}/api/abschied/dismiss`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ windowStart: fensterStart || '' })
-        });
-      } catch (e) { /* dann kommt er beim naechsten Abruf noch einmal -- kein Schaden */ }
-    }
-  });
-  // Der Steuerungszustand wird nur bei Aenderungen geschickt -- das Ablaufen der Anzeigedauer
-  // ist aber keine Aenderung. Deshalb zusaetzlich ein eigener Takt.
-  setInterval(ankunftsschirmPruefen, 60000);
-  // Alle zehn Sekunden statt jede Minute: Der Testmodus-Schalter speichert ueber eine eigene
-  // Route und laedt die Ansicht nicht neu -- der Schirm soll trotzdem zuegig kommen und gehen.
-  setInterval(async () => { await abschiedKonfigNachsehen(); abschiedPruefen(); }, 10000);
-  // Eigener, kurzer Takt: Das Hinlegen darf sich nicht um eine halbe Minute verspaeten, sonst
-  // wirkt die eingestellte Frist ungenau.
-  setInterval(ruhePruefen, 5000);
 
-  checkNightMode();
   // Erst nach dem Aufbau: Das Bild wird nur gebraucht, wenn die App mal NICHT laeuft -- es hat
   // keine Eile und soll den Start nicht aufhalten.
   setTimeout(() => { hintergrundAblegen(); }, 4000);
@@ -2095,16 +1701,16 @@ function uhrenKartenAktualisieren() {
   function scheduleRefresh() {
     // Steht die Live-Verbindung, ist der Abruf nur noch das Netz -- dann genuegt er seltener.
     // Ist sie weg, uebernimmt er wieder allein und laeuft entsprechend haeufig.
-    // Abwesend zaehlt wie Nacht: Es schaut niemand hin. Die Alarmanlage selbst bleibt davon
-    // unberuehrt -- sie kommt ueber die Live-Verbindung und nicht ueber diesen Takt.
-    const takt = nightActive ? (liveVerbunden ? 60000 : 30000)
-      : abwesend ? Math.max(5000, (Number(config && config.abwesendSekunden) || 20) * 1000)
+    //
+    // Waehrend der Schoner liegt, schaut niemand hin: Dann reicht ein langsamer Takt. Der
+    // Schoner selbst baut beim Wecken ohnehin neu auf, und bis dahin wuerde jeder Abruf nur
+    // eine verdeckte Flaeche aktualisieren.
+    const takt = (schoner && schoner.istSichtbar()) ? (liveVerbunden ? 60000 : 30000)
       : (liveVerbunden ? 20000 : 5000);
     setTimeout(async () => { await refresh(); scheduleRefresh(); }, takt);
   }
   scheduleRefresh();
 
-  setInterval(checkNightMode, 20000);
   // Zwischenspeicher regelmaessig leeren. Frueher lief NUR der Verlauf ab -- Wettervorhersage
   // und Muelltermine froren beim Start ein und veralteten ueber Tage. Auf einem Geraet, das
   // durchlaeuft, faellt das garantiert auf: Die Vorhersage zeigt vorgestern, und ein laengst

@@ -135,32 +135,32 @@ test('Fuer helles Design gibt es dunklere Sensorfarben', () => {
 // wird nur noch als Fangnetz.
 
 test('Eine passende Karte behaelt Groesse UND Platz', () => {
-  assert.deepStrictEqual(R.abschiedSpanne({ cols: 3, rows: 4, x: 3, y: 0 }),
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 3, rows: 4, x: 3, y: 0 }),
     { cols: 3, rows: 4, x: 3, y: 0 });
 });
 
 test('Was ueber den Rand ragt, wird hereingeschoben statt beschnitten', () => {
   // Eine Karte, die schmaler gemacht wird, verliert ihren Inhalt; eine, die ein Feld weiter
   // links liegt, nicht.
-  assert.deepStrictEqual(R.abschiedSpanne({ cols: 2, rows: 2, x: 5, y: 5 }),
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 2, rows: 2, x: 5, y: 5 }),
     { cols: 2, rows: 2, x: 4, y: 4 });
 });
 
 test('Groesser als die Flaeche geht nicht', () => {
-  assert.deepStrictEqual(R.abschiedSpanne({ cols: 9, rows: 9, x: 0, y: 0 }),
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 9, rows: 9, x: 0, y: 0 }),
     { cols: 6, rows: 6, x: 0, y: 0 });
 });
 
 test('Ohne Platzangabe fliesst die Karte', () => {
   // Kein x/y erfunden -- mit erfundener Position landete sie irgendwo, und "irgendwo" ist auf
   // einem Raster immer auf einer anderen Karte.
-  assert.deepStrictEqual(R.abschiedSpanne({ cols: 2, rows: 2 }), { cols: 2, rows: 2 });
+  assert.deepStrictEqual(R.schonerSpanne({ cols: 2, rows: 2 }), { cols: 2, rows: 2 });
 });
 
 test('Unsinnige Masse ergeben eine Karte, keine Ausnahme', () => {
   // Ein fehlendes Mass darf keine Karte mit "span NaN" erzeugen -- die verschwindet lautlos.
   for (const w of [null, undefined, {}, { cols: 0, rows: 0 }, { cols: -3, rows: 'zwei' }]) {
-    const s = R.abschiedSpanne(w);
+    const s = R.schonerSpanne(w);
     assert.ok(s.cols >= 1 && s.rows >= 1, JSON.stringify(w) + ' -> ' + JSON.stringify(s));
   }
 });
@@ -170,9 +170,9 @@ test('Die Grenzen stimmen mit dem Raster in der CSS ueberein', () => {
   // wieder eine Karte, die halb aus dem Bild haengt.
   const css = require('node:fs').readFileSync(
     require('node:path').join(__dirname, '..', 'renderer', 'shared', 'dashboard.css'), 'utf8');
-  const block = css.slice(css.indexOf('.abschiedsschirm .ab-karten {'), css.indexOf('.abschiedsschirm .ab-leer'));
-  const spalten = 'grid-template-columns: repeat(' + R.ABSCHIED_SPALTEN + ', 1fr)';
-  const zeilen = 'grid-template-rows: repeat(' + R.ABSCHIED_ZEILEN + ', 1fr)';
+  const block = css.slice(css.indexOf('.bs-karten {'), css.indexOf('.bs-leer'));
+  const spalten = 'grid-template-columns: repeat(' + R.SCHONER_SPALTEN + ', 1fr)';
+  const zeilen = 'grid-template-rows: repeat(' + R.SCHONER_ZEILEN + ', 1fr)';
   assert.ok(block.includes(spalten), spalten + ' fehlt in: ' + block);
   assert.ok(block.includes(zeilen), zeilen + ' fehlt in: ' + block);
 });

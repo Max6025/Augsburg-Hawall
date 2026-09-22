@@ -21,7 +21,20 @@
 // die Rastergroesse und ein Beispiel. Ohne das raet ein Modell die Kartennamen -- und liegt
 // daneben.
 
-const FORMAT = 'italien-wall-display/dashboard';
+const FORMAT = 'augsburg-wall-display/dashboard';
+
+// Das Format der Vorlage wird beim Import MITGELESEN, aber nie geschrieben.
+//
+// Der Grund ist handfest: Auf dem Schwesterngeraet in Italien liegen fertige Dashboards, und
+// die sollen sich hierher kopieren lassen, ohne dass jemand von Hand eine Zeile in der Datei
+// aendert. Wer eine Datei ablehnt, die er problemlos lesen koennte, erzeugt genau die Sorte
+// Handarbeit, bei der danach etwas anderes kaputt ist.
+//
+// Umgekehrt gilt das NICHT: Exportiert wird nur das eigene Format. Eine Datei von hier auf
+// dem Italien-Geraet einzuspielen kann schiefgehen -- dort gibt es Kartenarten, die es hier
+// nicht mehr gibt, und umgekehrt.
+const FORMAT_VORLAGE = 'italien-wall-display/dashboard';
+const FORMATE_LESBAR = [FORMAT, FORMAT_VORLAGE];
 const VERSION = 1;
 
 // Muss zum Editor passen (MAX_ROWS dort) und zum Raster in dashboard.css.
@@ -118,7 +131,7 @@ function exportieren(dashboard, kartenArten) {
 function anleitung(kartenArten) {
   const arten = kartenArten || {};
   return {
-    wozu: 'Ein Dashboard für Italien Wall Display. Diese Datei lässt sich unter '
+    wozu: 'Ein Dashboard für Augsburg Wall Display. Diese Datei lässt sich unter '
       + '"Unterdashboards" wieder einspielen.',
     raster: `${SPALTEN} Spalten mal ${ZEILEN} Zeilen. x zählt von links ab 0, y von oben ab 0. `
       + 'Karten dürfen sich nicht überlappen und nicht über den Rand hinausragen.',
@@ -158,7 +171,7 @@ function importieren(roh, kartenArten) {
   if (!roh || typeof roh !== 'object' || Array.isArray(roh)) {
     return { ok: false, fehler: ['Die Datei enthält kein Dashboard.'], warnungen };
   }
-  if (roh.format && roh.format !== FORMAT) {
+  if (roh.format && !FORMATE_LESBAR.includes(roh.format)) {
     fehler.push(`Unbekanntes Format "${roh.format}" – erwartet wird "${FORMAT}".`);
   }
   if (roh.version && Number(roh.version) > VERSION) {
@@ -283,4 +296,4 @@ function freierPlatz(belegt, x, y, cols, rows) {
   return null;
 }
 
-module.exports = { exportieren, importieren, anleitung, FORMAT, VERSION, SPALTEN, ZEILEN };
+module.exports = { exportieren, importieren, anleitung, FORMAT, FORMAT_VORLAGE, FORMATE_LESBAR, VERSION, SPALTEN, ZEILEN };

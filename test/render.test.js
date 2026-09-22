@@ -397,55 +397,6 @@ test('Ein Ausreisser am Rand kippt die Aussage nicht', () => {
   assert.strictEqual(D.tendenz(steigtMitAusrutscher).richtung, 1);
 });
 
-// --- Alarmanlage: Beschriftung und Farbe gehoeren der Anlage -----------------------------------
-//
-// "armed_home" heisst nicht ueberall dasselbe. In der einen Anlage ist es scharf mit freiem
-// Innenbereich, in der anderen der ganz normale Zustand, wenn jemand da ist -- also eher
-// unscharf. Wer das fest verdrahtet, erzaehlt der Haelfte der Nutzer etwas Unwahres ueber
-// ihre Sicherheit.
-
-test('Ohne Einstellung gelten die Vorgaben', () => {
-  assert.deepStrictEqual(D.alarmDarstellung('armed_away', {}), { text: 'Scharf (Abwesend)', ton: 'scharf' });
-  assert.deepStrictEqual(D.alarmDarstellung('disarmed', {}), { text: 'Unscharf', ton: 'ruhig' });
-  assert.deepStrictEqual(D.alarmDarstellung('triggered', {}), { text: 'ALARM!', ton: 'alarm' });
-});
-
-test('Text und Farbe lassen sich je Zustand ueberschreiben', () => {
-  const s = { alarmTexte: { armed_home: 'Zu Hause' }, alarmToene: { armed_home: 'ruhig' } };
-  assert.deepStrictEqual(D.alarmDarstellung('armed_home', s), { text: 'Zu Hause', ton: 'ruhig' });
-});
-
-test('Text und Farbe sind unabhaengig voneinander', () => {
-  // Nur umbenennen, Farbe behalten -- und umgekehrt.
-  assert.strictEqual(D.alarmDarstellung('armed_home', { alarmTexte: { armed_home: 'Zu Hause' } }).ton, 'scharf');
-  assert.strictEqual(D.alarmDarstellung('armed_home', { alarmToene: { armed_home: 'ruhig' } }).text, 'Scharf (Zuhause)');
-});
-
-test('Ein leerer Text faellt auf die Vorgabe zurueck', () => {
-  // Sonst stuende auf der Karte gar nichts, und niemand wuesste, wie die Anlage steht.
-  assert.strictEqual(D.alarmDarstellung('disarmed', { alarmTexte: { disarmed: '   ' } }).text, 'Unscharf');
-  assert.strictEqual(D.alarmDarstellung('disarmed', { alarmTexte: { disarmed: '' } }).text, 'Unscharf');
-});
-
-test('Ein unbekannter Zustand wird angezeigt statt verschluckt', () => {
-  // HA-Integrationen erfinden gelegentlich eigene Zustaende. Lieber die Kennung zeigen als
-  // eine leere Karte.
-  assert.strictEqual(D.alarmDarstellung('irgendwas', {}).text, 'irgendwas');
-  assert.strictEqual(D.alarmDarstellung('irgendwas', {}).ton, 'ruhig');
-});
-
-test('Fehlende Einstellungen stuerzen nicht ab', () => {
-  assert.ok(D.alarmDarstellung('disarmed', null).text);
-  assert.ok(D.alarmDarstellung('disarmed', undefined).text);
-});
-
-test('Jeder Zustand hat einen gueltigen Farbton', () => {
-  const gueltig = D.ALARM_TOENE.map(t => t.id);
-  D.ALARM_ZUSTAENDE.forEach(z => {
-    assert.ok(gueltig.includes(z.ton), `${z.id} hat Ton "${z.ton}", den es nicht gibt`);
-  });
-});
-
 // --- Symbole, die sich von selbst einstellen ---------------------------------------------------
 //
 // Ein Symbol je Knopf hilft nur, wenn eines da ist. Es erst auswaehlen zu muessen heisst: Wer

@@ -99,8 +99,8 @@ const updater = {
 //
 // Gemessen am 2026-09-09 auf dem Surface Go: Eine Minute nach dem Abschalten des Panels ging das
 // GERAET in Connected Standby (Kernel-Power 506). Die Anwendung war damit weg -- kein
-// Kalender-Abruf, kein Setup-Server, und ein Termin, der in dieser Zeit begann, blieb unbemerkt.
-// Erst beim Aufwachen (Kernel-Power 507) lief alles weiter und das Panel ging an.
+// Waechter-Takt, kein Setup-Server, und die Anzeige stand still. Erst beim Aufwachen
+// (Kernel-Power 507) lief alles weiter und das Panel ging an.
 //
 // "prevent-app-suspension" haelt das System wach und erlaubt dem Bildschirm ausdruecklich weiter,
 // sich abzuschalten. Genau diese Kombination brauchen wir: dunkles Panel, wacher Rechner.
@@ -230,7 +230,7 @@ function createWindow() {
     app.quit();
   });
 
-  // Not-Ausstieg aus der Kalendersteuerung: pausiert den Waechter, damit das Panel bedienbar
+  // Not-Ausstieg aus der Panelsteuerung: pausiert den Waechter, damit das Panel bedienbar
   // bleibt. Einer von drei Wegen -- die anderen beiden sind die Tipp-Geste in der oberen linken
   // Ecke des Dashboards und der Schalter in der Setup-Oberflaeche. Ein Geraet, das sich selbst
   // abschalten kann, braucht mehr als einen Ausweg, und eine Tastenkombination hilft auf einem

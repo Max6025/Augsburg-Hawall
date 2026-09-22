@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Italien Wall Display – Einstellungen</title>
+<title>Augsburg Wall Display – Einstellungen</title>
 <link rel="stylesheet" href="/shared/nav.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <nav class="hawall-nav">
-    <div class="hawall-nav-brand"><span class="hawall-logo">H</span> Hawall</div>
+    <div class="hawall-nav-brand"><span class="hawall-logo">A</span> Augsburg</div>
     <div class="hawall-nav-links">
       <a href="index.html">Verbindung</a>
       <a href="editor.html">Karten</a>
@@ -153,12 +153,13 @@
         <span class="eb-unter">Zeitfenster, in dem der Bildschirm aus bleibt</span>
       </summary>
       <div class="eb-inhalt">
-    <p class="note">Zeitfenster, in dem der Bildschirm aus bleibt. <strong>Die Nachtsperre hat
-      Vorrang vor der Kalendersteuerung</strong>: läuft ein Termin, der Bildschirm wäre also an,
-      bleibt er in diesem Fenster trotzdem aus.</p>
-    <p class="note">Ist die Kalendersteuerung aktiv, wird das Panel hier wirklich abgeschaltet
-      (Hintergrundbeleuchtung aus). Ohne Kalendersteuerung verhält sich die Einstellung wie
-      früher: schwarzes Bild bei weiterhin laufendem Panel, Berühren zeigt das Dashboard.</p>
+    <p class="note">Zeitfenster, in dem der Bildschirm aus bleibt. Das Panel wird darin
+      <strong>wirklich abgeschaltet</strong> – Hintergrundbeleuchtung aus, kein schwarzes Bild
+      über einem leuchtenden Panel.</p>
+    <p class="note">Außerhalb dieses Fensters läuft das Gerät durch; was dann zu sehen ist,
+      entscheidet der <strong>Bildschirmschoner</strong> weiter unten.</p>
+    <p class="note"><strong>Berühren weckt.</strong> Wer nachts hinlangt, bekommt das Panel für
+      zwei Minuten zurück – danach legt es sich von selbst wieder hin.</p>
     <label><input type="checkbox" id="nightEnabled" style="width:auto; margin-right:0.5rem;">Nachtmodus aktivieren</label>
     <div class="row2" style="margin-top:0.8rem;">
       <div><label>Beginn</label><input type="time" id="nightStart" value="23:00"></div>
@@ -170,318 +171,75 @@
 
     <details class="einstellungsblock">
       <summary>
-        <span class="eb-titel">Kalendersteuerung</span>
-        <span class="eb-unter">Termine und Stichworte, die das Panel schalten</span>
+        <span class="eb-titel">Bildschirmschoner</span>
+        <span class="eb-unter">Was zu sehen ist, wenn niemand das Panel anfasst</span>
       </summary>
       <div class="eb-inhalt">
-    <p class="note">Verbindet das Display mit einem Kalender aus Home Assistant. Steht dort ein
-      Termin, dessen <strong>Titel</strong> eines deiner Keywords enthält, ist der Bildschirm an –
-      genau so lange, wie der Termin dauert. Ein Ganztages-Termin über mehrere Tage hält den
-      Bildschirm entsprechend mehrere Tage an. Läuft kein passender Termin, wird das Panel
-      wirklich abgeschaltet, nicht nur schwarz gefärbt.</p>
+    <p class="note">Der Bildschirmschoner ist der <strong>Ruhezustand</strong> dieses Geräts,
+      nicht die Ausnahme. Er liegt, solange niemand das Panel anfasst; ein Tipp holt das
+      Dashboard, und nach der eingestellten Zeit legt er sich wieder hin.</p>
+    <p class="note">Er ist <strong>nicht</strong> dasselbe wie „Panel aus“. Das Panel leuchtet
+      weiter, nur gedimmt. Wirklich abgeschaltet wird es allein in der <strong>Nachtsperre</strong>
+      weiter oben.</p>
 
-    <label><input type="checkbox" id="calEnabled" style="width:auto; margin-right:0.5rem;">Kalendersteuerung aktivieren</label>
+    <label><input type="checkbox" id="schonerEnabled" style="width:auto; margin-right:0.5rem;">Bildschirmschoner verwenden</label>
+    <p class="hint-text">Ab Werk an. Ausgeschaltet steht dauerhaft das Dashboard auf der Wand.</p>
 
-    <label style="margin-top:1rem;">Kalender</label>
-    <select id="calEntity"><option value="">– wird geladen –</option></select>
+    <label style="margin-top:1rem;">Hinlegen nach … Minuten ohne Bedienung</label>
+    <input type="number" id="schonerMinuten" min="1" max="240" step="1" placeholder="3" style="max-width:140px;">
+    <p class="hint-text">Ab Werk 3 Minuten. Lang genug, um ein Dashboard in Ruhe zu lesen, ohne
+      es anzufassen; kurz genug, dass die Wand nicht stundenlang etwas zeigt, das niemand liest.</p>
 
-    <label style="margin-top:1rem;">Keywords (mit Komma getrennt)</label>
-    <input type="text" id="calKeywords" placeholder="Italien, Urlaub, Gäste">
-    <p class="hint-text">Groß- und Kleinschreibung spielt keine Rolle. Es genügt, dass das Wort im
-      Titel vorkommt: „Italien“ passt auch auf „Urlaub Italien 2026“. Die Beschreibung eines
-      Termins wird bewusst nicht durchsucht.</p>
+    <label style="margin-top:1rem;">Helligkeit im Ruhezustand (%)</label>
+    <input type="number" id="schonerHelligkeit" min="5" max="100" step="1" placeholder="40" style="max-width:140px;">
+    <p class="hint-text">Ab Werk 40&nbsp;%. Nicht ganz aus: Was der Schoner zeigt, soll aus zwei
+      Metern lesbar bleiben – ein Bildschirm, den man nicht mehr ablesen kann, ist von einem
+      kaputten nicht zu unterscheiden.</p>
 
-    <div class="row2" style="margin-top:0.8rem;">
-      <div><label>Vorlauf (Min.)</label><input type="number" id="calLead" min="0" step="5" value="0"></div>
-      <div><label>Nachlauf (Min.)</label><input type="number" id="calTrail" min="0" step="5" value="0"></div>
+    <label style="margin-top:1.4rem;">Hintergrund</label>
+    <label><input type="radio" name="schonerHintergrund" value="wolken" style="width:auto; margin-right:0.5rem;">Bewegte Farbwolken</label>
+    <label><input type="radio" name="schonerHintergrund" value="bild" style="width:auto; margin-right:0.5rem;">Eigenes Bild</label>
+    <p class="hint-text">Die Farbwolken sind ab Werk aktiv. Sie werden auf der Grafikeinheit
+      bewegt und kosten das Gerät fast nichts – der Zufall läuft nur, wenn eine neue Form
+      entsteht, alle zehn bis zwanzig Sekunden.</p>
+
+    <div id="schonerBildBereich" style="margin-top:0.8rem;">
+      <input type="file" id="schonerBildDatei" accept="image/jpeg,image/png,image/webp">
+      <p class="hint-text">JPEG, PNG oder WEBP. Das Bild liegt auf dem Gerät, nicht in Home
+        Assistant – es reist deshalb bei einem Dashboard-Export nicht mit. Am besten im
+        Seitenverhältnis des Panels (1280×854), sonst wird es beschnitten.</p>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+        <img id="schonerBildVorschau" alt="" style="display:none; max-width:240px; border-radius:8px;">
+        <button id="schonerBildWeg" style="max-width:200px; display:none;">Bild entfernen</button>
+      </div>
     </div>
-    <p class="hint-text">Schaltet den Bildschirm entsprechend früher ein bzw. später aus. 0 heißt:
-      exakt die Zeiten des Termins.</p>
 
+    <label style="margin-top:1.4rem;">Dashboard für den Schoner</label>
+    <select id="schonerDashboard"><option value="">– nichts anzeigen –</option></select>
+    <p class="hint-text">Ein Unterdashboard, dessen Karten auf dem Schoner erscheinen – etwa
+      eine Uhr und die Außentemperatur. Die Karten behalten <strong>Größe und Platz</strong>
+      aus dem Editor; gestaltet wird dort, nicht hier. Ein zweiter Karten-Editor wäre derselbe
+      noch einmal – und der zweite wäre der, den niemand pflegt.</p>
+    <p class="hint-text">Die Karten zeigen hier nur an. Der erste Tipp gehört immer dem
+      Aufwecken – wer im Vorbeigehen die Wand streift, soll nicht das Licht ausschalten.</p>
+      </div>
+    </details>
 
-    <h2 style="margin-top:1.6rem; font-size:1rem;">Status</h2>
-    <div id="calStatus" class="note" style="line-height:1.7;">– wird geladen –</div>
+    <details class="einstellungsblock">
+      <summary>
+        <span class="eb-titel">Panel</span>
+        <span class="eb-unter">Zustand und Pause</span>
+      </summary>
+      <div class="eb-inhalt">
+    <div id="panelStatus" class="note" style="line-height:1.7;">– wird geladen –</div>
     <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.8rem;">
-      <button id="calPauseBtn" style="max-width:260px;">30 Minuten pausieren</button>
-      <button id="calResumeBtn" style="max-width:260px;">Pause beenden</button>
-      <button id="calPreviewBtn" style="max-width:260px;">Treffer anzeigen</button>
+      <button id="panelPauseBtn" style="max-width:260px;">30 Minuten pausieren</button>
+      <button id="panelResumeBtn" style="max-width:260px;">Pause beenden</button>
     </div>
     <p class="hint-text">Pausieren hält den Bildschirm an, damit du das Gerät bedienen kannst –
       die Pause endet von selbst. Vor Ort geht das auch ohne Handy: fünfmal schnell in die
       <strong>obere linke Ecke</strong> des Displays tippen, oder <strong>Strg+Alt+W</strong>
       drücken, falls eine Tastatur angeschlossen ist.</p>
-    <div id="calPreview" class="result"></div>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Alarmanlage</span>
-        <span class="eb-unter">Woran das Panel erkennt, ob jemand da ist</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Die Alarmanlage weiß besser als jeder Kalender, ob jemand im Haus ist: Sie
-      steht im Regelfall auf <em>abwesend</em> und wird beim Betreten auf <em>zu Hause</em>
-      gestellt. Zwei Funktionen hängen daran – <strong>auf Ankunft warten</strong> und
-      <strong>bei Abwesenheit dimmen</strong>. Beide lassen sich einzeln ein- und ausschalten;
-      die Entität hier gilt für beide.</p>
-
-    <label>Entität der Anlage</label>
-    <input type="text" id="ankunftEntity" list="ankunftListe" placeholder="alarm_control_panel.haus">
-    <datalist id="ankunftListe"></datalist>
-    <p class="hint-text" id="ankunftZustandAnzeige"></p>
-
-    <label style="margin-top:1rem;">Zustände, die „zu Hause“ bedeuten (mit Komma getrennt)</label>
-    <input type="text" id="ankunftZuhause" placeholder="disarmed, armed_home">
-    <p class="hint-text">Groß- und Kleinschreibung spielt keine Rolle. Leer lassen setzt die
-      Vorgabe <code>disarmed, armed_home</code> zurück. Die Namen gehören der Anlage, nicht
-      dieser App – welche sie wirklich meldet, steht oben. Alles, was nicht in dieser Liste
-      steht, gilt als <em>abwesend</em>; ein <em>unbekannter</em> Zustand gilt als keines von
-      beidem und lässt alles beim Alten.</p>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Bei Abwesenheit dimmen</span>
-        <span class="eb-unter">Leeres Haus, dunkler Bildschirm</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Steht die Alarmanlage auf <em>abwesend</em>, ist niemand da, der hinsieht.
-      Der Bildschirm wird heruntergedimmt und fragt Home Assistant seltener – das spart Strom,
-      Bildschirmlebensdauer und Anfragen.</p>
-    <p class="note">Sobald sie wieder auf <em>zu Hause</em> steht, ist alles <strong>sofort</strong>
-      wieder hell und aktuell – nicht erst beim nächsten Takt. Die Alarmanlage selbst wird
-      nämlich weiterhin in Echtzeit beobachtet; nur alles andere wartet.</p>
-
-    <label><input type="checkbox" id="abwesendEnabled" style="width:auto; margin-right:0.5rem;">Bei Abwesenheit dimmen</label>
-
-    <div class="row2" style="margin-top:0.8rem;">
-      <div><label>Helligkeit (%)</label><input type="number" id="abwesendHelligkeit" min="5" max="100" step="5" value="20"></div>
-      <div><label>Abfrage alle (Sek.)</label><input type="number" id="abwesendSekunden" min="5" max="600" step="5" value="20"></div>
-    </div>
-    <p class="hint-text">Nicht unter 5 % Helligkeit: Ein Bildschirm, der sich gar nicht mehr
-      ablesen lässt, ist von einem kaputten nicht zu unterscheiden – und wer davorsteht, sucht
-      den Fehler am Gerät statt in diesem Feld.</p>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Auf Ankunft warten</span>
-        <span class="eb-unter">Dashboard erst, wenn wirklich jemand da ist</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Ganztägige Termine beginnen um <strong>00:00 Uhr</strong>. Ohne diese
-      Einstellung leuchtet die Wand ab Mitternacht gegen ein leeres Haus – und der
-      Ankunftsschirm hat seine Anzeigedauer aufgebraucht, bevor der erste Gast zur Tür
-      hereinkommt.</p>
-    <p class="note">Die Alarmanlage weiß es besser als der Kalender: Sie steht im Regelfall auf
-      <em>abwesend</em> und wird kurz vor dem Betreten auf <em>zu Hause</em> gestellt. Genau
-      dieser Wechsel gilt hier als Ankunft. Steht sie zu Terminbeginn schon auf <em>zu
-      Hause</em>, geht der Bildschirm sofort an.</p>
-
-    <label><input type="checkbox" id="ankunftEnabled" style="width:auto; margin-right:0.5rem;">Auf Ankunft warten</label>
-    <p class="hint-text">Entität und „zu Hause“-Zustände stehen weiter oben unter
-      <strong>Alarmanlage</strong>.</p>
-
-    <label style="margin-top:1rem;">Nach der Ankunft an bleiben (Min.)</label>
-    <input type="number" id="ankunftNachMinuten" min="0" max="1440" step="10" value="60" style="max-width:140px;">
-    <p class="hint-text">So lange nach der Ankunft bleibt der Bildschirm an, <strong>auch wenn
-      die Nachtsperre greift</strong>. Wer um halb eins nachts ankommt, soll begrüßt werden und
-      nicht vor einer schwarzen Wand stehen. 0 schaltet das ab – dann gilt die Nachtsperre
-      sofort wieder.</p>
-
-    <p class="hint-text">Ist der Zustand der Anlage nicht abrufbar (falsche Entität, Home
-      Assistant nicht erreichbar), wird <strong>nicht</strong> gewartet: Der Bildschirm geht
-      dann wie früher zu Terminbeginn an. Lieber einen halben Tag zu früh hell als einen ganzen
-      Termin lang dunkel.</p>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Ankunftsschirm</span>
-        <span class="eb-unter">Begrüssung zu Terminbeginn</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Eine Vollbildseite, die zu Beginn jedes Termins <strong>vor</strong> dem
-      Dashboard erscheint und ankommende Gäste begrüßt – mit bewegtem Hintergrund, Text und
-      einem Bild aus Home Assistant, typischerweise dem QR-Code fürs Gast-WLAN.</p>
-    <p class="note">Sie verschwindet, sobald jemand sie antippt, spätestens nach der eingestellten
-      Dauer. Einmal weggetippt bleibt sie für diesen Termin weg – auch wenn die App zwischendurch
-      neu startet. Beim nächsten Termin erscheint sie wieder.</p>
-
-    <label><input type="checkbox" id="welcomeEnabled" style="width:auto; margin-right:0.5rem;">Ankunftsschirm verwenden</label>
-
-    <label style="margin-top:1rem;">Überschrift</label>
-    <input type="text" id="welcomeHeading" placeholder="Herzlich **willkommen**">
-    <p class="hint-text">Mit <code>**…**</code> ausgezeichneter Text wird fett und rückt auf eine
-      eigene Zeile. <code>Herzlich **willkommen**</code> ergibt genau die Aufteilung aus dem
-      Entwurf: erste Zeile schlank, zweite kräftig.</p>
-
-    <label style="margin-top:1rem;">Text</label>
-    <textarea id="welcomeText" rows="3" placeholder="Schön, dass Sie da sind. Alles Wichtige zu Ihrem Aufenthalt finden Sie auf dem Ankunftszettel."></textarea>
-    <p class="hint-text">Markdown wird unterstützt: <code>**fett**</code>, <code>*kursiv*</code>,
-      <code>`Code`</code>, Aufzählungen mit <code>-</code>, Überschriften mit <code>#</code> und
-      Links als <code>[Text](https://…)</code>. Zeilenumbrüche werden übernommen. HTML wird
-      bewusst nicht ausgeführt, sondern als Text angezeigt.</p>
-
-    <label style="margin-top:1rem;">Bild</label>
-    <select id="welcomeImageEntity"><option value="">– kein Bild –</option></select>
-    <p class="hint-text">Auswahl aus deinen <code>image</code>-Entitäten. Liefert Home Assistant
-      das Bild gerade nicht, verschwindet der Bildbereich und der Text nimmt die ganze Fläche –
-      es erscheint kein Platzhalter.</p>
-
-    <label style="margin-top:1rem;">Zweites Bild (optional)</label>
-    <select id="welcomeImage2Quelle">
-      <option value="">– kein zweites Bild –</option>
-      <option value="entity">Entität aus Home Assistant</option>
-      <option value="upload">Bild hochladen</option>
-    </select>
-
-    <div id="welcomeImage2Entity" style="display:none; margin-top:0.6rem;">
-      <select id="welcomeImageEntity2"><option value="">– wird geladen –</option></select>
-    </div>
-
-    <div id="welcomeImage2Upload" style="display:none; margin-top:0.6rem;">
-      <div style="display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
-        <img id="welcomeImage2Preview" style="width:8vh; height:8vh; object-fit:contain; border-radius:8px; background:var(--bg); display:none;">
-        <input type="file" id="welcomeImage2File" accept="image/*" style="display:none;">
-        <button type="button" id="welcomeImage2Btn" style="width:auto;">Bild wählen</button>
-        <button type="button" id="welcomeImage2Remove" style="width:auto; background:#dc3545; display:none;">Entfernen</button>
-      </div>
-      <div id="welcomeImage2Result" class="result"></div>
-    </div>
-
-    <p class="hint-text">Ist ein zweites Bild gesetzt, dreht sich der Bildrahmen wie ein Würfel
-      zum nächsten Bild.</p>
-
-    <label style="margin-top:1rem;">Wechsel alle … Sekunden</label>
-    <input type="number" id="welcomeImageSeconds" min="2" step="1" value="8" style="max-width:140px;">
-
-    <label style="margin-top:1rem;">Bildunterschrift</label>
-    <input type="text" id="welcomeCaption" placeholder="Gast-WLAN">
-
-    <label style="margin-top:1rem;">Bildunterschrift zweites Bild</label>
-    <input type="text" id="welcomeCaption2" placeholder="wie oben">
-    <p class="hint-text">Leer lassen, wenn für beide Bilder dieselbe Unterschrift gelten soll.
-      Sie wechselt mitten in der Drehung, während keine der beiden Seiten lesbar ist.</p>
-
-    <label style="margin-top:1rem;">Anzeigedauer (Stunden)</label>
-    <input type="number" id="welcomeHours" min="0" step="1" value="5" style="max-width:140px;">
-    <p class="hint-text">0 bedeutet: bleibt stehen, bis jemand sie antippt.</p>
-
-
-    <button id="showWelcomeBtn" style="margin-top:0.6rem; background:#6c757d;">Ankunftsschirm jetzt wieder anzeigen</button>
-    <p class="hint-text">Zeigt ihn sofort auf dem Display – auch ohne laufenden Termin und auch,
-      wenn er ausgeschaltet ist. Er bleibt zehn Minuten stehen oder bis jemand ihn wegtippt.</p>
-    <div id="showWelcomeResult" class="result"></div>
-
-    <label style="display:flex; align-items:center; gap:0.6rem; margin-top:1.4rem;">
-      <input type="checkbox" id="welcomeTestmodus" style="width:auto; margin:0;">
-      Testmodus
-    </label>
-    <p class="hint-text">Solange der an ist, kommt der Ankunftsschirm nach jeder Ruhepause von
-      allein wieder – so oft man will, ohne laufenden Termin. Antippen blendet ihn aus, und
-      nach Ablauf der Zeit ist er wieder da.</p>
-    <label>Nach wie vielen Sekunden ohne Berührung</label>
-    <input type="number" id="welcomeTestSekunden" min="3" max="600" step="1" value="10" style="max-width:140px;">
-    <p class="hint-text"><strong>Nicht für den Dauerbetrieb.</strong> Solange der Testmodus läuft,
-      legt sich der Schirm immer wieder über das Dashboard – man kommt an die Karten nur in den
-      Pausen dazwischen. Nach dem Ausprobieren wieder abschalten.</p>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Ruheschirm</span>
-        <span class="eb-unter">Nicht den ganzen Termin durchleuchten</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Während eines Termins hält die Steuerung das Panel durchgehend an – damit
-      jeder, der vorbeigeht, sein Dashboard sieht. Die meiste Zeit geht aber niemand vorbei,
-      und dann steht eine helle Wand in einem leeren Raum.</p>
-    <p class="note">Mit dieser Einstellung legt sich das Dashboard nach einer Weile ohne
-      Bedienung hin: Der Bildschirm wird fast schwarz und zeigt nur noch eine große
-      Aufforderung. <strong>Ein Tipp, und das Dashboard ist sofort wieder da</strong> – mit
-      frischen Werten.</p>
-    <p class="note">Das ist <strong>nicht</strong> dasselbe wie „Panel aus". Außerhalb eines
-      Termins schaltet die Kalendersteuerung das Panel weiterhin ganz ab, wie gewohnt. Und
-      wenn gerade der Ankunfts- oder Abschiedsschirm steht oder die Nachtsperre greift, hält
-      sich der Ruheschirm heraus.</p>
-
-    <label><input type="checkbox" id="ruheEnabled" style="width:auto; margin-right:0.5rem;">Ruheschirm verwenden</label>
-
-    <label style="margin-top:1rem;">Hinlegen nach … Minuten ohne Bedienung</label>
-    <input type="number" id="ruheMinuten" min="1" max="120" step="1" placeholder="3" style="max-width:140px;">
-    <p class="hint-text">Ab Werk 3 Minuten. Lang genug, um ein Dashboard in Ruhe zu lesen, ohne
-      es anzufassen; kurz genug, dass die Wand nicht stundenlang leuchtet.</p>
-
-    <label style="margin-top:1rem;">Helligkeit im Ruhezustand (%)</label>
-    <input type="number" id="ruheHelligkeit" min="1" max="60" step="1" placeholder="12" style="max-width:140px;">
-    <p class="hint-text">Ab Werk 12&nbsp;%. Nicht ganz aus: Die Aufforderung muss lesbar bleiben,
-      sonst steht dort eine schwarze Scheibe und niemand weiß, dass ein Tipp genügt.</p>
-
-    <label style="margin-top:1rem;">Aufforderung</label>
-    <input type="text" id="ruheText" placeholder="Zum Anzeigen tippen">
-    <p class="hint-text">Leer lassen für „Zum Anzeigen tippen“.</p>
-      </div>
-    </details>
-
-    <details class="einstellungsblock">
-      <summary>
-        <span class="eb-titel">Abschiedsschirm</span>
-        <span class="eb-unter">Der letzte Tag, mit Karten</span>
-      </summary>
-      <div class="eb-inhalt">
-    <p class="note">Das Gegenstück zum Ankunftsschirm: eine Vollbildseite am <strong>letzten
-      Tag</strong> eines mehrtägigen Termins. Gleiche Bühne, gleiche wandernden Farbwolken –
-      aber <strong>kühl statt warm</strong>, damit man schon am Farbton sieht, ob heute jemand
-      kommt oder jemand fährt.</p>
-    <p class="note">Anders als der Ankunftsschirm zeigt er <strong>Karten</strong>: Ein
-      ankommender Gast wird begrüßt und soll nichts tun, ein abreisender hat eine Liste – Müll,
-      Fenster, Schlüssel – und will dabei sehen, wie das Wetter auf der Fahrt wird. Welche
-      Karten, bestimmst du unten: Er zeigt die eines Unterdashboards, das du im Karten-Editor
-      ganz normal einrichtest.</p>
-    <p class="note">Antippen des <strong>Textes links</strong> blendet ihn für diesen Termin
-      aus. Die Karten rechts bleiben bedienbar – wer das Licht ausmacht, will nicht, dass dabei
-      der halbe Schirm verschwindet.</p>
-
-    <label><input type="checkbox" id="abschiedEnabled" style="width:auto; margin-right:0.5rem;">Abschiedsschirm verwenden</label>
-
-    <label style="margin-top:1rem;">Überschrift</label>
-    <input type="text" id="abschiedHeading" placeholder="Gute **Heimreise**">
-    <p class="hint-text">Wie beim Ankunftsschirm: <code>**…**</code> wird fett und rückt auf eine
-      eigene Zeile.</p>
-
-    <label style="margin-top:1rem;">Text</label>
-    <textarea id="abschiedText" rows="4" placeholder="Bitte Fenster schließen, Müll mitnehmen und den Schlüssel in den Briefkasten."></textarea>
-    <p class="hint-text">Markdown wird unterstützt – Aufzählungen mit <code>-</code> sind hier
-      besonders praktisch, eine Checkliste liest sich schneller als ein Absatz.</p>
-
-    <label style="margin-top:1rem;">Karten von diesem Unterdashboard</label>
-    <select id="abschiedDashboard"><option value="">– keine Karten –</option></select>
-    <p class="hint-text">Leg dir unter <a href="dashboards.html">Unterdashboards</a> eines an
-      (z.&nbsp;B. „Abreise“) und richte es im <a href="editor.html">Karten-Editor</a> ein. Es
-      erscheint dann hier zur Auswahl. Vier bis sechs Karten sind gut – mehr wird auf dem Schirm
-      klein.</p>
-
-    <label style="margin-top:1rem;">Erst ab dieser Uhrzeit</label>
-    <input type="number" id="abschiedAbStunde" min="0" max="23" step="1" value="0" style="max-width:140px;">
-    <p class="hint-text">Volle Stunde, 0 = den ganzen letzten Tag. Wer um 7 einträgt, bekommt ihn
-      nicht schon um Mitternacht vorgesetzt.</p>
-
-    <label style="margin-top:1.2rem;"><input type="checkbox" id="abschiedTestmodus" style="width:auto; margin-right:0.5rem;">Zum Testen dauerhaft anzeigen</label>
-    <div id="abschiedTestmodusResult" class="result"></div>
-    <p class="hint-text">Solange dieser Schalter an ist, steht der Abschiedsschirm
-      <strong>dauerhaft</strong> auf dem Display – egal, was sonst eingestellt ist: kein Termin,
-      falscher Tag, Uhrzeitgrenze, weggetippt, und sogar der Schalter „Abschiedsschirm
-      verwenden“ darüber. Du sollst ja in Ruhe sehen, ob sich das Einschalten lohnt.</p>
-    <p class="hint-text">Er lässt sich dabei <strong>nicht wegtippen</strong>. Zurück in den
-      Normalbetrieb geht es nur hier, indem du den Schalter wieder ausschaltest. Wirkt sofort,
-      ohne Speichern – die anderen Felder oben brauchen weiterhin
-      <strong>„Alle Einstellungen speichern“</strong>, sonst siehst du den alten Text.</p>
       </div>
     </details>
 

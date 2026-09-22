@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Bildschirmschoner – Vorschau</title>
+<!--
+  Der Bildschirmschoner ueber einem angedeuteten Dashboard. Ohne Home Assistant, ohne
+  Electron, ohne Geraet -- einfach im Browser oeffnen.
+
+  Im Betrieb laeuft er NUR auf dem Panel (IM_PANEL), ist in der Live-Ansicht also nicht zu
+  sehen und dort auch nicht nachstellbar. Diese Probe baut ihn von Hand auf.
+
+  Wichtig beim Ansehen: Der Schoner ist hier wie im Betrieb der RUHEZUSTAND -- er liegt sofort,
+  und das Dashboard ist das, was man sich holt. Tippen weckt, danach legt er sich nach fuenf
+  Sekunden wieder hin (im Betrieb: Minuten).
+
+  Am besten bei 1280x854 ansehen, das ist die echte Panelgroesse.
+  ?hell   -- helles Design
+  ?bild   -- statt der Wolken ein Standbild (hier ein gemalter Verlauf als Platzhalter)
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  .raster { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr);
+    gap: 1.2vh; height: 100%; padding: 1.6vh; box-sizing: border-box; }
+  .stand { position: fixed; left: 1vh; bottom: 1vh; z-index: 99999;
+    font: 500 1.5vh system-ui, sans-serif; color: #9aa; background: rgba(0,0,0,0.55);
+    padding: 0.6vh 1.2vh; border-radius: 0.8vh; pointer-events: none; }
+</style>
+</head>
+<body class="wandanzeige">
+  <div class="raster" id="raster"></div>
+  <div class="bildschirmschoner" id="bildschirmschoner"></div>
+  <div class="stand" id="stand"></div>
+
+<script src="../../renderer/shared/dashboard-render.js"></script>
+<script src="../../renderer/shared/buehne.js"></script>
+<script src="../../renderer/shared/bildschirmschoner.js"></script>
+<script>
+const P = new URLSearchParams(location.search);
+DashboardRender.applyCustomTheme(DashboardRender.DEFAULT_THEME);
+if (P.has('hell')) document.body.classList.add('light-theme');
+
+const Z = (state, attributes = {}) => ({ state, attributes });
+
+// Ein bisschen Dashboard darunter, damit man sieht, was der Schoner zudeckt.
+const raster = document.getElementById('raster');
+[
+  ['sensor.aussen', 'temperature', Z('19.4', { friendly_name: 'Außen', unit_of_measurement: '°C' }), 2, 2],
+  ['clock:1', 'clock', null, 2, 2],
+  ['light.wohnen', 'light', Z('on', { friendly_name: 'Wohnzimmer', brightness: 180 }), 2, 2],
+  ['sensor.strom', 'sensor', Z('412', { friendly_name: 'Verbrauch', unit_of_measurement: 'W' }), 3, 2]
+].forEach(([id, typ, zustand, c, r]) => {
+  raster.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: c, rows: r }, {
+    editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: {}
+  }));
+});
+
+const schoner = new BildschirmschonerModul.Bildschirmschoner(
+  document.getElementById('bildschirmschoner'),
+  { beimWecken: () => { letzteBedienung = Date.now(); schoner.verbergen(); pruefen(); } }
+);
+
+// Die Karten des Schoners. Im Betrieb kommen sie aus einem Unterdashboard und bringen von
+// dort ihren Platz mit -- hier von Hand gesetzt, damit die Probe ohne Server auskommt.
+//
+// Belegt wie geplant: grosse Uhr oben, darunter Temperatur und Luftdruck, jeweils aussen
+// links und innen rechts. Die Raender bleiben frei, damit die Buehne zu sehen ist -- ein
+// Schoner, der randvoll mit Karten ist, ist ein zweites Dashboard.
+const verlauf = (basis, schwankung) => Array.from({ length: 30 }, (_, i) =>
+  ({ t: Date.now() - (30 - i) * 600000, v: basis + Math.sin(i / 4) * schwankung }));
+const flaeche = schoner.kartenFlaeche();
+[
+  ['clock:gross', 'clock', null, { cols: 4, rows: 2, x: 1, y: 0 }, null],
+  ['sensor.aussen_temperatur', 'temperature', Z('8.2', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 1, y: 2 }, verlauf(8, 2)],
+  ['sensor.wohnzimmer_temperatur', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), { cols: 2, rows: 2, x: 3, y: 2 }, verlauf(21, 0.4)],
+  ['sensor.aussen_luftdruck', 'pressure', Z('1011', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 1, y: 4 }, verlauf(1011, 2)],
+  ['sensor.wohnzimmer_luftdruck', 'pressure', Z('1013', { friendly_name: 'Luftdruck', unit_of_measurement: 'hPa' }), { cols: 2, rows: 2, x: 3, y: 4 }, verlauf(1013, 1)]
+].forEach(([id, typ, zustand, span, history]) => {
+  flaeche.appendChild(DashboardRender.buildCard(id, zustand, typ,
+    DashboardRender.schonerSpanne(span), {
+      editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: {}, history
+    }));
+});
+
+// Ein gemalter Verlauf als Platzhalter fuer "eigenes Bild". Im Betrieb liegt dort das
+// hochgeladene Foto; hier soll die Probe ohne Datei auskommen.
+function platzhalterBild() {
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 427;
+  const g = c.getContext('2d').createLinearGradient(0, 0, 640, 427);
+  g.addColorStop(0, '#1b2a4a'); g.addColorStop(0.55, '#3d2b52'); g.addColorStop(1, '#6b3550');
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 640, 427);
+  return c.toDataURL('image/png');
+}
+schoner.hintergrundSetzen(P.has('bild') ? 'bild' : 'wolken', P.has('bild') ? platzhalterBild() : '');
+
+// Hier absichtlich SEKUNDEN statt Minuten -- sonst wartet man beim Ansehen drei Minuten.
+const FRIST_SEKUNDEN = 5;
+// Wie im Betrieb: null heisst "noch nichts bedient", und dann liegt der Schoner sofort.
+let letzteBedienung = 0;
+
+document.addEventListener('pointerdown', () => { letzteBedienung = Date.now(); }, { capture: true });
+
+function pruefen() {
+  const schonen = BildschirmschonerModul.sollSchonen({
+    aktiviert: true, letzteBedienung, minuten: FRIST_SEKUNDEN / 60, jetzt: new Date()
+  });
+  if (schonen) schoner.zeigen(); else schoner.verbergen();
+  const rest = Math.max(0, FRIST_SEKUNDEN - Math.round((Date.now() - letzteBedienung) / 1000));
+  document.getElementById('stand').textContent = schonen
+    ? 'Schoner liegt (Ruhezustand) – tippen holt das Dashboard'
+    : 'Dashboard sichtbar, Schoner legt sich in ' + rest + ' s hin';
+}
+setInterval(pruefen, 250);
+pruefen();
+</script>
+</body>
+</html>

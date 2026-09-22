@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const crypto = require('crypto');
-const calendar = require('../control/calendar');
 const austausch = require('./dashboard-austausch');
 // Das Render-Modul kennt die Kartenarten. Es laesst sich in Node laden (dafuer wurde es
 // seinerzeit vom Fenster geloest) -- so gibt es die Liste nur EINMAL, statt sie hier ein
@@ -11,7 +10,6 @@ const austausch = require('./dashboard-austausch');
 const { CARD_TYPES } = require('../renderer/shared/dashboard-render.js');
 const { HaLive } = require('./ha-live');
 const { TorBeobachter } = require('../control/torzeiten');
-const { ZUHAUSE_VORGABE } = require('../renderer/shared/alarm.js');
 const { SCHWELLE_MINDESTENS } = require('../renderer/shared/akku.js');
 
 // Domains, die keine sinnvollen Wall-Display-Karten sind (Helfer/System-Entitaeten)
@@ -235,9 +233,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
           entity_id: s.entity_id,
           name: s.attributes.friendly_name || s.entity_id,
           domain: s.entity_id.split('.')[0],
-          // Damit die Einstellungsseite zeigen kann, was eine Entitaet GERADE meldet. Bei der
-          // Ankunftserkennung muss man die Zustandsnamen der eigenen Anlage eintragen, und die
-          // heissen nicht ueberall gleich -- ohne diese Anzeige raet man.
+          // Damit die Einstellungsseite zeigen kann, was eine Entitaet GERADE meldet -- wer
+          // eine Entitaet auswaehlt, sieht sonst nur eine Kennung und muss raten.
           zustand: s.state
         }));
       res.json({ ok: true, entities });
@@ -379,60 +376,22 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       nightEnd: store.get('nightEnd') || '06:30',
       nightModeForceOn: store.get('nightModeForceOn') || false,
       customTheme: store.get('customTheme') || null,
-      // Kalendersteuerung
-      calendarEnabled: store.get('calendarEnabled') || false,
-      calendarEntity: store.get('calendarEntity') || '',
-      calendarKeywords: store.get('calendarKeywords') || '',
-      calendarLeadMinutes: store.get('calendarLeadMinutes') || 0,
-      calendarTrailMinutes: store.get('calendarTrailMinutes') || 0,
-      // Ankunftsschirm
-      welcomeEnabled: store.get('welcomeEnabled') || false,
-      welcomeHeading: store.get('welcomeHeading') || 'Herzlich willkommen',
-      welcomeText: store.get('welcomeText') || '',
-      welcomeImageEntity: store.get('welcomeImageEntity') || '',
-      welcomeCaption: store.get('welcomeCaption') || 'Gast-WLAN',
-      welcomeCaption2: store.get('welcomeCaption2') || '',
-      welcomeImageEntity2: store.get('welcomeImageEntity2') || '',
-      // Das zweite Bild kann entweder aus Home Assistant kommen oder hochgeladen sein.
-      welcomeImage2Quelle: store.get('welcomeImage2Quelle') || '',
-      welcomeImage2Version: store.get('photoCardVersion:welcome-2') || 0,
-      welcomeImageSeconds: store.get('welcomeImageSeconds') === undefined ? 8 : store.get('welcomeImageSeconds'),
-      welcomeHours: store.get('welcomeHours') === undefined ? 5 : store.get('welcomeHours'),
-      welcomeDismissedFor: store.get('welcomeDismissedFor') || '',
-      // Abschiedsschirm: das Gegenstueck zum Ankunftsschirm, am letzten Tag.
-      abschiedEnabled: !!store.get('abschiedEnabled'),
-      abschiedHeading: store.get('abschiedHeading') || '',
-      abschiedText: store.get('abschiedText') || '',
-      abschiedDashboard: store.get('abschiedDashboard') || '',
-      abschiedAbStunde: store.get('abschiedAbStunde') === undefined ? 0 : store.get('abschiedAbStunde'),
-      abschiedDismissedFor: store.get('abschiedDismissedFor') || '',
-      abschiedTestmodus: !!store.get('abschiedTestmodus'),
-      // Ruheschirm: waehrend eines Termins nicht durchgehend leuchten.
-      ruheEnabled: !!store.get('ruheEnabled'),
-      ruheMinuten: store.get('ruheMinuten') === undefined ? 3 : store.get('ruheMinuten'),
-      ruheHelligkeit: store.get('ruheHelligkeit') === undefined ? 12 : store.get('ruheHelligkeit'),
-      ruheText: store.get('ruheText') || '',
-      welcomeErzwungenBis: store.get('welcomeErzwungenBis') || 0,
-      // Standard AN -- die Bewegung ist der sichtbare Teil des Designs.
+      // Bildschirmschoner: der Ruhezustand dieses Geraets. Das Dashboard ist die Ausnahme,
+      // nicht umgekehrt -- siehe renderer/shared/bildschirmschoner.js.
+      schonerEnabled: store.get('schonerEnabled') !== false,
+      schonerMinuten: store.get('schonerMinuten') === undefined ? 3 : store.get('schonerMinuten'),
+      schonerHelligkeit: store.get('schonerHelligkeit') === undefined ? 40 : store.get('schonerHelligkeit'),
+      schonerDashboard: store.get('schonerDashboard') || '',
+      // Hintergrund des Schoners: 'wolken' (bewegt, ab Werk) oder 'bild' (eigenes Standbild).
+      schonerHintergrund: store.get('schonerHintergrund') || 'wolken',
+      schonerBildVersion: store.get('photoCardVersion:schoner') || 0,
       // Wie gross das Panel wirklich ist -- der Editor zeichnet seine Arbeitsflaeche danach.
       panelGroesse: (typeof getPanelSize === 'function' ? getPanelSize() : null),
+      // Standard AN -- die Bewegung ist der sichtbare Teil des Designs.
       hintergrundBewegung: store.get('hintergrundBewegung') !== false,
       // 0 = gar nicht zurueck. Vorgabe 90 Sekunden: lang genug, um in Ruhe etwas
       // nachzusehen, kurz genug, dass die Wand nicht tagelang auf einem Unterdashboard steht.
       rueckkehrSekunden: store.get('rueckkehrSekunden') === undefined ? 90 : store.get('rueckkehrSekunden'),
-      welcomeTestmodus: !!store.get('welcomeTestmodus'),
-      welcomeTestSekunden: store.get('welcomeTestSekunden') || 10,
-      // Auf Ankunft warten: Die Termine sind ganztaegig, das Anzeigefenster begaenne also um
-      // Mitternacht. Siehe control/ankunft.js.
-      ankunftEnabled: !!store.get('ankunftEnabled'),
-      ankunftEntity: store.get('ankunftEntity') || '',
-      ankunftZuhause: store.get('ankunftZuhause') || ZUHAUSE_VORGABE,
-      ankunftNachMinuten: store.get('ankunftNachMinuten') === undefined ? 60 : store.get('ankunftNachMinuten'),
-      // Abwesenheit: dieselbe Entitaet, andere Frage. Steht die Anlage auf abwesend, schaut
-      // ohnehin niemand hin.
-      abwesendEnabled: !!store.get('abwesendEnabled'),
-      abwesendHelligkeit: store.get('abwesendHelligkeit') === undefined ? 20 : store.get('abwesendHelligkeit'),
-      abwesendSekunden: store.get('abwesendSekunden') === undefined ? 20 : store.get('abwesendSekunden'),
       desktopHintergrund: !!store.get('desktopHintergrund'),
       // Der Code selbst wird nie zurueckgegeben, nur ob einer gesetzt ist.
       hasSetupCode: !!store.get('setupCode')
@@ -447,15 +406,9 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       haUrl, token, title, entities, layout, sunEntity,
       notifyEntity, batteryThreshold, batterySound, batteryVolume, nightModeEnabled, nightStart, nightEnd, nightModeForceOn,
       notifyTitel, notifySekunden,
-      calendarEnabled, calendarEntity, calendarKeywords, calendarLeadMinutes, calendarTrailMinutes,
       setupCode,
-      welcomeEnabled, welcomeHeading, welcomeText, welcomeImageEntity, welcomeCaption, welcomeCaption2, welcomeHours,
-      welcomeImageEntity2, welcomeImageSeconds, welcomeImage2Quelle,
-      welcomeTestmodus, welcomeTestSekunden, hintergrundBewegung, rueckkehrSekunden,
-      ankunftEnabled, ankunftEntity, ankunftZuhause, ankunftNachMinuten,
-      abwesendEnabled, abwesendHelligkeit, abwesendSekunden, desktopHintergrund,
-      abschiedEnabled, abschiedHeading, abschiedText, abschiedDashboard, abschiedAbStunde,
-      ruheEnabled, ruheMinuten, ruheHelligkeit, ruheText
+      hintergrundBewegung, rueckkehrSekunden, desktopHintergrund,
+      schonerEnabled, schonerMinuten, schonerHelligkeit, schonerDashboard, schonerHintergrund
     } = req.body || {};
     const finalHaUrl = haUrl || store.get('haUrl');
     const finalToken = token || store.get('token');
@@ -485,73 +438,29 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (nightEnd !== undefined) store.set('nightEnd', nightEnd);
     if (nightModeForceOn !== undefined) store.set('nightModeForceOn', nightModeForceOn);
 
-    if (calendarEnabled !== undefined) store.set('calendarEnabled', !!calendarEnabled);
-    if (calendarEntity !== undefined) store.set('calendarEntity', String(calendarEntity || ''));
-    if (calendarKeywords !== undefined) store.set('calendarKeywords', String(calendarKeywords || ''));
-    if (calendarLeadMinutes !== undefined) store.set('calendarLeadMinutes', Math.max(0, Number(calendarLeadMinutes) || 0));
-    if (calendarTrailMinutes !== undefined) store.set('calendarTrailMinutes', Math.max(0, Number(calendarTrailMinutes) || 0));
-
-    if (welcomeEnabled !== undefined) store.set('welcomeEnabled', !!welcomeEnabled);
-    if (welcomeHeading !== undefined) store.set('welcomeHeading', String(welcomeHeading || ''));
-    if (welcomeText !== undefined) store.set('welcomeText', String(welcomeText || ''));
-    if (welcomeImageEntity !== undefined) store.set('welcomeImageEntity', String(welcomeImageEntity || ''));
-    if (welcomeCaption !== undefined) store.set('welcomeCaption', String(welcomeCaption || ''));
-    if (welcomeCaption2 !== undefined) store.set('welcomeCaption2', String(welcomeCaption2 || ''));
-    if (welcomeHours !== undefined) store.set('welcomeHours', Math.max(0, Number(welcomeHours) || 0));
-    if (welcomeImageEntity2 !== undefined) store.set('welcomeImageEntity2', String(welcomeImageEntity2 || ''));
-    if (welcomeImage2Quelle !== undefined) store.set('welcomeImage2Quelle', String(welcomeImage2Quelle || ''));
     if (hintergrundBewegung !== undefined) store.set('hintergrundBewegung', !!hintergrundBewegung);
     if (rueckkehrSekunden !== undefined) {
       store.set('rueckkehrSekunden', Math.max(0, Math.min(3600, parseInt(rueckkehrSekunden, 10) || 0)));
     }
-    if (welcomeTestmodus !== undefined) store.set('welcomeTestmodus', !!welcomeTestmodus);
-    if (welcomeTestSekunden !== undefined) {
-      // Unter drei Sekunden liesse sich der Schirm nicht mehr wegtippen -- er waere
-      // sofort wieder da, und der Testmodus liesse sich nur noch von aussen abschalten.
-      const v = Math.max(3, Math.min(600, parseInt(welcomeTestSekunden, 10) || 10));
-      store.set('welcomeTestSekunden', v);
-    }
-    if (welcomeImageSeconds !== undefined) store.set('welcomeImageSeconds', Math.max(2, Number(welcomeImageSeconds) || 8));
-
-    if (ankunftEnabled !== undefined) store.set('ankunftEnabled', !!ankunftEnabled);
-    if (ankunftEntity !== undefined) store.set('ankunftEntity', String(ankunftEntity || '').trim());
-    if (ankunftZuhause !== undefined) {
-      // Ein leeres Feld heisst "Vorgabe", nicht "keine Zustaende". Ohne das waere die Liste
-      // leer, nichts gaelte je als "zu Hause", und das Panel bliebe den ganzen Termin dunkel.
-      const roh = String(ankunftZuhause || '').trim();
-      store.set('ankunftZuhause', roh || ZUHAUSE_VORGABE);
-    }
-    if (ankunftNachMinuten !== undefined) {
-      store.set('ankunftNachMinuten', Math.max(0, Math.min(1440, parseInt(ankunftNachMinuten, 10) || 0)));
-    }
-
-    if (abwesendEnabled !== undefined) store.set('abwesendEnabled', !!abwesendEnabled);
-    if (abwesendHelligkeit !== undefined) {
-      // Nicht bis null: Ein Bildschirm, der sich nicht mehr ablesen laesst, ist von einem
-      // kaputten nicht zu unterscheiden -- und wer davorsteht, sucht den Fehler woanders.
-      store.set('abwesendHelligkeit', Math.max(5, Math.min(100, parseInt(abwesendHelligkeit, 10) || 20)));
-    }
-    if (abwesendSekunden !== undefined) {
-      store.set('abwesendSekunden', Math.max(5, Math.min(600, parseInt(abwesendSekunden, 10) || 20)));
-    }
     if (desktopHintergrund !== undefined) store.set('desktopHintergrund', !!desktopHintergrund);
 
-    if (abschiedEnabled !== undefined) store.set('abschiedEnabled', !!abschiedEnabled);
-    if (abschiedHeading !== undefined) store.set('abschiedHeading', String(abschiedHeading || ''));
-    if (abschiedText !== undefined) store.set('abschiedText', String(abschiedText || ''));
-    if (abschiedDashboard !== undefined) store.set('abschiedDashboard', String(abschiedDashboard || '').trim());
-    if (ruheEnabled !== undefined) store.set('ruheEnabled', !!ruheEnabled);
-    if (ruheText !== undefined) store.set('ruheText', String(ruheText || ''));
-    if (ruheMinuten !== undefined) {
-      store.set('ruheMinuten', Math.max(1, Math.min(120, parseInt(ruheMinuten, 10) || 3)));
+    if (schonerEnabled !== undefined) store.set('schonerEnabled', !!schonerEnabled);
+    if (schonerMinuten !== undefined) {
+      // Unter einer Minute koennte man das Dashboard nicht mehr lesen, ohne es dauernd
+      // anzufassen -- der Schoner laege wieder, bevor man die erste Zahl gefunden hat.
+      store.set('schonerMinuten', Math.max(1, Math.min(240, parseInt(schonerMinuten, 10) || 3)));
     }
-    if (ruheHelligkeit !== undefined) {
-      // Nach unten begrenzt: Bei 0 waere die Aufforderung unsichtbar, und niemand wuesste,
-      // dass ein Tipp genuegt -- die Wand saehe schlicht kaputt aus.
-      store.set('ruheHelligkeit', Math.max(1, Math.min(60, parseInt(ruheHelligkeit, 10) || 12)));
+    if (schonerHelligkeit !== undefined) {
+      // Nicht bis null: Ein Bildschirm, der sich nicht mehr ablesen laesst, ist von einem
+      // kaputten nicht zu unterscheiden -- und wer davorsteht, sucht den Fehler woanders.
+      store.set('schonerHelligkeit', Math.max(5, Math.min(100, parseInt(schonerHelligkeit, 10) || 40)));
     }
-    if (abschiedAbStunde !== undefined) {
-      store.set('abschiedAbStunde', Math.max(0, Math.min(23, parseInt(abschiedAbStunde, 10) || 0)));
+    if (schonerDashboard !== undefined) store.set('schonerDashboard', String(schonerDashboard || '').trim());
+    if (schonerHintergrund !== undefined) {
+      // Nur zwei bekannte Werte. Ein Tippfehler darf nicht zu einer Flaeche fuehren, die
+      // weder Wolken noch Bild zeigt -- das saehe auf der Wand aus wie ein Absturz.
+      const art = String(schonerHintergrund || '').trim();
+      store.set('schonerHintergrund', art === 'bild' ? 'bild' : 'wolken');
     }
 
     // Mindestlaenge, damit das Feld nicht versehentlich leer bleibt und der Schutz still ausfaellt.
@@ -574,108 +483,27 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (onConfigSaved) onConfigSaved();
   });
 
-  // Der Ankunftsschirm wurde weggetippt. Gespeichert wird der Beginn des Anzeigefensters, zu dem
-  // er gehoerte -- damit ueberdauert das Wegtippen einen Neustart, und beim naechsten Termin
-  // erscheint der Schirm wieder. Bewusst eine eigene Route: ueber /api/config wuerde das daran
-  // haengende onConfigSaved() die Ansicht neu laden.
-  app.post('/api/welcome/dismiss', (req, res) => {
-    const start = String((req.body && req.body.windowStart) || '');
-    // Ein leerer Fensterbeginn ist erlaubt: Beim erzwungenen Anzeigen laeuft kein Termin, und
-    // trotzdem muss sich der Schirm wegtippen lassen.
-    if (start) store.set('welcomeDismissedFor', start);
-    store.delete('welcomeErzwungenBis');
-    res.json({ ok: true });
-  });
-
-  // Wie lange ein erzwungener ANKUNFTSschirm stehen bleibt, wenn ihn niemand wegtippt. Lang
-  // genug, um vom Einstellungsgeraet zur Wand zu gehen und hinzusehen; kurz genug, dass ein
-  // vergessener Knopfdruck das Panel nicht den halben Tag blockiert.
+  // --- Panelsteuerung -------------------------------------------------------------------------
   //
-  // Der Abschiedsschirm hat bewusst KEINE Frist, sondern einen Schalter: Er zeigt Karten, und
-  // ob die an der Wand taugen, sieht man nicht in zehn Minuten.
-  const WELCOME_ERZWUNGEN_MS = 10 * 60 * 1000;
+  // Frueher hiessen diese Routen /api/calendar/*. Der Kalender ist weg, die Pause ist geblieben:
+  // Sie ist der Weg, nachts ans Geraet zu kommen, ohne davorzustehen und zu warten.
 
-  // Weggetippt gilt fuer genau diesen Termin -- wie beim Ankunftsschirm. Eigene Route aus
-  // demselben Grund: ueber /api/config wuerde onConfigSaved() die Ansicht neu laden, und der
-  // Schirm waere sofort wieder da.
-  app.post('/api/abschied/dismiss', (req, res) => {
-    const start = String((req.body && req.body.windowStart) || '');
-    if (start) store.set('abschiedDismissedFor', start);
-    res.json({ ok: true });
-  });
-
-  // Der Testmodus: Abschiedsschirm dauerhaft anzeigen, unabhaengig von Termin, Tag und
-  // Uhrzeit -- und er bleibt, bis dieser Schalter wieder umgelegt wird.
-  //
-  // Eigene Route statt eines Feldes in /api/config: Ueber /api/config laeuft
-  // onConfigSaved(), und das laedt die Anzeige neu. Zum Ansehen eines Schirms die ganze
-  // Wand neu zu laden ist unnoetig -- und beim Ausschalten wuerde der Neuaufbau verdecken,
-  // ob der Schirm von selbst verschwindet.
-  app.post('/api/abschied/testmodus', (req, res) => {
-    const an = !!(req.body && req.body.an);
-    store.set('abschiedTestmodus', an);
-    // Beim Einschalten den Verworfen-Zustand raeumen: Sonst haengt am selben Schirm noch die
-    // Entscheidung von gestern, und nach dem Ausschalten bliebe er unerwartet weg.
-    if (an) store.delete('abschiedDismissedFor');
-    res.json({ ok: true, an });
-  });
-
-  // Ankunftsschirm jetzt zeigen.
-  //
-  // Vorher wurde hier nur der Verworfen-Zustand geloescht -- und das reichte nicht: Ohne
-  // laufenden Termin gibt es kein Anzeigefenster, und der Schirm erschien trotzdem nicht.
-  // Wer ihn ansehen will, hat aber in aller Regel gerade keinen Termin laufen. Jetzt wird ein
-  // Zeitfenster gesetzt, das die Anzeige unabhaengig vom Kalender erzwingt.
-  app.post('/api/welcome/show', (req, res) => {
-    store.delete('welcomeDismissedFor');
-    store.set('welcomeErzwungenBis', Date.now() + WELCOME_ERZWUNGEN_MS);
-    res.json({ ok: true, minuten: Math.round(WELCOME_ERZWUNGEN_MS / 60000) });
-  });
-
-  // --- Kalendersteuerung ----------------------------------------------------------------------
-
-  app.get('/api/calendar/state', (req, res) => {
+  app.get('/api/panel/state', (req, res) => {
     if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
     res.json({ ok: true, state: controller.getState() });
   });
 
   // Der zweite von drei Wegen in die Pause -- dieser hier ist der, den man vom Handy aus findet.
-  app.post('/api/calendar/pause', (req, res) => {
+  app.post('/api/panel/pause', (req, res) => {
     if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
     const pausedUntil = controller.pause(req.body && req.body.minutes);
     res.json({ ok: true, pausedUntil, state: controller.getState() });
   });
 
-  app.post('/api/calendar/resume', (req, res) => {
+  app.post('/api/panel/resume', (req, res) => {
     if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
     controller.resume();
     res.json({ ok: true, state: controller.getState() });
-  });
-
-  // Vorschau: welche Treffer liefert die aktuelle Keyword-Eingabe? Erlaubt es, die Einstellung
-  // zu pruefen, ohne auf den naechsten Termin warten zu muessen.
-  app.get('/api/calendar/preview', async (req, res) => {
-    const haUrl = store.get('haUrl');
-    const token = store.get('token');
-    const entity = req.query.entity || store.get('calendarEntity');
-    const keywords = req.query.keywords !== undefined ? req.query.keywords : store.get('calendarKeywords');
-    if (!haUrl || !token) return res.json({ ok: false, error: 'Erst Verbindung einrichten' });
-    if (!entity) return res.json({ ok: false, error: 'Kein Kalender ausgewählt' });
-    try {
-      const windows = await calendar.fetchWindows({
-        haUrl, token, entity, keywords,
-        leadMinutes: Number(req.query.lead) || 0,
-        trailMinutes: Number(req.query.trail) || 0
-      });
-      res.json({
-        ok: true,
-        windows: windows.slice(0, 20).map(w => ({
-          title: w.title, start: w.start.toISOString(), end: w.end.toISOString()
-        }))
-      });
-    } catch (err) {
-      res.json({ ok: false, error: String(err.message || err) });
-    }
   });
 
   // Proxy fuer das Dashboard: aktuelle Zustaende ausgewaehlter Entitaeten
@@ -1070,9 +898,6 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   const haLive = new HaLive({
     getConfig: () => ({ haUrl: store.get('haUrl'), token: store.get('token') }),
     onAenderung: (aenderung) => {
-      // Die Steuerung im Hauptprozess wartet unter Umstaenden genau auf diese eine Entitaet:
-      // Stellt jemand die Alarmanlage auf "zu Hause", ist das die Ankunft, und das Panel soll
-      // in dem Moment angehen -- nicht erst beim naechsten Abruf zwei Minuten spaeter.
       // Tore: aus den Zustandswechseln die Fahrzeiten lernen.
       try {
         if (torBeobachter.gemeldet(aenderung.entity_id, aenderung.state)) {
@@ -1080,9 +905,6 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         }
       } catch (e) { /* eine misslungene Messung darf die Anzeige nicht aufhalten */ }
 
-      if (controller && controller.zustandGemeldet) {
-        try { controller.zustandGemeldet(aenderung.entity_id, aenderung.state); } catch (e) { /* die Anzeige darf davon nichts merken */ }
-      }
       const zeile = 'data: ' + JSON.stringify(aenderung) + '\n\n';
       for (const res of liveHoerer) {
         try { res.write(zeile); } catch (e) { liveHoerer.delete(res); }
