@@ -88,7 +88,7 @@ jobs:
       - name: Quellcode-Archiv anhaengen
         shell: bash
         run: |
-          git archive --format=zip --prefix=italien-wall-exe/ HEAD -o italien-wall-exe.zip
-          gh release upload "$TAG" italien-wall-exe.zip --clobber
+          git archive --format=zip --prefix=augsburg-wall-exe/ HEAD -o augsburg-wall-exe.zip
+          gh release upload "$TAG" augsburg-wall-exe.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

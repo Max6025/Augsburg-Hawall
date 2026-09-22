@@ -1,8 +1,8 @@
 {
-  "name": "italien-wall-display",
-  "productName": "Italien Wall Display",
-  "version": "1.45.0",
-  "description": "Wall Display fuer Home Assistant, dessen Anzeige ueber Kalendereintraege gesteuert wird: laeuft ein passender Termin, zeigt das Geraet das Dashboard, sonst ist das Panel wirklich aus",
+  "name": "augsburg-wall-display",
+  "productName": "Augsburg Wall Display",
+  "version": "1.0.0",
+  "description": "Wall Display fuer Home Assistant im Dauerbetrieb: im Ruhezustand liegt der Bildschirmschoner, ein Tipp holt das Dashboard, nachts ist das Panel wirklich aus",
   "main": "main.js",
   "author": "Max",
   "license": "MIT",
@@ -24,8 +24,8 @@
     "electron-builder": "26.15.7"
   },
   "build": {
-    "appId": "de.max.italienwalldisplay",
-    "productName": "Italien Wall Display",
+    "appId": "de.max.augsburgwalldisplay",
+    "productName": "Augsburg Wall Display",
     "asar": true,
     "files": [
       "main.js",
@@ -52,13 +52,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "differentialPackage": true,
-      "artifactName": "Italien-Wall-Display-Setup-${version}.${ext}"
+      "artifactName": "Augsburg-Wall-Display-Setup-${version}.${ext}"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "Max6025",
-        "repo": "Italien-Hawall",
+        "repo": "Augsburg-Hawall",
         "vPrefixedTagName": false,
         "releaseType": "release"
       }
