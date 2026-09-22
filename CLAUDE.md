@@ -103,9 +103,13 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   negativen Int32, und der Aufruf schlägt dann ohne Fehlermeldung fehl); die Anforderung hängt
   am **Thread** des PowerShell-Prozesses und wird deshalb regelmäßig bekräftigt; und es gibt
   **keinen Rückfall** auf einen Einzelaufruf — ein eigener Prozess wäre sofort wieder weg, und
-  mit ihm die Anforderung. Auf **Akku** wird bewusst nicht wachgehalten: Ein Gerät, das die
-  Nacht durchwacht, ist am Morgen leer, und ein leeres Gerät ist schlechter erreichbar als ein
-  schlafendes. Prüfen lässt sich das nur am Gerät, mit `powercfg /requests`.
+  mit ihm die Anforderung. Wachgehalten wird **ohne Ausnahme, auch im Akkubetrieb**.
+  Das ist eine ausdrückliche Entscheidung und kein Versehen: Ein Wandpanel, dessen
+  Weboberfläche nachts nicht antwortet, ist von einem kaputten nicht zu unterscheiden — und wer
+  dann nachsehen will, muss hingehen. Der Preis steht im Protokoll (`akkuWarnen()` meldet den
+  Wechsel, nicht jeden Takt): Am Akku entlädt sich das Gerät deutlich schneller. Wer das ändert,
+  ändert die Entscheidung, nicht heimlich die Bedingung. Prüfen lässt sich das Ganze nur am
+  Gerät, mit `powercfg /requests` — unter **SYSTEM** muss die App stehen, nicht „Keine".
 - **Eine Funktion, die niemand aufruft, ist dasselbe wie eine, die es nicht gibt.** In 1.0.4
   steckte `setSystemWach()` vollständig in `panel.js` — der Aufruf im Controller fehlte, weil
   ein abgebrochenes Bearbeitungsskript `controller.js` und `main.js` nie geschrieben hatte.

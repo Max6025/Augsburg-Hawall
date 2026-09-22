@@ -18,9 +18,11 @@
 // Panel aus ist, soll der Setup-Server erreichbar bleiben und die Steuerung weiterlaufen.
 // Siehe den Kopf von control/panel.js: Ohne das geht mit dem Panel das ganze Geraet schlafen.
 //
-// Die einzige Ausnahme ist der Akkubetrieb. Ein Wandpanel gehoert ans Netz; haengt es doch
-// einmal am Akku, ist ein Geraet, das die Nacht durchwacht, am Morgen leer -- und ein leeres
-// Geraet ist schlechter erreichbar als ein schlafendes.
+// OHNE Ausnahme, auch im Akkubetrieb. Das war eine ausdrueckliche Entscheidung: Ein
+// Wandpanel, dessen Weboberflaeche nachts nicht antwortet, ist von einem kaputten nicht zu
+// unterscheiden -- und wer dann nachsehen will, muss hingehen. Der Preis steht im Protokoll:
+// Am Akku entlaedt sich das Geraet dadurch deutlich schneller. Wer das aendern will, aendert
+// die Entscheidung, nicht heimlich die Bedingung.
 //
 // Was dadurch NICHT hierher gehoert: Der Bildschirmschoner. Er ist ein Overlay und schaltet
 // nichts am Panel (siehe renderer/shared/bildschirmschoner.js und CONTEXT.md). Ueber das Panel
@@ -73,6 +75,7 @@ class Controller {
     // Ohne Angabe wird Netzbetrieb angenommen: Das ist der Normalfall fuer ein Wandpanel, und
     // faelschlich wach zu bleiben ist harmloser als ein Geraet, das nachts unerreichbar ist.
     this.aufAkku = aufAkku || (() => false);
+    this.zuletztAufAkku = null;   // nur fuer die Warnung, nicht fuer die Entscheidung
     this.onStateChange = onStateChange || (() => {});
     this.logFile = logDir ? path.join(logDir, 'panelsteuerung.log') : null;
     this.panel = new Panel((level, msg) => this.log(level, msg));
@@ -161,16 +164,32 @@ class Controller {
 
     this.panel.setPower(decision.on);
 
-    // Unabhaengig davon, ob das Panel an oder aus ist: Das System soll wach bleiben, solange
-    // Strom da ist. Fehler hier duerfen die Panelsteuerung nicht aufhalten.
-    let akku = false;
-    try { akku = !!this.aufAkku(); } catch (e) { akku = false; }
-    this.panel.setSystemWach(!akku);
+    // Unabhaengig davon, ob das Panel an oder aus ist -- und unabhaengig vom Akku.
+    this.panel.setSystemWach(true);
+    this.akkuWarnen();
 
     const next = this.buildState(decision, now);
     const changed = !this.state || JSON.stringify(this.state) !== JSON.stringify(next);
     this.state = next;
     if (changed) this.onStateChange(next);
+  }
+
+  /**
+   * Einmal warnen, wenn das Geraet am Akku haengt und trotzdem wachgehalten wird.
+   *
+   * Nicht bei jedem Takt: Das waere alle fuenf Sekunden eine Zeile, und ein zugemuelltes
+   * Protokoll ist genau dann wertlos, wenn man es braucht. Gewarnt wird beim WECHSEL --
+   * damit man spaeter sieht, seit wann das Geraet ohne Strom durchwacht.
+   */
+  akkuWarnen() {
+    let akku = false;
+    try { akku = !!this.aufAkku(); } catch (e) { return; }
+    if (akku === this.zuletztAufAkku) return;
+    this.zuletztAufAkku = akku;
+    this.log('warn', akku
+      ? 'Akkubetrieb -- das System wird trotzdem wachgehalten, damit die Weboberflaeche '
+        + 'erreichbar bleibt. Der Akku entlaedt sich dadurch deutlich schneller.'
+      : 'Wieder am Netz.');
   }
 
   pause(minutes) {

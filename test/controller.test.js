@@ -221,29 +221,38 @@ function controllerMitAkku(aufAkku) {
   return c;
 }
 
-test('Jeder Takt sagt dem Panel, ob das System wach bleiben soll', () => {
+test('Jeder Takt sagt dem Panel, dass das System wach bleiben soll', () => {
   const c = controllerMitAkku(() => false);
   c.tick();
-  assert.deepStrictEqual(c.gesendet, [true], 'am Netz muss wachgehalten werden');
+  assert.deepStrictEqual(c.gesendet, [true]);
 });
 
-test('Auf Akku wird NICHT wachgehalten', () => {
-  // Ein Geraet, das die Nacht durchwacht, ist am Morgen leer -- und ein leeres Geraet ist
-  // schlechter erreichbar als ein schlafendes.
+test('Auch auf Akku wird wachgehalten -- die Weboberflaeche geht vor', () => {
+  // Ausdrueckliche Entscheidung: Ein Panel, dessen Weboberflaeche nachts nicht antwortet, ist
+  // von einem kaputten nicht zu unterscheiden. Der Preis (schnellere Entladung) steht im
+  // Protokoll. Wer das aendert, aendert die Entscheidung -- nicht heimlich die Bedingung.
   const c = controllerMitAkku(() => true);
   c.tick();
-  assert.deepStrictEqual(c.gesendet, [false]);
+  assert.deepStrictEqual(c.gesendet, [true]);
 });
 
-test('Ohne Angabe gilt Netzbetrieb', () => {
-  const c = new Controller({ store: fakeStore(IMMER_NACHT), logDir: null });
+test('Der Akkubetrieb wird gewarnt, aber nur beim Wechsel', () => {
+  let akku = true;
+  const zeilen = [];
+  const c = new Controller({ store: fakeStore(IMMER_NACHT), logDir: null, aufAkku: () => akku });
   c.panel.supported = true;
   c.panel.setPower = () => true;
-  const gesendet = [];
-  c.panel.setSystemWach = (w) => { gesendet.push(w); return true; };
+  c.panel.setSystemWach = () => true;
+  c.log = (stufe, text) => zeilen.push(stufe + ': ' + text);
   c.startedAt = Date.now() - 2 * GRACE_MS;
+
+  c.tick(); c.tick(); c.tick();
+  const warnungen = zeilen.filter(z => z.includes('Akkubetrieb'));
+  assert.strictEqual(warnungen.length, 1, 'alle fuenf Sekunden eine Zeile waere Laerm');
+
+  akku = false;
   c.tick();
-  assert.deepStrictEqual(gesendet, [true], 'im Zweifel wach halten, nicht schlafen lassen');
+  assert.ok(zeilen.some(z => z.includes('Wieder am Netz')), 'die Rueckkehr gehoert auch ins Protokoll');
 });
 
 test('Ein fehlerhafter Akku-Geber haelt die Panelsteuerung nicht auf', () => {
