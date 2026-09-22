@@ -13,6 +13,15 @@
 // Kalender, ob ueberhaupt jemand im Haus ist, und der Normalzustand war "Panel aus". Hier wohnt
 // jemand: Der Normalzustand ist "Panel an", und die einzige Ausnahme ist die Nacht.
 //
+// Ein Zweites haengt hier: ob das SYSTEM wach bleiben soll, waehrend das Panel dunkel ist.
+// Das ist nicht dieselbe Frage wie "Panel an?", sondern die Gegenfrage -- gerade WEIL das
+// Panel aus ist, soll der Setup-Server erreichbar bleiben und die Steuerung weiterlaufen.
+// Siehe den Kopf von control/panel.js: Ohne das geht mit dem Panel das ganze Geraet schlafen.
+//
+// Die einzige Ausnahme ist der Akkubetrieb. Ein Wandpanel gehoert ans Netz; haengt es doch
+// einmal am Akku, ist ein Geraet, das die Nacht durchwacht, am Morgen leer -- und ein leeres
+// Geraet ist schlechter erreichbar als ein schlafendes.
+//
 // Was dadurch NICHT hierher gehoert: Der Bildschirmschoner. Er ist ein Overlay und schaltet
 // nichts am Panel (siehe renderer/shared/bildschirmschoner.js und CONTEXT.md). Ueber das Panel
 // entscheidet allein decide() -- zwei Stellen, die dasselbe schalten, widersprechen einander
@@ -58,9 +67,12 @@ class Controller {
    * Wird aus dem Hauptprozess hereingereicht (powerMonitor.getSystemIdleTime), damit dieses
    * Modul ohne Electron testbar bleibt. Ohne Angabe verhaelt es sich, als sei nie jemand da.
    */
-  constructor({ store, logDir, onStateChange, idleSeconds }) {
+  constructor({ store, logDir, onStateChange, idleSeconds, aufAkku }) {
     this.store = store;
     this.idleSeconds = idleSeconds || (() => Infinity);
+    // Ohne Angabe wird Netzbetrieb angenommen: Das ist der Normalfall fuer ein Wandpanel, und
+    // faelschlich wach zu bleiben ist harmloser als ein Geraet, das nachts unerreichbar ist.
+    this.aufAkku = aufAkku || (() => false);
     this.onStateChange = onStateChange || (() => {});
     this.logFile = logDir ? path.join(logDir, 'panelsteuerung.log') : null;
     this.panel = new Panel((level, msg) => this.log(level, msg));
@@ -148,6 +160,12 @@ class Controller {
     }
 
     this.panel.setPower(decision.on);
+
+    // Unabhaengig davon, ob das Panel an oder aus ist: Das System soll wach bleiben, solange
+    // Strom da ist. Fehler hier duerfen die Panelsteuerung nicht aufhalten.
+    let akku = false;
+    try { akku = !!this.aufAkku(); } catch (e) { akku = false; }
+    this.panel.setSystemWach(!akku);
 
     const next = this.buildState(decision, now);
     const changed = !this.state || JSON.stringify(this.state) !== JSON.stringify(next);

@@ -106,6 +106,14 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   mit ihm die Anforderung. Auf **Akku** wird bewusst nicht wachgehalten: Ein Gerät, das die
   Nacht durchwacht, ist am Morgen leer, und ein leeres Gerät ist schlechter erreichbar als ein
   schlafendes. Prüfen lässt sich das nur am Gerät, mit `powercfg /requests`.
+- **Eine Funktion, die niemand aufruft, ist dasselbe wie eine, die es nicht gibt.** In 1.0.4
+  steckte `setSystemWach()` vollständig in `panel.js` — der Aufruf im Controller fehlte, weil
+  ein abgebrochenes Bearbeitungsskript `controller.js` und `main.js` nie geschrieben hatte.
+  Alle Tests waren grün, denn jeder prüfte nur seine eigene Hälfte; am Gerät zeigte
+  `powercfg /requests` weiterhin „SYSTEM: Keine". Wo zwei Dateien zusammenspielen müssen,
+  gehört ein Test auf die **Verbindung** dazu, nicht nur auf die Teile — `test/controller.test.js`
+  prüft deshalb, dass jeder Takt `setSystemWach()` ruft, und liest `main.js` daraufhin, ob der
+  Akkuzustand überhaupt hereingereicht wird.
 - **Modern Standby frisst die Anwendung.** Gemessen am 2026-09-09 auf dem Surface Go: eine
   Minute nach dem Abschalten des Panels ging das *Gerät* in Connected Standby (Kernel-Power 506),
   die App war weg, der Setup-Server unerreichbar, und der Wächter lief nicht mehr.

@@ -358,6 +358,11 @@ app.whenReady().then(() => {
     // Bildschirm bloss dunkel geschaltet war.
     idleSeconds: () => {
       try { return powerMonitor.getSystemIdleTime(); } catch (e) { return Infinity; }
+    },
+    // Am Netz oder am Akku? Davon haengt ab, ob das System wachgehalten wird -- siehe
+    // control/panel.js. Im Zweifel Netzbetrieb annehmen.
+    aufAkku: () => {
+      try { return powerMonitor.isOnBatteryPower(); } catch (e) { return false; }
     }
   });
   controller.start();

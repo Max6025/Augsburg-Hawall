@@ -201,3 +201,74 @@ test('Der Test-Schalter wirkt nur bei eingeschalteter Nachtsperre', () => {
   c.startedAt = mittags.getTime() - 2 * GRACE_MS;
   assert.strictEqual(c.decide(mittags).on, true);
 });
+
+// --- Das System wach halten ---------------------------------------------------------------
+//
+// Anlass, und zwar ein peinlicher: Version 1.0.4 enthielt setSystemWach() in panel.js, aber
+// NICHT den Aufruf im Controller -- ein abgebrochenes Bearbeitungsskript hatte die Datei nie
+// geschrieben. Alle Tests waren gruen, weil keiner die Verbindung zwischen beiden prueft, und
+// am Geraet zeigte `powercfg /requests` weiterhin "SYSTEM: Keine".
+//
+// Eine Funktion, die niemand aufruft, ist dasselbe wie eine, die es nicht gibt.
+
+function controllerMitAkku(aufAkku) {
+  const c = new Controller({ store: fakeStore(IMMER_NACHT), logDir: null, aufAkku });
+  c.panel.supported = true;
+  c.panel.setPower = () => true;          // kein PowerShell im Test
+  c.gesendet = [];
+  c.panel.setSystemWach = (w) => { c.gesendet.push(w); return true; };
+  c.startedAt = Date.now() - 2 * GRACE_MS;
+  return c;
+}
+
+test('Jeder Takt sagt dem Panel, ob das System wach bleiben soll', () => {
+  const c = controllerMitAkku(() => false);
+  c.tick();
+  assert.deepStrictEqual(c.gesendet, [true], 'am Netz muss wachgehalten werden');
+});
+
+test('Auf Akku wird NICHT wachgehalten', () => {
+  // Ein Geraet, das die Nacht durchwacht, ist am Morgen leer -- und ein leeres Geraet ist
+  // schlechter erreichbar als ein schlafendes.
+  const c = controllerMitAkku(() => true);
+  c.tick();
+  assert.deepStrictEqual(c.gesendet, [false]);
+});
+
+test('Ohne Angabe gilt Netzbetrieb', () => {
+  const c = new Controller({ store: fakeStore(IMMER_NACHT), logDir: null });
+  c.panel.supported = true;
+  c.panel.setPower = () => true;
+  const gesendet = [];
+  c.panel.setSystemWach = (w) => { gesendet.push(w); return true; };
+  c.startedAt = Date.now() - 2 * GRACE_MS;
+  c.tick();
+  assert.deepStrictEqual(gesendet, [true], 'im Zweifel wach halten, nicht schlafen lassen');
+});
+
+test('Ein fehlerhafter Akku-Geber haelt die Panelsteuerung nicht auf', () => {
+  const c = controllerMitAkku(() => { throw new Error('kaputt'); });
+  c.tick();
+  assert.deepStrictEqual(c.gesendet, [true]);
+  assert.strictEqual(c.state.panelOn, false, 'die Nachtsperre gilt weiterhin');
+});
+
+test('Der Zustand meldet, ob das System wachgehalten wird', () => {
+  // Damit die Einrichtungsseite erklaeren kann, warum das Geraet nachts nicht antwortet.
+  const c = controllerMitAkku(() => true);
+  c.panel.systemWach = false;
+  c.tick();
+  assert.strictEqual(c.state.systemWach, false);
+  c.panel.systemWach = true;
+  c.tick();
+  assert.strictEqual(c.state.systemWach, true);
+});
+
+test('main.js reicht den Akkuzustand ueberhaupt herein', () => {
+  // Der Controller kann noch so richtig rechnen -- ohne diesen Geber bekaeme er nie mit,
+  // dass das Geraet am Akku haengt. Genau diese Anbindung fehlte in 1.0.4.
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /aufAkku:/, 'main.js uebergibt kein aufAkku an den Controller');
+  assert.match(main, /isOnBatteryPower/, 'main.js fragt den Akkuzustand nicht ab');
+});
