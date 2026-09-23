@@ -153,7 +153,8 @@ async function refreshPanelStatus() {
       + 'auch Wachhalten kann das nicht verhindern. Abschalten lässt es sich vor Ort: fünfmal in '
       + 'die obere linke Ecke tippen und die Rückfrage von Windows am Panel bestätigen.');
   } else if (s.modernStandbyAus === true) {
-    lines.push('Modern Standby ist abgeschaltet – wirksam ab dem nächsten Neustart des Geräts.');
+    lines.push('Modern Standby ist abgeschaltet und die Schlaf-Zeitgeber stehen auf „nie" – '
+      + '<strong>wirksam ab dem nächsten Neustart</strong> des Geräts.');
   }
   if (s.letzteSchlafluecke) {
     const minuten = Math.round(s.letzteSchlafluecke.dauerMs / 60000);

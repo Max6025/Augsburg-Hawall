@@ -241,7 +241,13 @@ function wartungVorOrt(minuten) {
   if (!controller) return { ok: false };
   const r = controller.wartung(minuten);
   if (modernStandbyZustand === false) {
-    modernStandby.abschalten({ store, log: (s, m) => controller.log(s, m) })
+    modernStandby.abschalten({
+      store,
+      log: (s, m) => controller.log(s, m),
+      // Dasselbe Verzeichnis wie das Lautstaerke-Skript und das Protokoll: Was die App
+      // ablegt, liegt an einer Stelle, und ein Installer raeumt es mit weg.
+      verzeichnis: app.getPath('userData')
+    })
       .then(() => modernStandbyNachlesen())
       .then(() => controller.refresh())
       .catch(() => {});

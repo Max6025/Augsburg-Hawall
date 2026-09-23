@@ -26,15 +26,59 @@ test('Der Lesebefehl fragt genau den Wert ab, um den es geht', () => {
   assert.ok(!ms.LESE_BEFEHL.includes('\n'), 'ein Befehl, eine Zeile');
 });
 
-test('Der Schreibbefehl fordert erhoehte Rechte an und wartet auf die Antwort', () => {
+test('Der Aufruf fordert erhoehte Rechte an und wartet auf die Antwort', () => {
   // `-Verb RunAs` ist die Rueckfrage. Ohne `-Wait` kaeme der Aufruf zurueck, bevor jemand sie
   // beantwortet hat -- und das Nachlesen danach waere wertlos.
-  assert.ok(ms.SCHREIB_BEFEHL.includes('-Verb RunAs'), 'ohne Elevation kein HKLM');
-  assert.ok(ms.SCHREIB_BEFEHL.includes('-Wait'), 'sonst ist das Nachlesen ein Ratespiel');
-  assert.ok(ms.SCHREIB_BEFEHL.includes('/d','0') || ms.SCHREIB_BEFEHL.includes("'0'"));
-  assert.ok(ms.SCHREIB_BEFEHL.includes('REG_DWORD'));
-  assert.ok(!ms.SCHREIB_BEFEHL.includes('\n'), 'kein mehrzeiliger Befehl -- siehe panel.js');
-  assert.ok(!ms.SCHREIB_BEFEHL.includes("@'"), 'kein Here-String');
+  const b = ms.befehl('C:\\Pfad mit Leerzeichen\\wall-standby.cmd');
+  assert.ok(b.includes('-Verb RunAs'), 'ohne Elevation kein HKLM');
+  assert.ok(b.includes('-Wait'), 'sonst ist das Nachlesen ein Ratespiel');
+  assert.ok(!b.includes('\n'), 'ein Befehl, eine Zeile');
+  assert.ok(!b.includes("@'"), 'kein Here-String');
+  // Keine verschachtelten Anfuehrungszeichen: Der Pfad steht in EINER einfach bequoteten
+  // Zeichenkette, die Umleitung liegt in der Datei. Alles andere kam durch drei Ebenen
+  // Maskierung zerlegt an.
+  assert.ok(!b.includes('""'), 'doppelte Anfuehrungszeichen zerlegen den Pfad');
+  assert.ok(b.includes("'C:\\Pfad mit Leerzeichen\\wall-standby.cmd'"), 'Pfad mit Leerzeichen muss halten');
+});
+
+test('Ein einfaches Anfuehrungszeichen im Pfad bricht den Befehl nicht auf', () => {
+  const b = ms.befehl("C:\\Max's Panel\\wall-standby.cmd");
+  assert.ok(b.includes("Max''s Panel"), 'in PowerShell wird es verdoppelt');
+});
+
+test('Das Skript setzt Modern Standby UND die Schlaf-Zeitgeber', () => {
+  // Ohne Modern Standby greift der klassische Schlaf-Timer, ab Werk oft dreissig Minuten --
+  // dann ist der Webserver aus einem anderen Grund weg, und von aussen sieht es gleich aus.
+  assert.ok(ms.SKRIPT.includes('PlatformAoAcOverride'));
+  assert.ok(ms.SKRIPT.includes('REG_DWORD'));
+  for (const was of ['standby-timeout-ac', 'standby-timeout-dc',
+    'hibernate-timeout-ac', 'hibernate-timeout-dc',
+    'monitor-timeout-ac', 'monitor-timeout-dc']) {
+    assert.ok(ms.SKRIPT.includes(was), `${was} fehlt -- das Geraet schlaeft weiter ein`);
+  }
+  assert.ok(ms.SKRIPT.includes('powercfg /a'), 'zum Nachlesen, welcher Schlafzustand danach gilt');
+});
+
+test('Vor jeder Umleitung steht ein Leerzeichen', () => {
+  // Der teuerste cmd-Fallstrick in dieser Datei: Eine Ziffer unmittelbar vor `>` liest cmd als
+  // DATEIKENNUNG. `standby-timeout-ac 0>> datei` leitet die Standardeingabe um und verschluckt
+  // die 0 -- powercfg bekaeme seinen Wert nie, der Zeitgeber blieb stehen, und zwar ohne
+  // Fehlermeldung. Genau die Art Fehlschlag, die dieses Projekt zweimal teuer bezahlt hat.
+  //
+  // `2>&1` ist dagegen eine echte Kennungs-Umleitung und ausgenommen.
+  const zeilen = ms.SKRIPT.split(/\r?\n/);
+  for (const zeile of zeilen) {
+    const ohneStderr = zeile.replace(/2>&1/g, '');
+    assert.ok(!/[0-9]>/.test(ohneStderr),
+      `Ziffer direkt vor > -- cmd liest das als Dateikennung: ${zeile}`);
+  }
+});
+
+test('Das Skript legt sein Protokoll neben sich ab', () => {
+  // Der elevierte Prozess ist ein eigener; seine Ausgabe erreicht die App nur ueber diese
+  // Datei. Ohne sie waere ein fehlgeschlagener powercfg-Aufruf unsichtbar.
+  assert.ok(ms.SKRIPT.includes('%~dp0' + ms.LOG_NAME), 'das Protokoll gehoert neben das Skript');
+  assert.ok(ms.SKRIPT.includes('>> "%LOG%" 2>&1'), 'auch die Fehlerausgabe muss hinein');
 });
 
 test('Auf Nicht-Windows wird nichts versucht', async () => {

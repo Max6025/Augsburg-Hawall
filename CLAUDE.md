@@ -150,6 +150,13 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   1. **Wirksam erst nach einem Neustart** des Geräts. Bis dahin ändert sich nichts, und der
      Registrierungswert allein ist kein Beweis, dass es hilft — das sagt erst eine ausbleibende
      Taktlücke.
+  1a. **Damit ist es NICHT erledigt: der klassische Schlaf-Timer.** Ohne Modern Standby greift
+     der Schlaf-Timer des Energieschemas, ab Werk oft 30 Minuten — dann ist der Webserver aus
+     einem anderen Grund weg, und von außen sieht das genauso aus wie vorher. `modernstandby.js`
+     setzt deshalb im **selben** elevierten Schritt `standby-timeout`, `hibernate-timeout` und
+     `monitor-timeout` auf „nie", für Netz und Akku. Der Bildschirm-Zeitgeber gehört dazu, weil
+     über das Panel `decide()` entscheidet und nicht Windows — bisher hat `panel.js` jede Minute
+     gegen Windows angeschaltet, und das ist ein Wettlauf, kein Entwurf.
   2. **Der Wert liegt unter HKLM und braucht erhöhte Rechte.** Der Installer ist eine
      Per-User-Installation und läuft unelevert; er versucht es (`build/installer.nsh`), kommt aber
      normalerweise nicht durch. `perMachine: true` ist der falsche Ausweg — dann bräuchte **jedes**
@@ -159,7 +166,19 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
      wer ihn aus dem Netz auslöst, hat ihn nicht vor sich. Der Merker wird **vor** dem Versuch
      gesetzt — einmal fragen ist Hilfe, bei jeder Wartung fragen ist Nötigung.
   3. **Dem Rückgabewert nicht glauben, nachlesen.** Ein abgelehnter UAC-Dialog endet ohne
-     Fehlermeldung — „kein Fehler" hieße dann fälschlich „erledigt".
+     Fehlermeldung — „kein Fehler" hieße dann fälschlich „erledigt". Und die Ausgabe des
+     elevierten Prozesses erreicht die App nur über eine **Protokolldatei**, die das Skript
+     selbst schreibt; ohne sie wäre ein fehlgeschlagener `powercfg`-Aufruf unsichtbar.
+  4. **Leerzeichen vor jeder cmd-Umleitung.** Eine Ziffer unmittelbar vor `>` liest cmd.exe als
+     **Dateikennung**: `standby-timeout-ac 0>> datei` leitet die *Standardeingabe* um und
+     verschluckt die `0` — `powercfg` bekäme seinen Wert nie, der Zeitgeber bliebe stehen, und
+     zwar ohne Fehlermeldung. `2>&1` ist dagegen eine echte Kennungs-Umleitung. Ein Test prüft
+     jede Zeile des Skripts darauf.
+  5. **Die Befehle stehen in einer Datei, nicht im Aufruf.** Dasselbe Urteil wie bei
+     `lautstaerke.js`: Durch drei Ebenen (`exec` → `powershell -Command` → `-ArgumentList` →
+     `cmd /c`) müssten Anführungszeichen dreifach maskiert werden, und PowerShell liest `""` in
+     einer *einfach* bequoteten Zeichenkette als zwei Zeichen statt als ein maskiertes — der
+     Pfad käme zerlegt an. In der Datei gibt es die Ebenen nicht.
 
   **Und die Vorlage hat dafür keine Lösung**, auch wenn es so aussieht: Italien-Hawall hat
   denselben `prevent-app-suspension`-Aufruf mit dem Vorbehalt im Kommentar, kein `powercfg`, kein
@@ -727,7 +746,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-341 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+345 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

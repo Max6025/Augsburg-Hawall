@@ -12,6 +12,23 @@
 // `PlatformAoAcOverride = 0` schaltet Modern Standby ab. Das Geraet nutzt danach klassischen
 // S3-Schlaf, und damit greift die Wach-Anforderung wieder. WIRKSAM ERST NACH EINEM NEUSTART.
 //
+// --- Und damit ist es NICHT erledigt -------------------------------------------------------
+//
+// Ohne Modern Standby greift der KLASSISCHE Schlaf-Timer des Energieschemas, ab Werk oft
+// dreissig Minuten. Dann ist der Webserver aus einem anderen Grund weg, und von aussen sieht
+// das genauso aus wie vorher. Deshalb werden im selben Zug die Zeitgeber abgeschaltet:
+// Standby, Ruhezustand und der Bildschirm-Zeitgeber.
+//
+// Der Bildschirm-Zeitgeber gehoert mit dazu, obwohl er nichts am Erreichbarsein aendert: Ueber
+// das Panel entscheidet in diesem Projekt `decide()`, und zwei Stellen, die dasselbe schalten,
+// widersprechen einander spaetestens beim naechsten Sonderfall. Bisher hat `panel.js` gegen
+// Windows angeschaltet (ON_REASSERT_MS, jede Minute) -- das ist ein Wettlauf, kein Entwurf.
+//
+// Was dabei NICHT passiert: Der Bildschirm bleibt weiter wirklich abschaltbar. Die Nachtsperre
+// schaltet ihn ueber SC_MONITORPOWER aus, die Hintergrundbeleuchtung ist dann dunkel, und eine
+// Beruehrung weckt ihn -- das ist der Unterschied zu "Helligkeit auf 0", das dieses Projekt
+// ausdruecklich nicht will (siehe ADR 0002).
+//
 // --- Warum das hier steht und nicht im Installer ---------------------------------------------
 //
 // Der Wert liegt unter HKLM und braucht erhoehte Rechte. Der Installer ist eine
@@ -29,6 +46,9 @@
 // Dialog aufgedraengt; stattdessen sagt die Einrichtungsseite, dass es noch aussteht.
 
 const { exec } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const SCHLUESSEL = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Power';
 const WERT = 'PlatformAoAcOverride';
@@ -40,13 +60,75 @@ const VERSUCH_STAND = 1;
 // damit aus. Der Registrierungswert sagt immerhin, ob die Umstellung vorgenommen wurde.
 const LESE_BEFEHL = `reg query "${SCHLUESSEL}" /v ${WERT}`;
 
-// Der elevierte Schreibzugriff, als EINZEILIGER PowerShell-Befehl. Kein Here-String, aus
-// demselben Grund wie in control/panel.js. `-Wait`, damit der Rueckgabewert etwas bedeutet:
-// Ohne das kaeme der Aufruf zurueck, bevor der Benutzer den UAC-Dialog beantwortet hat.
-const SCHREIB_BEFEHL = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "'
-  + 'Start-Process -FilePath reg.exe -ArgumentList '
-  + ["add", SCHLUESSEL, "/v", WERT, "/t", "REG_DWORD", "/d", "0", "/f"].map(a => `'${a}'`).join(',')
-  + ' -Verb RunAs -WindowStyle Hidden -Wait"';
+// Alles, was erhoehte Rechte braucht, in EINER Datei -- und damit hinter EINEM UAC-Dialog.
+//
+// Warum eine Datei und nicht ein Aufruf: Es sind sieben Befehle. Als verschachtelte
+// Zeichenkette durch `exec` -> `powershell -Command` -> `Start-Process -ArgumentList` ->
+// `cmd /c` muessten Anfuehrungszeichen dreifach maskiert werden, und der Backslash im
+// Registrierungspfad kommt dabei irgendwo abhanden. Dasselbe Urteil wie in
+// control/lautstaerke.js: Bleibt die Datei.
+//
+// Die Ausgabe wird MITGESCHRIEBEN. Der elevierte Prozess ist ein eigener; seine Ausgabe
+// erreicht uns nicht. Ohne das Protokoll waere ein fehlgeschlagener Befehl unsichtbar -- und
+// unsichtbare Fehlschlaege sind in diesem Projekt schon zweimal teuer geworden.
+const LOG_NAME = 'wall-standby.log';
+
+// Die Umleitung steht IN der Datei, nicht im Aufruf. `%~dp0` ist ihr eigenes Verzeichnis.
+//
+// Das ist nicht Geschmack: Stuende die Umleitung im Aufruf, muessten ihre Anfuehrungszeichen
+// durch drei Ebenen (`exec` -> `powershell -Command "..."` -> `-ArgumentList '...'` -> `cmd /c`)
+// maskiert werden. PowerShell liest `""` in einer EINFACH bequoteten Zeichenkette als zwei
+// Zeichen, nicht als ein maskiertes -- der Pfad kaeme zerlegt an. In der Datei gibt es die
+// Ebenen nicht, und `Start-Process` braucht ueberhaupt keine Argumente.
+const SKRIPT = [
+  '@echo off',
+  'set LOG=%~dp0' + LOG_NAME,
+  // LEERZEICHEN VOR JEDEM `>`. Eine Ziffer unmittelbar davor liest cmd als Dateikennung:
+  // `standby-timeout-ac 0>> datei` leitet die STANDARDEINGABE um und verschluckt die 0 --
+  // powercfg bekaeme seinen Wert nie und der Zeitgeber blieb stehen, ohne Fehlermeldung.
+  // Dasselbe bei `%TIME%>`: Die Uhrzeit endet auf eine Ziffer.
+  'echo Umstellung %DATE% %TIME% > "%LOG%"',
+  `reg add "${SCHLUESSEL}" /v ${WERT} /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1`,
+  // Kein `&&` zwischen den Zeilen: Ein fehlgeschlagener Befehl soll die folgenden nicht
+  // aufhalten. Sechs von sieben sind besser als einer.
+  'powercfg /change standby-timeout-ac 0 >> "%LOG%" 2>&1',
+  'powercfg /change standby-timeout-dc 0 >> "%LOG%" 2>&1',
+  'powercfg /change hibernate-timeout-ac 0 >> "%LOG%" 2>&1',
+  'powercfg /change hibernate-timeout-dc 0 >> "%LOG%" 2>&1',
+  'powercfg /change monitor-timeout-ac 0 >> "%LOG%" 2>&1',
+  'powercfg /change monitor-timeout-dc 0 >> "%LOG%" 2>&1',
+  // Zum Nachlesen, welcher Schlafzustand das Geraet danach ueberhaupt kennt. Vor dem Neustart
+  // steht hier noch der alte Stand -- das ist kein Fehler, sondern der Beweis, dass es einen
+  // Neustart braucht.
+  'powercfg /a >> "%LOG%" 2>&1',
+  'exit /b 0',
+  ''
+].join('\r\n');
+
+let skriptPfad = null;
+
+function skriptAblegen(verzeichnis) {
+  if (skriptPfad && fs.existsSync(skriptPfad)) return skriptPfad;
+  const ziel = path.join(verzeichnis || os.tmpdir(), 'wall-standby.cmd');
+  fs.writeFileSync(ziel, SKRIPT, 'utf8');
+  skriptPfad = ziel;
+  return ziel;
+}
+
+/**
+ * Baut den Aufruf. Ausgelagert, damit er sich ohne Windows pruefen laesst.
+ *
+ * `-Verb RunAs` ist die Rueckfrage, `-Wait` macht den Rueckgabewert erst bedeutungsvoll: Ohne
+ * das kaeme der Aufruf zurueck, bevor jemand den UAC-Dialog beantwortet hat.
+ */
+function befehl(pfad) {
+  // Ein einfaches Anfuehrungszeichen im Pfad wuerde die PowerShell-Zeichenkette aufbrechen.
+  // In einem Windows-Benutzerpfad ist das unwahrscheinlich und kostet eine Zeile.
+  const sicher = String(pfad).replace(/'/g, "''");
+  return 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "'
+    + `Start-Process -FilePath '${sicher}' -Verb RunAs -WindowStyle Hidden -Wait`
+    + '"';
+}
 
 /**
  * Ist Modern Standby abgeschaltet?
@@ -74,11 +156,12 @@ function lesen() {
 }
 
 /**
- * Einmal versuchen, Modern Standby abzuschalten. Erzeugt EINEN UAC-Dialog auf dem Panel.
+ * Einmal versuchen, Modern Standby und die Schlaf-Zeitgeber abzuschalten. Erzeugt EINEN
+ * UAC-Dialog auf dem Panel.
  *
  * Nur aufrufen, wenn jemand vor dem Geraet steht -- siehe den Kopf dieser Datei.
  */
-function abschalten({ store, log } = {}) {
+function abschalten({ store, log, verzeichnis } = {}) {
   // Der Merker zuerst, vor der Plattformpruefung: "schon gefragt" gilt unabhaengig davon, auf
   // welchem System das laeuft -- und nur so ist der Riegel ohne Windows pruefbar.
   if (store && Number(store.get(MERKER)) >= VERSUCH_STAND) {
@@ -89,12 +172,32 @@ function abschalten({ store, log } = {}) {
   // den Dialog ab, soll beim naechsten Antippen nicht wieder ein Dialog aufspringen. Einmal
   // fragen ist Hilfe, bei jeder Wartung fragen ist Noetigung.
   if (store) store.set(MERKER, VERSUCH_STAND);
-  if (log) log('info', 'Modern Standby wird abgeschaltet -- dafuer kommt einmal die Rueckfrage von Windows.');
+  if (log) log('info', 'Modern Standby und die Schlaf-Zeitgeber werden abgeschaltet -- dafuer '
+    + 'kommt einmal die Rueckfrage von Windows.');
+
+  let pfad, logPfad;
+  try {
+    pfad = skriptAblegen(verzeichnis);
+    logPfad = path.join(path.dirname(pfad), LOG_NAME);
+  } catch (e) {
+    if (log) log('warn', `Standby-Skript konnte nicht abgelegt werden: ${e.message}`);
+    return Promise.resolve({ ok: false, grund: e.message });
+  }
+
   return new Promise((fertig) => {
-    exec(SCHREIB_BEFEHL, { timeout: 120000 }, async (err, stdout, stderr) => {
+    exec(befehl(pfad), { timeout: 120000 }, async (err, stdout, stderr) => {
+      // Die Ausgabe des elevierten Prozesses erreicht uns nur ueber diese Datei. Ohne sie
+      // waere ein fehlgeschlagener powercfg-Aufruf unsichtbar.
+      let ausgabe = '';
+      try { ausgabe = fs.readFileSync(logPfad, 'utf8').trim(); } catch (e) { /* nichts da */ }
+      if (ausgabe && log) {
+        for (const zeile of ausgabe.split(/\r?\n/).filter(z => z.trim())) {
+          log('info', `Standby-Umstellung: ${zeile.trim()}`);
+        }
+      }
       if (err) {
         const grund = String(stderr || err.message || '').trim().split('\n')[0];
-        if (log) log('warn', `Modern Standby konnte nicht abgeschaltet werden: ${grund}`);
+        if (log) log('warn', `Umstellung fehlgeschlagen: ${grund}`);
         return fertig({ ok: false, grund });
       }
       // Nicht dem Rueckgabewert glauben, sondern nachlesen: Ein abgelehnter UAC-Dialog endet
@@ -102,7 +205,8 @@ function abschalten({ store, log } = {}) {
       const aus = await lesen();
       if (log) {
         log(aus ? 'info' : 'warn', aus
-          ? 'Modern Standby ist abgeschaltet -- wirksam nach dem naechsten Neustart des Geraets.'
+          ? 'Modern Standby ist abgeschaltet und die Schlaf-Zeitgeber stehen auf "nie" -- '
+            + 'wirksam nach dem naechsten Neustart des Geraets.'
           : 'Modern Standby ist weiterhin aktiv (Rueckfrage abgelehnt oder ohne Wirkung).');
       }
       fertig({ ok: aus === true, grund: aus ? null : 'Wert nicht gesetzt' });
@@ -110,4 +214,4 @@ function abschalten({ store, log } = {}) {
   });
 }
 
-module.exports = { lesen, abschalten, LESE_BEFEHL, SCHREIB_BEFEHL, SCHLUESSEL, WERT, MERKER };
+module.exports = { lesen, abschalten, befehl, skriptAblegen, LESE_BEFEHL, SKRIPT, SCHLUESSEL, WERT, MERKER, LOG_NAME };

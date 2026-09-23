@@ -54,6 +54,24 @@ nicht am Code. Das ist am 2026-09-23 vormittags zu klären.
    den Zustand. Das ist der Beweis dafür, dass das Gerät geschlafen hat; `powercfg /requests`
    verlangt erhöhte Rechte und fällt aus.
 
+## Nachtrag 1.0.9: der klassische Schlaf-Timer
+
+Der Nutzer hat die Anforderung am 2026-09-23 vormittags geschärft: Der Bildschirm soll
+**wirklich** abschalten (ausdrücklich nicht „Helligkeit auf 0"), das Gerät soll erreichbar
+bleiben, und eine Berührung soll ihn wieder anschalten.
+
+Dabei fiel eine Lücke in 1.0.8 auf: Ohne Modern Standby greift der **klassische** Schlaf-Timer
+des Energieschemas, ab Werk oft 30 Minuten. Dann ist der Webserver aus einem anderen Grund weg,
+und von außen sieht es identisch aus. `modernstandby.js` setzt deshalb im selben elevierten
+Schritt `standby-timeout`, `hibernate-timeout` und `monitor-timeout` auf „nie" (Netz und Akku)
+und schreibt `powercfg /a` ins Protokoll, damit nachlesbar ist, welcher Schlafzustand danach
+gilt.
+
+Zwei Fallstricke dabei, beide im Code kommentiert und durch Tests abgedeckt:
+Leerzeichen vor jeder cmd-Umleitung (`0>>` wäre eine Umleitung der Standardeingabe und würde
+den Wert verschlucken), und die Befehle stehen in einer Datei statt im Aufruf, weil sonst
+Anführungszeichen durch drei Ebenen maskiert werden müssten.
+
 ## Offen — zuerst zu klären
 
 - [ ] **Hing das Gerät wirklich am Strom?** Auf dem Screenshot von 00:2x meldet die
@@ -68,8 +86,10 @@ nicht am Code. Das ist am 2026-09-23 vormittags zu klären.
 - [ ] `panelsteuerung.log` vom Gerät ansehen: Kam „System kann NICHT wachgehalten werden"? Kam
       „Panel-Steuerung meldet keine Bereitschaft"? Gibt es Taktlücken? (Die beiden ersten
       Meldungen gibt es erst ab der neuen Version.)
-- [ ] Nach dem Update und einem Neustart: Bleibt die Einrichtungsseite nachts erreichbar, und
-      bleiben Taktlücken aus?
+- [ ] Nach dem Update, der einmaligen Rückfrage und einem Neustart: Bleibt die
+      Einrichtungsseite nachts erreichbar, bleiben Taktlücken aus, und weckt eine Berührung den
+      Bildschirm? Im Protokoll steht nach der Umstellung auch die Ausgabe von `powercfg /a` --
+      dort muss ein echter Standby-Zustand stehen und nicht nur „S0 Low Power Idle".
 - [ ] Wenn Modern Standby aus ist und das Gerät trotzdem schläft: Als nächstes die Variante
       „Helligkeit 0 statt Panel aus" vorlegen — sie umgeht das Problem grundsätzlich, kippt aber
       ADR 0002 und gehört deshalb dem Nutzer vorgelegt.
