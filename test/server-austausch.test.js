@@ -23,7 +23,14 @@ function fakeStore(values = {}) {
   };
 }
 
-const PORT = 18789;
+// Der Port wird vom Betriebssystem vergeben, nicht festgelegt.
+//
+// Vorher stand hier 18789 -- und genau den belegte auf dem Entwicklungsrechner ein fremder
+// Dienst. Der Test scheiterte dann mit EADDRINUSE, also mit einer Meldung, die aussieht wie ein
+// kaputter Server und keiner ist: Er war nie gestartet. In der CI fiel das nie auf, weil dort
+// nichts anderes laeuft. Ein Test, der einen bestimmten Port BRAUCHT, prueft nebenbei die
+// Portbelegung des Rechners mit, auf dem er laeuft, und das ist nicht seine Aufgabe.
+let PORT = 0;
 const HAUPT = [
   { entity_id: 'light.kueche', card_type: 'light', x: 0, y: 0, cols: 1, rows: 1, settings: { name: 'Decke' } },
   { entity_id: 'sensor.temp', card_type: 'temperature', x: 1, y: 0, cols: 2, rows: 1 }
@@ -38,14 +45,20 @@ let server;
 let live;
 const U = (pfad) => `http://127.0.0.1:${PORT}${pfad}`;
 
-test.before(() => {
+test.before(async () => {
   const app = startServer({
-    port: PORT, store, onConfigSaved: () => {}, getLocalIps: () => [],
+    port: 0, store, onConfigSaved: () => {}, getLocalIps: () => [],
     updater: { currentVersion: '1.0.0', getState: () => ({}), check: () => {}, install: () => {} },
     controller: null
   });
   server = app.server;
   live = app.haLive;
+  // `listen()` gibt den Server sofort zurueck, aber `address()` bleibt null, bis er wirklich
+  // lauscht. Ohne dieses Warten steht im ersten Test eine undefinierte Portnummer in der URL.
+  return new Promise((fertig) => {
+    if (server.listening) return fertig();
+    server.once('listening', fertig);
+  }).then(() => { PORT = server.address().port; });
 });
 
 test.after(() => {
