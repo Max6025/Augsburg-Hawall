@@ -33,6 +33,8 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `renderer/setup/status.html` | Die Statusseite — zeigt nur an, bewertet nicht |
 | `renderer/dashboard.html` (Blende) | Der Übergang zwischen „Panel an" und „Panel aus", zwei Wege hinein |
 | `control/wartungsmelder.js` | Der Überwachung sagen, dass gerade gearbeitet wird — und dass es vorbei ist |
+| `control/kiosksperren.js` | Welche Windows-Einstellungen im Weg sind, und welche davon noch zu setzen sind |
+| `control/vordergrund.js` | Startmenü und Benachrichtigungscenter wieder wegdrücken — die Entscheidung, nicht das Fenster |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -187,6 +189,40 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   man keine Spur. `schlaflueckeMessen()` meldet deshalb jede Taktlücke über 20 Sekunden ins
   Protokoll und in den Zustand. `powercfg /requests` wäre genauer, **verlangt aber erhöhte
   Rechte** und fällt damit aus — die App läuft unelevert.
+- **Eine einzige unmögliche Sperre hielt alle anderen auf.** Die Windows-Sperren hatten EINEN
+  Merker für alle zusammen: Schlug eine fehl, wurde er nicht gesetzt — und dann lief auch der
+  **Explorer-Neustart** nicht, der `DisableNotificationCenter` und `NoWinKeys` erst wirksam
+  macht. Am Gerät sah das so aus: `AllowEdgeSwipe=0` stand in der Registry, die Wischgeste vom
+  rechten Rand öffnete das Benachrichtigungscenter weiter, und im Protokoll stand eine Zeile
+  über eine ganz andere Sperre.
+
+  Schuld war genau eine, und sie ist **unmöglich**: `TaskbarDa` (Widget-Knopf) lässt sich auf
+  **Windows 11 25H2 Build 26200 nicht schreiben**. Gemessen am 2026-09-23 auf dem Surface Go:
+  `Get-Acl` gibt dem Konto am Schlüssel `Explorer\Advanced` **FullControl**, ein anderer Wert
+  darin ließ sich anlegen und wieder löschen — nur dieser eine antwortet mit „Es wurde versucht,
+  einen nicht autorisierten Vorgang auszuführen". Windows schützt ihn einzeln. Er ist deshalb
+  **draußen** und nicht „wird nochmal versucht": Ein Panel, dessen Taskleiste ohnehin versteckt
+  ist, hat keinen Widget-Knopf zu verstecken.
+
+  Seitdem wird **jede Sperre einzeln gemerkt** (`control/kiosksperren.js`), und „nicht möglich"
+  ist ausdrücklich **kein offener Posten** — weder für den nächsten Start noch auf der
+  Statusseite. Eine Warnung, die bei jedem Start wiederkommt, liest nach dem dritten Mal
+  niemand mehr, und dann geht die echte darin unter.
+- **Die Windows-Taste allein lässt sich nicht per Registry abfangen.** `NoWinKeys` nimmt nur den
+  **Kombinationen** die Wirkung (Win+A, Win+C, Win+X); die nackte Windows-Taste öffnet weiter
+  das Startmenü, und ein globales Tastenkürzel darauf lässt Windows nicht zu. Windows' eigene
+  Antwort wäre „Zugewiesener Zugriff" — Administratorrechte und ein Gerät, das auf ein einziges
+  Programm festgelegt ist. Beides geht hier nicht.
+  Was bleibt: Startmenü und Benachrichtigungscenter sind **Ausklappfenster** und schließen sich
+  von selbst, sobald sie den Fokus verlieren. `control/vordergrund.js` holt ihn zurück. Drei
+  Dinge hängen daran:
+  1. **Nur bei versteckter Taskleiste.** Läuft eine Wartung, ist die Leiste absichtlich da, und
+     wer davor steht, will an Windows — ihm den Fokus zu nehmen wäre das Gegenteil von Hilfe.
+  2. **Eine Bremse.** Auf dem Sperrbildschirm lässt sich das Fenster nicht nach vorne holen;
+     ohne Bremse rennt der Rückholer endlos gegen Windows an. Nach einer Häufung gibt er eine
+     halbe Minute Ruhe und schreibt **eine** Zeile, nicht eine pro Versuch.
+  3. **Entschieden wird im Modul, gehandelt in `main.js`.** Das Modul kennt kein Electron und
+     keinen Zeitgeber — nur so ist die Bremse prüfbar, ohne eine halbe Minute zu warten.
 - **Die Taskleiste wird versteckt, nicht zugedeckt.** Der Kiosk-Modus legt sich nur *über* sie;
   auf einem Touch-Gerät holt eine Wischgeste vom unteren Rand sie darüber, und ein
   Explorer-Neustart oder eine Anmeldung bringt sie ohnehin zurück. `AllowEdgeSwipe=0` nimmt der
@@ -863,7 +899,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-425 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+445 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

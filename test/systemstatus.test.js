@@ -13,7 +13,8 @@ const { pruefungen, schlechteste } = require('../server/systemstatus');
 const GUT = {
   konfiguriert: true, haVerbunden: true, version: '1.0.11', laeuftSeit: Date.now() - 60000,
   akku: { prozent: 100, laedt: true }, zugangscodeGesetzt: true,
-  dashboards: 2, hauptKarten: 8, sperrenStand: 2, sperrenSoll: 2, warnungen: [],
+  dashboards: 2, hauptKarten: 8, warnungen: [],
+  sperren: { stand: 3, gesamt: 8, gesetzt: 8, offen: [], unmoeglich: [] },
   panel: {
     panelOn: true, reason: 'dauerbetrieb', nightModeEnabled: true,
     nightStart: '23:00', nightEnd: '06:30', schlafZeitgeber: { ac: 0, dc: 0 },

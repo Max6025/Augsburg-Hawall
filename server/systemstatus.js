@@ -144,15 +144,28 @@ function pruefungen(d = {}) {
   }
 
   // --- Windows-Sperren -----------------------------------------------------------------------
-  if (d.sperrenStand === undefined || d.sperrenSoll === undefined) {
+  //
+  // "Nicht möglich" ist KEIN offener Posten. Vorher stand hier dauerhaft "Stand 0 von 2 --
+  // jeder Start versucht es erneut", und das war zweimal falsch: Die meisten Sperren saßen, und
+  // der eine fehlende Versuch war aussichtslos (Windows schützt den Wert einzeln).
+  if (!d.sperren) {
     p('sperren', 'Windows-Sperren', 'unbekannt', 'nicht zu ermitteln', '');
-  } else if (Number(d.sperrenStand) >= Number(d.sperrenSoll)) {
-    p('sperren', 'Windows-Sperren', 'ok', `Stand ${d.sperrenSoll}`,
-      'Rand-Wischgesten, Widget-Knopf und Benachrichtigungen sind abgeschaltet.');
   } else {
-    p('sperren', 'Windows-Sperren', 'hinweis', `Stand ${d.sperrenStand || 0} von ${d.sperrenSoll}`,
-      'Mindestens eine Sperre ließ sich nicht setzen. Jeder Start versucht es erneut; '
-      + 'welche es ist, steht im Protokoll.');
+    const s = d.sperren;
+    const offen = (s.offen || []).length;
+    const unmoeglich = (s.unmoeglich || []).length;
+    const zusatz = unmoeglich
+      ? ` ${unmoeglich} lässt Windows nicht setzen (${(s.unmoeglich || []).join(', ')}); `
+        + 'das wird nicht wieder versucht.'
+      : '';
+    if (offen) {
+      p('sperren', 'Windows-Sperren', 'hinweis', `${s.gesetzt} von ${s.gesamt} gesetzt`,
+        `Offen: ${(s.offen || []).join(', ')}. Jeder Start versucht es erneut.` + zusatz);
+    } else {
+      p('sperren', 'Windows-Sperren', 'ok', `${s.gesetzt} von ${s.gesamt} gesetzt`,
+        'Rand-Wischgesten, Benachrichtigungscenter und Windows-Tastenkombinationen sind '
+        + 'abgeschaltet.' + zusatz);
+    }
   }
 
   // --- Zugangscode ---------------------------------------------------------------------------

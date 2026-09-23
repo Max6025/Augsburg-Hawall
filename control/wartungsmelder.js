@@ -47,17 +47,16 @@ const ZEITGRENZE_MS = 8000;
 /**
  * Titel und Beschreibung aus dem Anlass -- reine Funktion, damit sie pruefbar ist.
  *
- * DAS STEHT AUF EINER STATUSSEITE, DIE ANDERE LESEN.
- *
- * Daran haben sich drei Dinge entschieden, und der erste Entwurf hat alle drei falsch gemacht:
+ * DAS STEHT AUF EINER STATUSSEITE, DIE ANDERE LESEN. Daran haben sich drei Dinge
+ * entschieden, und der erste Entwurf hat alle drei falsch gemacht:
  *
  * 1. **Kein Innenjargon.** "Die Taskleiste ist freigegeben und die Anzeige pausiert" beschreibt
- *    die Innereien dieser Anwendung. Wer auf eine Statusseite schaut, will wissen, was fuer ihn
- *    nicht geht -- nicht, was das Programm intern tut.
+ *    die Innereien dieser Anwendung. Da steht jetzt "im Wartungsmodus" -- das ist die Auskunft,
+ *    die jemand davor braucht.
  * 2. **Keine Uhrzeit.** Uptime Kuma zeigt das Zeitfenster als eigenes Feld direkt darunter an.
- *    "Begonnen 23.09., 14:12" im Text daneben ist dieselbe Angabe zweimal, und die zweite
- *    stimmt schon nicht mehr, sobald sich etwas verschiebt.
- * 3. **Zwei Saetze, nicht vier.** Eine Wartungsmeldung wird im Vorbeigehen gelesen.
+ *    Dieselbe Angabe zweimal, und die zweite stimmt nicht mehr, sobald sich etwas verschiebt --
+ *    und sie verschiebt sich, weil die Endzeit beim Beenden nachgezogen wird.
+ * 3. **Ein Satz.** Eine Wartungsmeldung wird im Vorbeigehen gelesen.
  */
 function anlassText(art, daten = {}) {
   const geraet = daten.geraet || 'Wandpanel';
@@ -66,9 +65,9 @@ function anlassText(art, daten = {}) {
     const von = daten.von || '?';
     const nach = daten.nach || '?';
     return {
-      titel: `${geraet}: Update ${von} \u2192 ${nach}`,
-      beschreibung: 'Das Gerät installiert ein Update und startet danach neu. '
-        + 'Die Weboberfläche ist in dieser Zeit nicht erreichbar.',
+      titel: `${geraet}: Wartung`,
+      beschreibung: `Das Gerät ist im Wartungsmodus: Es installiert das Update `
+        + `${von} \u2192 ${nach} und startet danach neu.`,
       dauer_minuten: DAUER_STANDARD_MIN
     };
   }
@@ -77,16 +76,14 @@ function anlassText(art, daten = {}) {
     const min = Number(daten.minuten) || 5;
     return {
       titel: `${geraet}: Wartung`,
-      beschreibung: 'Am Gerät wird gearbeitet. Die Weboberfläche und die Anzeige können '
-        + 'in dieser Zeit kurz nicht erreichbar sein.',
+      beschreibung: 'Das Gerät ist im Wartungsmodus. Es wird daran gearbeitet.',
       dauer_minuten: Math.max(min, 10)
     };
   }
 
   return {
     titel: `${geraet}: Wartung`,
-    beschreibung: 'Am Gerät wird gearbeitet. Die Weboberfläche ist in dieser Zeit '
-      + 'möglicherweise nicht erreichbar.',
+    beschreibung: 'Das Gerät ist im Wartungsmodus.',
     dauer_minuten: DAUER_STANDARD_MIN
   };
 }

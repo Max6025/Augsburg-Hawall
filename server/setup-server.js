@@ -137,7 +137,7 @@ document.getElementById('f').addEventListener('submit', async (ev) => {
 </script></body></html>`;
 
 function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
-  sperrenSoll, gestartetAm, melder }) {
+  sperrenBericht, gestartetAm, melder }) {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
@@ -781,8 +781,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         zugangscodeGesetzt: !!store.get('setupCode'),
         dashboards: Array.isArray(store.get('dashboards')) ? store.get('dashboards').length : 0,
         hauptKarten: (store.get('layout') || []).length,
-        sperrenStand: process.platform === 'win32' ? (store.get('kioskLockdownStand') || 0) : undefined,
-        sperrenSoll: process.platform === 'win32' ? sperrenSoll : undefined,
+        sperren: process.platform === 'win32' && sperrenBericht ? sperrenBericht() : undefined,
+
         version: updater ? updater.currentVersion : undefined,
         laeuftSeit: gestartetAm,
         warnungen: []
@@ -821,8 +821,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         zugangscodeGesetzt: !!store.get('setupCode'),
         dashboards: Array.isArray(dashboards) ? dashboards.length : 0,
         hauptKarten: (store.get('layout') || []).length,
-        sperrenStand: process.platform === 'win32' ? (store.get('kioskLockdownStand') || 0) : undefined,
-        sperrenSoll: process.platform === 'win32' ? sperrenSoll : undefined,
+        sperren: process.platform === 'win32' && sperrenBericht ? sperrenBericht() : undefined,
+
         version: updater ? updater.currentVersion : undefined,
         laeuftSeit: gestartetAm,
         warnungen: letzteWarnungen()

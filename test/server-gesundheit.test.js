@@ -39,7 +39,8 @@ async function serverMit({ panel = PANEL_GUT, code = null } = {}) {
     onConfigSaved: () => {}, getLocalIps: () => ['192.168.1.174'],
     updater: { currentVersion: '9.9.9', getState: () => ({}), check: () => {}, install: () => {} },
     controller: { getState: () => panel, logFile: null, log: () => {} },
-    getPanelSize: () => null, sperrenSoll: 2, gestartetAm: Date.now()
+    getPanelSize: () => null, gestartetAm: Date.now(),
+    sperrenBericht: () => ({ stand: 3, gesamt: 8, gesetzt: 8, offen: [], unmoeglich: [] })
   });
   const server = app.server;
   await new Promise((f) => (server.listening ? f() : server.once('listening', f)));

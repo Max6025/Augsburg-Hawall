@@ -29,10 +29,13 @@ function bauen({ url = 'http://ha:8099', schluessel = 'geheim', antworten = [], 
 
 // --- Die Texte ------------------------------------------------------------------------------
 
-test('anlassText nennt beide Versionen im Titel', () => {
+test('anlassText nennt beide Versionen', () => {
+  // Im Titel steht bei allen Anlaessen dasselbe ("<Geraet>: Wartung") -- die Statusseite soll
+  // nicht nach Programmversionen aussehen. Welches Update es war, gehoert in die Beschreibung.
   const t = anlassText('update', { von: '1.0.14', nach: '1.0.15' });
-  assert.match(t.titel, /1\.0\.14/);
-  assert.match(t.titel, /1\.0\.15/);
+  assert.match(t.beschreibung, /1\.0\.14/);
+  assert.match(t.beschreibung, /1\.0\.15/);
+  assert.match(t.titel, /: Wartung$/);
   assert.ok(t.dauer_minuten >= 10);
 });
 
@@ -54,8 +57,8 @@ test('die Beschreibung enthaelt keinen Innenjargon', () => {
   for (const art of ['update', 'vorort', 'irgendwas']) {
     const t = anlassText(art, { von: '1', nach: '2', minuten: 5 });
     assert.ok(!innen.test(t.beschreibung), `"${t.beschreibung}" erklaert Innereien`);
-    assert.ok(/erreichbar/.test(t.beschreibung),
-      'sie muss sagen, was nicht geht -- sonst beantwortet sie die eine Frage nicht');
+    assert.match(t.beschreibung, /Wartungsmodus/,
+      'sie muss den Zustand benennen -- das ist die Auskunft, die jemand davor sucht');
   }
 });
 
@@ -63,7 +66,7 @@ test('anlassText traegt keine ASCII-Ersatzschreibung in die Statusseite', () => 
   for (const art of ['update', 'vorort', 'irgendwas']) {
     const t = anlassText(art, { von: '1', nach: '2', minuten: 5 });
     const text = `${t.titel} ${t.beschreibung}`;
-    assert.ok(!/\b(fuer|Geraet|ueber|laeuft|waehrend|moeglicherweise)\b/.test(text),
+    assert.ok(!/\b(fuer|Geraet|ueber|laeuft|waehrend)\b/.test(text),
       `"${text}" steht so in Uptime Kuma -- dort gehoeren echte Umlaute hin`);
   }
 });

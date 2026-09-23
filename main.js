@@ -11,6 +11,8 @@ const energie = require('./control/energie');
 const lautstaerke = require('./control/lautstaerke');
 const hintergrund = require('./control/hintergrund');
 const { Wartungsmelder } = require('./control/wartungsmelder');
+const kiosksperren = require('./control/kiosksperren');
+const { Vordergrund } = require('./control/vordergrund');
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -109,6 +111,10 @@ async function gesundAbwarten(versuche = 20, abstand = 3000) {
   }
   return false;
 }
+
+const vordergrund = new Vordergrund({
+  log: (stufe, text) => { if (controller) controller.log(stufe, text); }
+});
 
 // Die Vorort-Wartung endet, wenn die Taskleiste wieder verschwindet -- das ist der Moment, in
 // dem niemand mehr davor steht. Gemerkt wird der letzte Stand, weil `onStateChange` bei jedem
@@ -366,6 +372,27 @@ function createWindow() {
 
   zeigerAusblenden(mainWindow);
 
+  // Startmenue und Benachrichtigungscenter wieder wegdruecken.
+  //
+  // Beides sind Ausklappfenster: Sie schliessen sich von selbst, sobald sie den Fokus
+  // verlieren. Die Windows-Taste ALLEIN laesst sich nicht per Registry abfangen -- weder
+  // `NoWinKeys` (gilt nur fuer Kombinationen) noch ein globales Tastenkuerzel (die nackte
+  // Windows-Taste nimmt Windows fuer sich). Bleibt der Fokus, und der kostet keine Rechte.
+  //
+  // Waehrend einer Wartung passiert das AUSDRUECKLICH nicht: Dann ist die Taskleiste absichtlich
+  // da, und wer davor steht, will an Windows.
+  mainWindow.on('blur', () => {
+    const e = vordergrund.verloren(controller ? controller.state : null);
+    if (!e.holen) return;
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      try {
+        mainWindow.focus();
+        if (mainWindow.isFocused()) vordergrund.geglueckt();
+      } catch (err) { /* nicht fokussierbar -- die Bremse im Modul faengt das ab */ }
+    }, e.verzoegerung);
+  });
+
   // Nach einem Update: der Ladekreis ("Update wird installiert") laeuft nahtlos weiter,
   // auch waehrend/nach dem Neustart -- kein Sprung ins Leere. Erst wenn die App wirklich
   // wieder laeuft, wird kurz "Erfolgreich auf Version X aktualisiert" gezeigt, danach geht
@@ -423,73 +450,53 @@ function onConfigSaved() {
   loadCurrentView();
 }
 
-// Sperrt Windows-eigene Rand-Wischgesten (Action Center, Task-Ansicht, Widgets, Taskleiste-
-// Reveal), die auf einem Touch-Geraet sonst VOR unserer App zugreifen und die Geste komplett
-// schlucken -- das ist derselbe Grund, warum eigene Wisch-Gesten im Dashboard nicht ankommen.
+// Sperrt Windows-eigene Rand-Wischgesten (Benachrichtigungscenter, Task-Ansicht,
+// Taskleiste-Reveal), die auf einem Touch-Geraet sonst VOR unserer App zugreifen und die Geste
+// komplett schlucken -- derselbe Grund, warum eigene Wisch-Gesten im Dashboard nicht ankommen.
 // Dazu Benachrichtigungen: Ein Toast ueber dem Dashboard ist auf einer Wand nichts als Stoerung.
 //
-// ALLES UNTER HKCU -- UND ZWAR AUSSERHALB VON \Software\Policies.
+// Welche Werte, warum, und was nachweislich NICHT geht: control/kiosksperren.js.
 //
-// Das ist die Lehre vom 2026-09-22, gemessen auf dem Geraet: Drei der sechs Werte waren nie
-// angekommen, und niemand hat es gemerkt. `Get-Acl HKCU:\Software\Policies` gibt dem Konto
-// nur `ReadKey` -- dieser Zweig gehoert der Gruppenrichtlinie, und ein unelevierter Prozess
-// darf dort nicht schreiben. Dass das Konto Administrator IST, hilft nicht: Bei
-// eingeschalteter Benutzerkontensteuerung laeuft die App ohne erhoehte Rechte.
-//
-// Die Fehler waren doppelt unsichtbar: `exec` bekam einen Rueckruf, der jeden Fehler
-// verschluckt (`() => resolve()`), und das Erledigt-Flag wurde trotzdem gesetzt. Beim naechsten
-// Start lief es deshalb nie wieder an. Jetzt gilt:
-//
-//   1. Kein Wert aus \Software\Policies. Fuer die Benachrichtigungen gibt es mit
-//      PushNotifications\ToastEnabled einen Schluessel, der dem Benutzer gehoert.
-//   2. Jeder Fehlschlag wird protokolliert, mit dem Wortlaut von reg.exe.
-//   3. Das Flag wird NUR gesetzt, wenn wirklich alles durchging. Sonst versucht es der
-//      naechste Start erneut -- vielleicht ist die Ursache dann behoben.
-//   4. Das Flag traegt eine Nummer. Wer hier einen Wert ergaenzt, zaehlt sie hoch, sonst
-//      bekommen bestehende Installationen die Ergaenzung nie.
-const KIOSK_SPERREN_STAND = 2;
-
+// Hier steht nur noch das Ausfuehren. Der Unterschied zur alten Fassung ist die Buchfuehrung:
+// JEDE Sperre wird einzeln gemerkt. Vorher gab es einen Merker fuer alle zusammen, und weil
+// eine davon auf diesem Windows grundsaetzlich nicht zu setzen ist, wurde er nie gesetzt --
+// und damit lief auch der Explorer-Neustart nie, der die uebrigen Sperren erst wirksam macht.
+// Am Geraet sah das so aus: `AllowEdgeSwipe=0` stand in der Registry, die Wischgeste ging
+// weiter, und im Protokoll stand eine Zeile ueber eine ganz andere Sperre.
 function applyWindowsKioskLockdown() {
   if (process.platform !== 'win32') return;
-  if (Number(store.get('kioskLockdownStand')) >= KIOSK_SPERREN_STAND) return;
 
-  const sperren = [
-    ['Wischgeste vom Rand', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\EdgeUI', 'AllowEdgeSwipe', 0],
-    ['Ecke oben links', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi', 'DisableTLcorner', 1],
-    ['Ecke oben rechts', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi', 'DisableTRcorner', 1],
-    // Frueher DisableNotificationCenter unter \Software\Policies -- dort schreibgeschuetzt.
-    ['Benachrichtigungen', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications', 'ToastEnabled', 0],
-    ['Benachrichtigungen auf dem Sperrbildschirm', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications', 'LockScreenToastEnabled', 0],
-    // Frueher AllowNewsAndInterests unter \Software\Policies -- dort schreibgeschuetzt.
-    // TaskbarDa blendet den Widget-Knopf aus und gehoert dem Benutzer.
-    ['Widget-Knopf', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', 'TaskbarDa', 0],
-    ['Suchfeld in der Taskleiste', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Search', 'SearchboxTaskbarMode', 0]
-  ];
+  const gespeichert = store.get('kioskSperren') || {};
+  const offen = kiosksperren.offeneSperren(gespeichert);
+  if (!offen.length) return;
 
-  const setzen = ([name, pfad, wert, zahl]) => new Promise((fertig) => {
-    const befehl = `reg add "${pfad}" /v ${wert} /t REG_DWORD /d ${zahl} /f`;
+  const setzen = (s) => new Promise((fertig) => {
+    const befehl = `reg add "${s.pfad}" /v ${s.wert} /t REG_DWORD /d ${s.zahl} /f`;
     exec(befehl, { timeout: 5000 }, (err, stdout, stderr) => {
-      if (!err) return fertig({ name, ok: true });
+      if (!err) return fertig({ name: s.name, ok: true });
       const grund = String(stderr || stdout || err.message || '').trim().split('\n')[0];
-      fertig({ name, ok: false, grund });
+      fertig({ name: s.name, ok: false, grund, unmoeglich: kiosksperren.istUnmoeglich(grund) });
     });
   });
 
-  Promise.all(sperren.map(setzen)).then((ergebnisse) => {
-    const kaputt = ergebnisse.filter(e => !e.ok);
-    kaputt.forEach(e => {
-      if (controller) controller.log('warn', `Sperre "${e.name}" konnte nicht gesetzt werden: ${e.grund}`);
-    });
-    if (kaputt.length) {
-      if (controller) {
-        controller.log('warn', `${kaputt.length} von ${ergebnisse.length} Windows-Sperren fehlgeschlagen -- `
-          + 'beim naechsten Start wird es erneut versucht.');
-      }
-      return;   // Flag NICHT setzen
+  Promise.all(offen.map(setzen)).then((ergebnisse) => {
+    store.set('kioskSperren', kiosksperren.standFortschreiben(gespeichert, ergebnisse));
+
+    const sagen = (stufe, text) => { if (controller) controller.log(stufe, text); };
+    for (const e of ergebnisse.filter(x => !x.ok)) {
+      // "nicht moeglich" wird EINMAL gemeldet und danach nicht mehr versucht. Eine Warnung,
+      // die bei jedem Start wiederkommt, liest nach dem dritten Mal niemand mehr -- und dann
+      // geht die echte darin unter.
+      sagen('warn', e.unmoeglich
+        ? `Sperre "${e.name}" laesst Windows nicht setzen (${e.grund}). Wird nicht wieder versucht.`
+        : `Sperre "${e.name}" konnte nicht gesetzt werden: ${e.grund}`);
     }
-    store.set('kioskLockdownStand', KIOSK_SPERREN_STAND);
-    if (controller) controller.log('info', `Windows-Sperren gesetzt (Stand ${KIOSK_SPERREN_STAND})`);
-    // Explorer neu starten, damit die Aenderungen sofort ohne Geraete-Neustart greifen
+    const gesetzt = ergebnisse.filter(e => e.ok).length;
+    if (gesetzt) sagen('info', `${gesetzt} von ${ergebnisse.length} Windows-Sperren gesetzt`);
+
+    if (!kiosksperren.explorerNeustartNoetig(ergebnisse)) return;
+    // Nur wenn sich wirklich etwas geaendert hat: Der Neustart nimmt fuer einen Moment die
+    // Taskleiste mit, und ohne ihn greifen DisableNotificationCenter und NoWinKeys nicht.
     exec('taskkill /f /im explorer.exe', { timeout: 5000 }, () => {
       exec('start explorer.exe', { timeout: 5000 }, () => {});
     });
@@ -609,7 +616,9 @@ app.whenReady().then(() => {
     port: SETUP_PORT, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
     // Fuer die Statusseite: Womit der Stand der Windows-Sperren zu vergleichen ist, und
     // seit wann die App laeuft. Beides weiss nur der Hauptprozess.
-    sperrenSoll: KIOSK_SPERREN_STAND,
+    // Fuer die Statusseite. Als Funktion, nicht als Wert: Die Sperren werden nach dem
+    // Serverstart gesetzt, und ein Wert waere dann fuer immer der von vorher.
+    sperrenBericht: () => kiosksperren.bericht(store.get('kioskSperren')),
     gestartetAm: GESTARTET_AM,
     // Damit die Einstellungsseite den Wartungsmelder auf demselben Weg pruefen kann, den ein
     // Update spaeter nimmt.
