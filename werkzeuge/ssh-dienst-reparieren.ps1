@@ -45,14 +45,23 @@ $DATEN = Join-Path $env:ProgramData 'ssh'
 
 Titel '1. Lage prüfen'
 
+# KEIN frueher Ausstieg, wenn der Dienst laeuft -- und das war der Fehler der ersten beiden
+# Fassungen. Sie schrieben "laeuft bereits, es gibt nichts zu tun" und beendeten sich, womit
+# der ganze Netzteil (Lauschadresse, Netzprofil, Firewall) uebersprungen wurde. Genau das ist
+# aber die verbleibende Ursache, wenn der Dienst laeuft und trotzdem niemand durchkommt.
+#
+# "Der Dienst laeuft" beantwortet die Frage "komme ich drauf?" NICHT.
 $dienst = Get-Service -Name sshd -ErrorAction SilentlyContinue
-if ($dienst -and $dienst.Status -eq 'Running') {
-  Sagen 'Der Dienst sshd läuft bereits. Es gibt nichts zu tun.' 'Green'
-  Get-Service sshd | Format-List Name, DisplayName, Status, StartType
-  return
+$laeuft = ($dienst -and $dienst.Status -eq 'Running')
+if ($laeuft) {
+  Sagen 'Der Dienst sshd laeuft. Die Registrierung ist also nicht die Ursache.' 'Green'
+  Sagen 'Weiter mit dem Netzweg -- dort liegt es dann.' 'Gray'
+  Get-Service sshd | Format-List Name, DisplayName, Status, StartType | Out-Host
+} elseif ($dienst) {
+  Sagen "Dienst ist eingetragen, Status: $($dienst.Status)" 'Yellow'
+} else {
+  Sagen 'Dienst sshd ist NICHT eingetragen.' 'Yellow'
 }
-if ($dienst) { Sagen "Dienst ist eingetragen, Status: $($dienst.Status)" 'Yellow' }
-else { Sagen 'Dienst sshd ist NICHT eingetragen.' 'Yellow' }
 
 if (-not (Test-Path $SSHD)) {
   Sagen "sshd.exe fehlt ($SSHD)." 'Yellow'
@@ -149,7 +158,8 @@ function DienstEinrichten {
   return ($d -and $d.Status -eq 'Running')
 }
 
-$laeuft = DienstEinrichten
+# Nur anfassen, was nicht laeuft. Ein laufender Dienst wird nicht neu angemeldet.
+if (-not $laeuft) { $laeuft = DienstEinrichten }
 
 if (-not $laeuft) {
   Titel '7. Gründlicher Weg: Windows-Feature aus- und wieder einbauen'
@@ -232,7 +242,14 @@ function ZugangFreiMachen {
     Sagen 'Die Firewall-Regel muss fuer DIESE Kategorie gelten.' 'Gray'
   }
 
-  Titel 'D. Firewall-Regeln fuer Port 22'
+  Titel 'D. Firewall-Profile'
+  # Der unauffaelligste Grund von allen: Ist im aktiven Profil die Standardregel fuer
+  # eingehende Verbindungen "Blockieren" und es gibt keine passende Erlaubnis, laeuft jeder
+  # Verbindungsversuch in eine Zeitueberschreitung -- also genau das Bild, das wir sehen.
+  Get-NetFirewallProfile -ErrorAction SilentlyContinue |
+    Select-Object Name, Enabled, DefaultInboundAction | Format-Table -AutoSize | Out-Host
+
+  Titel 'E. Firewall-Regeln fuer Port 22'
   $alle = @()
   try {
     $alle = Get-NetFirewallRule -Direction Inbound -Enabled True -ErrorAction Stop |
@@ -255,7 +272,7 @@ function ZugangFreiMachen {
     Sagen 'Keine aktive eingehende Regel fuer Port 22 gefunden. Das ist die Ursache.' 'Yellow'
   }
 
-  Titel 'E. Erlaubnis-Regel sicherstellen (alle Profile)'
+  Titel 'F. Erlaubnis-Regel sicherstellen (alle Profile)'
   # Eine eigene Regel mit klarem Namen, statt an der von Windows zu drehen: So ist im
   # Nachhinein zu sehen, was von hier kommt -- und sie gilt fuer ALLE Profile, damit ein
   # Wechsel von Privat auf Oeffentlich den Zugang nicht wieder zunagelt.
@@ -281,7 +298,7 @@ function ZugangFreiMachen {
   }
 
   if ($geaendert) {
-    Titel 'F. Dienst neu starten (die Konfiguration wurde geaendert)'
+    Titel 'G. Dienst neu starten (die Konfiguration wurde geaendert)'
     try {
       Restart-Service sshd -Force -ErrorAction Stop
       Sagen 'Neu gestartet.' 'Green'
@@ -302,7 +319,7 @@ $lauscht = Get-NetTCPConnection -LocalPort 22 -State Listen -ErrorAction Silentl
 if ($lauscht) {
   # BEWUSST vorsichtig formuliert. Der erste Anlauf schrieb hier "der Zugang sollte gehen",
   # und von aussen kam trotzdem nichts durch -- ein lauschender Dienst ist kein erreichbarer.
-  Sagen 'Auf Port 22 lauscht etwas. Ob von aussen jemand durchkommt, sagen die Abschnitte A bis E.' 'Green'
+  Sagen 'Auf Port 22 lauscht etwas. Ob von aussen jemand durchkommt, sagen die Abschnitte A bis F.' 'Green'
   $lauscht | Select-Object LocalAddress, LocalPort, State | Format-Table -AutoSize
   Sagen ''
   Sagen ('Zum Verbinden: ssh ' + $env:USERNAME + '@' + (
@@ -315,4 +332,5 @@ if ($lauscht) {
 }
 
 Write-Host ''
+Write-Host 'Die Abschnitte A bis F sind der interessante Teil -- davon bitte einen Screenshot.' -ForegroundColor Cyan
 Write-Host 'Fertig. Fenster kann geschlossen werden.' -ForegroundColor Cyan
