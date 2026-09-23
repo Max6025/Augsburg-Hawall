@@ -252,6 +252,31 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Das Schlüsselwort `HAWALL-OK` steht **wortwörtlich** im Körper, weil die Überwachungsart
   „HTTP(s) - Keyword" Text sucht und nicht Struktur. Wer es umbenennt, muss die Überwachung
   nachziehen.
+- **Die Energiekarte zeigt LEISTUNG (W), nicht ENERGIE (kWh) — und hat das jahrelang nicht
+  gesagt.** Der Vorschlag-Knopf im Editor las `energy/get_prefs` von Home Assistant aus und trug
+  ein, was dort steht: die kWh-**Zähler** (`stat_energy_from`). Ein Zählerstand von 1234 kWh
+  erschien dann als „1,23 kW" — eine Zahl, die aussieht wie eine Leistung, sich langsam bewegt
+  und nichts bedeutet. Im Kleingedruckten stand „ggf. Leistungssensor statt Statistik-ID
+  nachtragen", und genau das geht unter: Der Knopf hat gefüllt, es sah fertig aus.
+  1. **Die Karte prüft die Einheit** und schreibt einen Satz statt einer Zahl, die lügt — mit
+     Kennung und Einheit des Sensors.
+  2. **Der Vorschlag-Knopf sucht Leistungssensoren** (`/api/entities` liefert dafür `einheit`
+     und `klasse` mit) und lässt leer, was er nicht findet. Ein leeres Feld ist ein sichtbares
+     „fehlt noch", ein falsch gefülltes eine stille Lüge.
+  3. **Die Batterie wird NICHT geraten.** Am Gerät durchprobiert: `battery.?power` trifft einen
+     Handy-Akku, `akkuleistung` den Speicher des *zweiten* Hauses — beide Anlagen hängen in
+     derselben HA-Instanz. Aus einem Sensornamen lässt sich nicht ableiten, in welchem Haus er
+     steht, und ein falscher Batterieknoten geht auch in die Hausverbrauchs-Rechnung ein.
+- **Eine Klasse ohne CSS-Regel ist genauso tot wie eine Regel ohne Klasse.** Beim Umbenennen der
+  Diagramm-Konstanten traf das Suchmuster auch Zeichenketten: Aus dem SVG-Kommando `M` am Anfang
+  eines Pfads wurde `ED_M` (der Browser verwirft so einen Pfad **stillschweigend** —
+  `getTotalLength()` gab 0, und die Karte zeigte Knoten ohne eine einzige Leitung), und aus
+  `class="ed-symbol"` wurde `class="ed-edSymbol"` (Element da, Gestaltung weg). Beides ohne
+  Fehlermeldung. `test/energiediagramm.test.js` vergleicht deshalb die Klassen im JS mit den
+  Regeln im CSS **in beide Richtungen** und prüft jeden Pfadstring gegen `^M…`.
+- **Was in `.scratch/karten-design/vorschau.html` fehlt, wird nicht angesehen.** Die Energiekarte
+  stand dort nicht — und ist deshalb jahrelang ungeprüft ausgeliefert worden. Wer einen
+  Kartentyp ändert, trägt ihn dort ein, samt der Optionen, die er braucht.
 - **Auf dem Sperrbildschirm greift kein einziger Fluchtweg.** Die Tipp-Geste erreicht das
   Dashboard nicht (der Sperrbildschirm liegt davor), globale Tastenkuerzel laesst Windows dort
   nicht durch, und der Schalter in der Weboberflaeche braucht einen Server, der beim Aufwachen
@@ -781,7 +806,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-377 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+386 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

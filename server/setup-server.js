@@ -252,7 +252,12 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
           domain: s.entity_id.split('.')[0],
           // Damit die Einstellungsseite zeigen kann, was eine Entitaet GERADE meldet -- wer
           // eine Entitaet auswaehlt, sieht sonst nur eine Kennung und muss raten.
-          zustand: s.state
+          zustand: s.state,
+          // Einheit und Geraeteklasse reisen mit, damit der Editor die RICHTIGE Art Sensor
+          // finden kann. Die Energiekarte braucht Leistung (W); ohne diese beiden Felder liess
+          // sich das nicht unterscheiden, und der Vorschlag-Knopf trug kWh-Zaehler ein.
+          einheit: (s.attributes && s.attributes.unit_of_measurement) || '',
+          klasse: (s.attributes && s.attributes.device_class) || ''
         }));
       res.json({ ok: true, entities });
     } catch (err) {

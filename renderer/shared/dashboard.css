@@ -503,25 +503,52 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 .card.type-clock .clock-date { font-size: clamp(0.8vh, 8cqmin, 3vh); color: var(--muted); margin-top: 0.5vh; }
 
 .card.type-energy { padding: 1vh; }
-.ef-wrap { position: relative; width: 100%; height: 100%; }
-.ef-lines { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
-.ef-path { fill: none; stroke: var(--on-card-track); stroke-width: 3; stroke-linecap: round; }
-.ef-path.active { stroke: #4f7cff; stroke-dasharray: 6 6; animation: ef-flow 0.8s linear infinite; }
-.ef-path.active.reverse { animation-direction: reverse; }
-@keyframes ef-flow { to { stroke-dashoffset: -24; } }
-.ef-node { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column;
-  align-items: center; z-index: 1; text-align: center; gap: 0.1vh; }
-.ef-node .ef-icon svg { width: clamp(1.8vh, 11cqmin, 3.6vh); height: clamp(1.8vh, 11cqmin, 3.6vh); }
-.ef-node .ef-val { font-size: clamp(1vh, 7cqmin, 2vh); font-weight: 600; color: var(--text); }
-.ef-node .ef-label { font-size: clamp(0.7vh, 5cqmin, 1.3vh); color: var(--muted); white-space: nowrap; }
-.ef-solar { top: 14%; left: 50%; }
-.ef-solar .ef-icon { color: #ff9800; }
-.ef-grid { top: 50%; left: 16%; }
-.ef-grid .ef-icon { color: #4f7cff; }
-.ef-home { top: 50%; left: 50%; }
-.ef-home .ef-icon { color: var(--text); }
-.ef-battery { top: 50%; left: 84%; }
-.ef-battery .ef-icon { color: #22c55e; }
+/* --- Energiefluss-Diagramm ------------------------------------------------------------------
+   Alles im SVG-Koordinatensystem: Schriftgroessen in SVG-Einheiten, nicht in vh oder cqmin.
+   Dadurch skaliert die Zeichnung als Ganzes mit der Karte -- eine Schrift, die eigenstaendig
+   rechnet, passt bei einer Kartengroesse und bei allen anderen nicht. */
+.ed { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.ed-scheibe { fill: rgba(255,255,255,0.05); }
+.ed-ring { fill: none; stroke-width: 3; opacity: 0.3; }
+.ed-knoten.ed-aktiv .ed-ring { opacity: 1; }
+/* Der Schein nur am aktiven Knoten: Leuchtet alles, leuchtet nichts. */
+.ed-knoten.ed-aktiv .ed-scheibe { fill: rgba(255,255,255,0.09); }
+
+.ed-symbol { fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0.55; }
+.ed-knoten.ed-aktiv .ed-symbol { opacity: 1; }
+
+.ed-wert { fill: var(--text, #f2f2f0); font-size: 30px; font-weight: 700; text-anchor: middle;
+  letter-spacing: -0.4px; }
+.ed-name { fill: var(--muted, #8a8b91); font-size: 15px; text-anchor: middle;
+  text-transform: uppercase; letter-spacing: 0.08em; }
+
+.ed-leitung { fill: none; stroke-width: 5; stroke-linecap: round; }
+/* Die Bewegung laeuft ueber den Strichversatz, nicht ueber eine Positionsanimation: Das
+   rechnet der Browser auf der Grafikeinheit, und auf einem Surface Go ist das der Unterschied
+   zwischen ruhiger Anzeige und Ruckeln. */
+/* Groessere Punkte mit mehr Luft: Aus fuenf Metern muss man einzelne Punkte wandern SEHEN.
+   Mit 2/14 war es eine gepunktete Linie, bei der die Bewegung erst auffiel, wenn man davor
+   stand -- und genau darum geht es hier nicht. */
+.ed-leitung.ed-fliesst { stroke-dasharray: 5 19; animation: ed-fluss 1.2s linear infinite; }
+@keyframes ed-fluss { to { stroke-dashoffset: -24; } }
+
+/* Wer Bewegung abgeschaltet hat, bekommt eine durchgezogene Leitung statt einer, die still
+   blinkt -- dieselbe Ruecksicht wie bei der Tor- und der Klima-Karte. */
+@media (prefers-reduced-motion: reduce) {
+  .ed-leitung.ed-fliesst { stroke-dasharray: none; animation: none; }
+}
+
+/* Wenn die konfigurierten Sensoren keine Leistung messen, steht hier ein Satz statt einer Zahl,
+   die lügt. Siehe die Prüfung im Energie-Zweig von dashboard-render.js. */
+.ed-fehler { display: flex; flex-direction: column; justify-content: center; gap: 0.5em;
+  height: 100%; padding: 4% 6%; }
+.ed-fehler-titel { font-size: clamp(0.9vh, 6cqmin, 1.7vh); font-weight: 700; color: var(--text); }
+.ed-fehler-text { font-size: clamp(0.7vh, 4.4cqmin, 1.2vh); color: var(--muted); line-height: 1.45; }
+.ed-fehler-liste { margin: 0; padding-left: 1.1em; font-size: clamp(0.65vh, 4cqmin, 1.1vh);
+  color: var(--muted); line-height: 1.5; }
+.ed-fehler-liste li { overflow-wrap: anywhere; }
 
 .card.type-media_player { padding: 1vh; }
 .card.has-art-bg { position: relative; overflow: hidden; }

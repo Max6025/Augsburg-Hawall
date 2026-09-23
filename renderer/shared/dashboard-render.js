@@ -1,4 +1,188 @@
 (function (global) {
+  // --- Energiefluss-Diagramm ------------------------------------------------------------------
+  //
+  // Eine einzige SVG: Knoten, Leitungen und Text im selben Koordinatensystem.
+  //
+  // Die Vorgaengerin setzte die Knoten per CSS absolut und legte darunter eine SVG mit
+  // `preserveAspectRatio="none"`. Damit wird das Koordinatensystem der Leitungen mit der Karte
+  // verzerrt, die CSS-Knoten aber nicht -- beides laeuft bei jeder anderen Kartengroesse
+  // auseinander. Auf einer 4x2-Karte traf die Leitung den Knoten, auf einer 2x2 endete sie im
+  // Nichts. Das war der billige Eindruck: nicht die Farben, die Geometrie.
+  //
+  // Aufbau wie in Home Assistant: Solar oben, Netz links, Haus rechts, Batterie unten, die
+  // Verbindungen als Kurven ueber die Mitte. Eine Leitung mit rechtem Winkel sieht nach
+  // Schaltplan aus, nicht nach Fluss.
+
+  // Hoeher als breit, und das mit Absicht: Unter jedem Knoten stehen zwei Zeilen (Wert und
+  // Name), und beim untersten Knoten muessen die noch ins Bild passen. Mit einem Quadrat wurde
+  // die Beschriftung der Batterie abgeschnitten -- sichtbar erst, wenn eine Batterie
+  // konfiguriert ist, also beim Nutzer und nicht beim Bauen.
+  const ED_B = 400;
+  const ED_R = 44;               // Radius eines Knotens
+  const ED_BAHN = 136;           // Abstand der Knotenmitte von der Mitte
+  const ED_MITTE_Y = 240;
+  // Unter jedem Knoten stehen zwei Zeilen. Beim UNTERSTEN muessen die noch ins Bild passen --
+  // sonst wird die Beschriftung der Batterie abgeschnitten, und zwar erst beim Nutzer, weil
+  // ohne Batterie nichts dort unten steht.
+  //
+  // Die Hoehe haengt deshalb davon ab, ob eine Batterie dabei ist. Eine feste Hoehe sah ohne
+  // Batterie aus wie eine Karte, die zu einem Drittel leer ist: Die Zeichnung wird auf die
+  // Hoehe eingepasst, und das reservierte Feld unten bleibt leer.
+  const ED_H_OHNE = ED_MITTE_Y + ED_R + 70;
+  const ED_H_MIT = ED_MITTE_Y + ED_BAHN + ED_R + 74;
+
+  const ED_MITTE = { x: ED_B / 2, y: ED_MITTE_Y };
+  const ED_ORT = {
+    solar:    { x: ED_MITTE.x,        y: ED_MITTE.y - ED_BAHN },
+    netz:     { x: ED_MITTE.x - ED_BAHN, y: ED_MITTE.y },
+    haus:     { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y },
+    batterie: { x: ED_MITTE.x,        y: ED_MITTE.y + ED_BAHN }
+  };
+
+  const ED_FARBE = {
+    solar: '#f5b544',
+    netz: '#6f7784',
+    haus: '#4f7cff',
+    batterie: '#57c98a',
+    ruhe: 'rgba(255,255,255,0.13)'
+  };
+
+  function edFmt(w) {
+    if (w === null || w === undefined || !isFinite(w)) return '–';
+    const a = Math.abs(w);
+    if (a >= 10000) return (w / 1000).toFixed(1).replace('.', ',') + ' kW';
+    if (a >= 1000) return (w / 1000).toFixed(2).replace('.', ',') + ' kW';
+    return Math.round(w) + ' W';
+  }
+
+
+  // Eine Kurve von A nach ED_B, die durch die Mitte ausholt. Der Kontrollpunkt liegt auf der
+  // Verbindung zur Mitte -- so biegt jede Leitung zur Mitte hin und die vier sehen wie ein
+  // System aus und nicht wie vier Striche.
+  function edBahn(a, b) {
+    const ax = a.x + (ED_MITTE.x - a.x) * (ED_R / ED_BAHN);
+    const ay = a.y + (ED_MITTE.y - a.y) * (ED_R / ED_BAHN);
+    const bx = b.x + (ED_MITTE.x - b.x) * (ED_R / ED_BAHN);
+    const by = b.y + (ED_MITTE.y - b.y) * (ED_R / ED_BAHN);
+    // ACHTUNG: Das führende `M` ist das SVG-Kommando "moveto", keine Variable. Beim Umbenennen
+    // der Konstanten ist es einmal mitumbenannt worden ("ED_M200.0,148.0") -- der Browser hat
+    // den Pfad dann stillschweigend verworfen, getTotalLength() gab 0, und die Karte zeigte
+    // Knoten ohne eine einzige Leitung. Deshalb heißt der Mittelpunkt hier ED_MITTE und nicht M.
+    return `M${ax.toFixed(1)},${ay.toFixed(1)} Q${ED_MITTE.x},${ED_MITTE.y} ${bx.toFixed(1)},${by.toFixed(1)}`;
+  }
+
+  // Die Symbole kommen von AUSSEN (ICONS aus dashboard-render.js), nicht aus dieser Datei.
+  //
+  // Der erste Anlauf hatte eigene Pfade -- und das Netz-Symbol sah aus wie ein Muelleimer. Vor
+  // allem aber waeren es zwei Symbolsaetze im selben Dashboard geworden, mit unterschiedlicher
+  // Strichstaerke und unterschiedlicher Formensprache. Der Satz in ICONS ist der eine.
+  //
+  // Eingesetzt wird als VERSCHACHTELTE SVG: Die Symbole bringen ihr eigenes `viewBox="0 0 24
+  // 24"` mit, und eine verschachtelte SVG rechnet das selbst um. Ein `<g transform="scale()">`
+  // muesste die Strichstaerke mitskalieren und haette sie verzerrt.
+  const ED_GROESSE = 46;
+  function edSymbol(quelle, ort, farbe) {
+    if (!quelle) return '';
+    const x = (ort.x - ED_GROESSE / 2).toFixed(1);
+    const y = (ort.y - ED_GROESSE / 2).toFixed(1);
+    return quelle.replace('<svg ',
+      `<svg class="ed-symbol" x="${x}" y="${y}" width="${ED_GROESSE}" height="${ED_GROESSE}" `
+      + `style="color:${farbe}" `);
+  }
+
+  // Symbol IN der Scheibe, Wert und Name DARUNTER.
+  //
+  // Der erste Anlauf legte den Wert in die Scheibe, mitten auf das Symbol -- "5,20 kW" stand
+  // quer ueber der Sonne und war beides unlesbar. Es gibt in einer Scheibe von 88 Pixeln nicht
+  // genug Platz fuer ein Symbol und eine vierstellige Zahl; eines davon muss raus.
+  // Symbol IN der Scheibe, Wert und Name DARUNTER -- beim obersten Knoten DARUEBER.
+  //
+  // Zwei Anlaeufe waren hier falsch. Der erste legte den Wert in die Scheibe, mitten auf das
+  // Symbol: "5,20 kW" stand quer ueber der Sonne, beides unlesbar. Der zweite setzte den Text
+  // bei jedem Knoten nach unten -- und beim Solarknoten laufen die Leitungen nach unten weg,
+  // mitten durch das Wort "SOLAR".
+  //
+  // Deshalb: Text auf der Seite, an der KEINE Leitung abgeht. Oben der Solarknoten, unten die
+  // Batterie, seitlich Netz und Haus (dort laufen die Leitungen waagerecht und kreuzen den
+  // Text nicht).
+  function edKnoten(art, ort, wert, beschriftung, aktiv, zusatz, symbole, textOben) {
+    const farbe = ED_FARBE[art];
+    const name = zusatz ? beschriftung + ' \u00b7 ' + zusatz : beschriftung;
+    // Wert immer naeher an der Scheibe als der Name: Er ist die Zahl, die man sucht.
+    const yWert = textOben ? ort.y - ED_R - 16 : ort.y + ED_R + 32;
+    const yName = textOben ? ort.y - ED_R - 38 : ort.y + ED_R + 56;
+    return `
+      <g class="ed-knoten ${aktiv ? 'ed-aktiv' : ''}">
+        <circle cx="${ort.x}" cy="${ort.y}" r="${ED_R}" class="ed-scheibe"/>
+        <circle cx="${ort.x}" cy="${ort.y}" r="${ED_R}" class="ed-ring" style="stroke:${farbe}"/>
+        ${edSymbol(symbole[art], ort, farbe)}
+        <text x="${ort.x}" y="${yWert}" class="ed-wert">${esc(edFmt(wert))}</text>
+        <text x="${ort.x}" y="${yName}" class="ed-name">${esc(name)}</text>
+      </g>`;
+  }
+
+  /**
+   * daten: { solarW, netzBezugW, netzEinspeisungW, batterieW, batterieLaedt, batterieSoc,
+   *          hausW, schwelleW, namen: {solar, netz, haus, batterie} }
+   * Fehlende Zweige werden weggelassen, nicht mit Null gezeichnet.
+   */
+  function edDiagramm(d) {
+    const symbole = d.symbole || {};
+    const s = d.schwelleW === undefined ? 5 : Math.abs(d.schwelleW);
+    const n = Object.assign({ solar: 'Solar', netz: 'Netz', haus: 'Haus', batterie: 'Batterie' }, d.namen || {});
+    const hatSolar = d.solarW !== null && d.solarW !== undefined;
+    const hatBatterie = d.batterieW !== null && d.batterieW !== undefined;
+
+    const bezug = d.netzBezugW || 0;
+    const einspeisung = d.netzEinspeisungW || 0;
+    const netzAktiv = Math.abs(bezug) > s || Math.abs(einspeisung) > s;
+    // Der Netzknoten zeigt den BETRAG, die Richtung steht im Namen ("Netz · Einspeisung").
+    // Ein Minuszeichen vor einer Zahl liest man aus fuenf Metern nicht, und zwei Zahlen
+    // nebeneinander schon gar nicht.
+    const netzWert = einspeisung > s ? einspeisung : bezug;
+    const solarAktiv = hatSolar && Math.abs(d.solarW) > s;
+    const battAktiv = hatBatterie && Math.abs(d.batterieW) > s;
+
+    const leitungen = [];
+    if (hatSolar) {
+      leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.haus), farbe: ED_FARBE.solar, aktiv: solarAktiv, um: false });
+      if (einspeisung > s) {
+        leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.netz), farbe: ED_FARBE.solar, aktiv: true, um: false });
+      }
+    }
+    if (bezug > s) {
+      leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz, aktiv: true, um: false });
+    } else {
+      leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz, aktiv: false, um: false });
+    }
+    if (hatBatterie) {
+      leitungen.push({
+        d: d.batterieLaedt ? edBahn(ED_ORT.solar, ED_ORT.batterie) : edBahn(ED_ORT.batterie, ED_ORT.haus),
+        farbe: ED_FARBE.batterie, aktiv: battAktiv, um: false
+      });
+    }
+
+    // LUFT OBEN. Der Name des Solarknotens steht ueber seiner Scheibe und lag ohne diesen Rand
+    // auf der Kante des Ausschnitts -- in einer Karte mit `overflow: hidden` ist er dann halb
+    // abgeschnitten, und zwar nur oben, was wie ein Zufall aussieht und keiner ist.
+    const LUFT = 14;
+    const hoehe = (hatBatterie ? ED_H_MIT : ED_H_OHNE) + LUFT;
+    return `
+      <svg class="ed" viewBox="0 ${-LUFT} ${ED_B} ${hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
+        <g>
+          ${leitungen.map(l => `<path d="${l.d}" class="ed-leitung ${l.aktiv ? 'ed-fliesst' : ''}"
+             style="stroke:${l.aktiv ? l.farbe : ED_FARBE.ruhe}"/>`).join('')}
+        </g>
+        ${hatSolar ? edKnoten('solar', ED_ORT.solar, d.solarW, n.solar, solarAktiv, '', symbole, true) : ''}
+        ${edKnoten('netz', ED_ORT.netz, netzWert, n.netz, netzAktiv,
+          einspeisung > s ? 'Einspeisung' : (bezug > s ? 'Bezug' : ''), symbole)}
+        ${edKnoten('haus', ED_ORT.haus, d.hausW, n.haus, (d.hausW || 0) > s, '', symbole)}
+        ${hatBatterie ? edKnoten('batterie', ED_ORT.batterie, d.batterieW, n.batterie, battAktiv,
+          d.batterieSoc !== null && d.batterieSoc !== undefined
+            ? Math.round(d.batterieSoc) + ' %' + (d.batterieLaedt ? ' ↑' : ' ↓') : '', symbole) : ''}
+      </svg>`;
+  }
+
   const ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2.7-1.6L13.4 2h-2.8l-.4 2.8a7 7 0 0 0-2.7 1.6l-2.3-.9-2 3.4 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .2 1.6l-2 1.6 2 3.4 2.3-1a7 7 0 0 0 2.7 1.6l.4 2.8h2.8l.4-2.8a7 7 0 0 0 2.7-1.6l2.3 1 2-3.4-2-1.6c.1-.5.2-1 .2-1.6z"/></svg>',
@@ -1741,69 +1925,83 @@
       renderClockNow(card);
     } else if (type === 'energy') {
       const en = opts.energy || {};
-      const numOf = s => { const v = s && parseFloat(s.state); return (v === undefined || isNaN(v)) ? null : v; };
-      const toW = (v, unit) => (v === null ? null : (unit === 'kW' ? v * 1000 : v));
-      const unitOf = s => s && s.attributes && s.attributes.unit_of_measurement;
-      const gridW = toW(numOf(en.grid), unitOf(en.grid));
-      const gridRetW = toW(numOf(en.gridReturn), unitOf(en.gridReturn));
-      const solarW = toW(numOf(en.solar), unitOf(en.solar));
-      const battRaw = toW(numOf(en.battery), unitOf(en.battery));
+      const zahl = s => { const v = s && parseFloat(s.state); return (v === undefined || isNaN(v)) ? null : v; };
+      const einheit = s => (s && s.attributes && s.attributes.unit_of_measurement) || '';
+      const klasse = s => (s && s.attributes && s.attributes.device_class) || '';
+      const nachW = (v, e) => (v === null ? null : (e === 'kW' ? v * 1000 : v));
+
+      // --- Die Pruefung, die vorher fehlte ------------------------------------------------------
+      //
+      // Diese Karte zeigt LEISTUNG (W), nicht ENERGIE (kWh). Der Vorschlag-Knopf im Editor las
+      // die Energie-Einstellungen von Home Assistant aus, und die nennen kWh-Zaehler
+      // (`stat_energy_from`). Ein Zaehlerstand von 1234 kWh wurde dann als "1,23 kW" angezeigt:
+      // eine Zahl, die aussieht wie eine Leistung, sich langsam bewegt und nichts bedeutet.
+      // Falsch, aber nicht als falsch erkennbar -- die teuerste Sorte Fehler.
+      //
+      // Jetzt sagt die Karte es. Lieber ein Satz, der erklaert, als eine Zahl, die luegt.
+      const falsch = [];
+      for (const [feld, zustand] of [['Netzbezug', en.grid], ['Einspeisung', en.gridReturn],
+        ['Solar', en.solar], ['Batterie', en.battery]]) {
+        if (!zustand) continue;
+        const e = einheit(zustand);
+        if (e === 'W' || e === 'kW' || klasse(zustand) === 'power') continue;
+        // Kennung, sonst Anzeigename, sonst nur das Feld: Eine Meldung, in der "undefined"
+        // steht, ist keine Meldung.
+        const wer = zustand.entity_id
+          || (zustand.attributes && zustand.attributes.friendly_name) || '(unbekannt)';
+        falsch.push(feld + ': ' + wer + (e ? ' misst ' + e : ' ohne Einheit'));
+      }
+      if (falsch.length) {
+        card.innerHTML = `
+          <div class="ed-fehler">
+            <div class="ed-fehler-titel">Diese Karte braucht Leistung, nicht Energie</div>
+            <div class="ed-fehler-text">Erwartet werden Sensoren in <b>W</b> oder <b>kW</b>
+              (z.&nbsp;B. „Netzbezug", „Wechselrichter"), nicht die kWh-Zähler aus den
+              Energie-Einstellungen.</div>
+            <ul class="ed-fehler-liste">${falsch.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+          </div>`;
+        return card;
+      }
+
+      const netzBezugW = nachW(zahl(en.grid), einheit(en.grid));
+      const netzEinspeisungW = nachW(zahl(en.gridReturn), einheit(en.gridReturn));
+      const solarW = nachW(zahl(en.solar), einheit(en.solar));
+      const battRoh = nachW(zahl(en.battery), einheit(en.battery));
       const battSoc = en.batterySoc ? parseFloat(en.batterySoc.state) : null;
       // Welches Vorzeichen "laedt" bedeutet, ist keine Norm, sondern eine Entscheidung der
       // jeweiligen Anlage. Passt sie nicht, floss die Energie auf dem Display in die falsche
       // Richtung -- sichtbar, aber nicht als Fehler erkennbar.
       const battInvers = !!settings.energyBatteryInvert;
-      const battCharging = battRaw !== null && (battInvers ? battRaw > 0 : battRaw < 0);
-      const battW = battRaw !== null ? Math.abs(battRaw) : null;
-      const fmtW = v => v === null ? '–' : (v >= 1000 ? (v / 1000).toFixed(2) + ' kW' : Math.round(v) + ' W');
-      const homeW = (solarW || 0) + (gridW || 0) - (gridRetW || 0) + (battCharging ? -(battW || 0) : (battW || 0));
-      const hasSolar = en.solar !== undefined;
-      const hasBattery = en.battery !== undefined;
+      const battLaedt = battRoh !== null && (battInvers ? battRoh > 0 : battRoh < 0);
+      const battW = battRoh !== null ? Math.abs(battRoh) : null;
+
+      // Das Haus wird gerechnet, nicht gemessen: Was hereinkommt, geht hinaus. Ein eigener
+      // Hausverbrauchs-Sensor waere eine zweite Wahrheit daneben, und die beiden waeren sich
+      // nie einig.
+      const hausW = (solarW || 0) + (netzBezugW || 0) - (netzEinspeisungW || 0)
+        + (battLaedt ? -(battW || 0) : (battW || 0));
+
       // Ab wann eine Leitung als "fliesst" gilt. 5 W passten zu einem Zaehler mit ruhigem
-      // Nullpunkt; ein Wechselrichter, der nachts 30 W Eigenverbrauch meldet, laesst die
-      // Linie sonst die ganze Nacht leuchten.
+      // Nullpunkt; ein Wechselrichter, der nachts 30 W Eigenverbrauch meldet, liesse die
+      // Leitung sonst die ganze Nacht leuchten.
       const schwelleW = (settings.energyThreshold !== undefined && settings.energyThreshold !== ''
         && Number.isFinite(Number(settings.energyThreshold)))
         ? Math.abs(Number(settings.energyThreshold)) : 5;
-      const solarActive = solarW !== null && Math.abs(solarW) > schwelleW;
-      const gridActive = (gridW !== null && Math.abs(gridW) > schwelleW) || (gridRetW !== null && Math.abs(gridRetW) > schwelleW);
-      const battActive = battW !== null && battW > schwelleW;
-      const bez = {
-        solar: settings.energyLabelSolar || 'Solar',
-        netz: settings.energyLabelGrid || 'Netz',
-        haus: settings.energyLabelHome || settings.name || 'Haus',
-        batterie: settings.energyLabelBattery || 'Batterie'
-      };
-      card.innerHTML = `
-        <div class="ef-wrap">
-          <svg class="ef-lines" viewBox="0 0 300 220" preserveAspectRatio="none">
-            ${hasSolar ? `<path class="ef-path ${solarActive ? 'active' : ''}" d="M150,50 L150,108"/>` : ''}
-            <path class="ef-path ${gridActive ? 'active' : ''}" d="M58,110 L140,110"/>
-            ${hasBattery ? `<path class="ef-path ${battActive ? 'active' : ''} ${battCharging ? 'reverse' : ''}" d="M242,110 L160,110"/>` : ''}
-          </svg>
-          ${hasSolar ? `
-          <div class="ef-node ef-solar">
-            <span class="ef-icon">${ICONS.sun2}</span>
-            <span class="ef-val">${fmtW(solarW)}</span>
-            <span class="ef-label">${esc(bez.solar)}</span>
-          </div>` : ''}
-          <div class="ef-node ef-grid">
-            <span class="ef-icon">${ICONS.grid}</span>
-            <span class="ef-val">${fmtW(gridW)}</span>
-            <span class="ef-label">${esc(bez.netz)}${gridRetW !== null && gridRetW > schwelleW ? ` (↑${fmtW(gridRetW)})` : ''}</span>
-          </div>
-          <div class="ef-node ef-home">
-            <span class="ef-icon">${ICONS.home2}</span>
-            <span class="ef-val">${fmtW(homeW)}</span>
-            <span class="ef-label">${esc(bez.haus)}</span>
-          </div>
-          ${hasBattery ? `
-          <div class="ef-node ef-battery">
-            <span class="ef-icon">${ICONS.battery2}</span>
-            <span class="ef-val">${fmtW(battW)}${battSoc !== null ? ' · ' + Math.round(battSoc) + '%' : ''}</span>
-            <span class="ef-label">${battW !== null ? (battCharging ? 'Lädt' : 'Entlädt') : esc(bez.batterie)}</span>
-          </div>` : ''}
-        </div>`;
+
+      card.innerHTML = edDiagramm({
+        solarW: en.solar !== undefined ? solarW : null,
+        netzBezugW, netzEinspeisungW,
+        batterieW: en.battery !== undefined ? battW : null,
+        batterieLaedt: battLaedt, batterieSoc: battSoc,
+        hausW, schwelleW,
+        namen: {
+          solar: settings.energyLabelSolar || 'Solar',
+          netz: settings.energyLabelGrid || 'Netz',
+          haus: settings.energyLabelHome || settings.name || 'Haus',
+          batterie: settings.energyLabelBattery || 'Batterie'
+        },
+        symbole: { solar: ICONS.sun2, netz: ICONS.grid, haus: ICONS.home2, batterie: ICONS.battery2 }
+      });
     } else if (type === 'media_player') {
       const st = state ? state.state : 'off';
       const isPlaying = st === 'playing';
@@ -2483,6 +2681,10 @@
     HVAC_SYMBOL, hvacSymbol, hvacReihenfolge, animationsPhase, hvacPhasenStil,
     ankuendigungsText, ankuendigungKurz, NICHTS_ANZUZEIGEN,
     fotoBildId, fotoVersionen, fotoUrls,
+    // Das Energiefluss-Diagramm als reine Funktion: rein die Werte, raus die SVG. Damit ist es
+    // ohne Browser pruefbar -- und genau dort steckte der Fehler, der es sonst bis aufs Geraet
+    // geschafft haette (das SVG-Kommando M, das beim Umbenennen mitwanderte).
+    energieDiagramm: edDiagramm,
     DEFAULT_THEME
   };
   // Auch ausserhalb eines Browsers ladbar machen. Ohne das konnte kein einziger Test dieses

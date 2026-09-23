@@ -32,6 +32,12 @@ const Z = (state, attributes = {}, last_changed) => ({ state, attributes, last_c
 
 // Ein Querschnitt: bunte Typen, neutrale Typen, an und aus, mit und ohne Bedienelemente.
 const KARTEN = [
+  // Energiefluss in beiden Lagen. Diese Karte fehlte hier -- und ist deshalb nie jemandem
+  // aufgefallen, bis sie auf der Wand hing. Was in der Vorschau fehlt, wird nicht angesehen.
+  ['energy.fluss',     'energy', null, 2, 2],
+  ['energy.batterie',  'energy', null, 2, 2],
+  ['energy.breit',     'energy', null, 4, 2],
+  ['energy.kaputt',    'energy', null, 2, 2],
   ['light.wohnzimmer',    'light',       Z('on',  { friendly_name: 'Wohnzimmer', brightness: 180, supported_color_modes: ['color_temp'], min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500, color_temp_kelvin: 2900 }), 1, 1],
   ['light.flur',          'light',       Z('off', { friendly_name: 'Flur' }), 1, 1],
   ['switch.kaffee',       'switch',      Z('on',  { friendly_name: 'Kaffeemaschine' }), 1, 1],
@@ -104,10 +110,28 @@ const VERLAEUFE = {
 const sensorFarben = DashboardRender.sensorAkzente(KARTEN.filter(k => k[1] === 'sensor').map(k => k[0]),
   new URLSearchParams(location.search).has('hell'));
 
+// Rohwerte fuer die Energiekarten. In W, denn die Karte zeigt LEISTUNG -- und einmal bewusst
+// ein kWh-Zaehler, damit auch die Warnung im Bild ist.
+// Mit entity_id, denn die echten Zustaende von Home Assistant haben eine -- und die Warnung
+// bei falscher Einheit nennt sie. Ohne stand in der Vorschau "undefined misst kWh", und genau
+// so haette es auch auf der Wand ausgesehen, wenn die Kennung einmal fehlt.
+const W = (v, name, id) => Object.assign(Z(String(v),
+  { friendly_name: name, unit_of_measurement: 'W', device_class: 'power' }), { entity_id: id });
+const KWH = (v, name, id) => Object.assign(Z(String(v),
+  { friendly_name: name, unit_of_measurement: 'kWh', device_class: 'energy' }), { entity_id: id });
+const ENERGIE = {
+  'energy.fluss': { grid: W(12, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(5198, 'Kostal', 'sensor.kostal_wechselrichter') },
+  'energy.batterie': { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(300, 'Einspeisung', 'sensor.netzeinspeisung'),
+    solar: W(3900, 'Kostal', 'sensor.kostal_wechselrichter'), battery: W(-1500, 'Akku', 'sensor.akkuleistung'), batterySoc: Z('64', { unit_of_measurement: '%' }) },
+  'energy.breit': { grid: W(840, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(0, 'Kostal', 'sensor.kostal_wechselrichter') },
+  'energy.kaputt': { grid: KWH(1234.5, 'Netzeinspeisung kWh', 'sensor.netzeinspeisung_kwh'), solar: KWH(5239.1, 'Wechselrichter kWh', 'sensor.kwh_kostal_wechselrichter_kwh') }
+};
+
 const nur = new URLSearchParams(location.search).get('nur');
 (nur ? KARTEN.filter(k => k[1] === nur) : KARTEN).forEach(([id, typ, zustand, c, r]) => {
   const el = DashboardRender.buildCard(id, zustand, typ, { cols: c, rows: r }, {
     editable: false, apiBase: '', statesById: { 'light.dauerauf': { state: 'on' } }, history: VERLAEUFE[id], akzent: sensorFarben[id],
+    energy: ENERGIE[id],
     // Gemessene Fahrzeit fuer die kalibrierten Tore -- 18 Sekunden auf.
     torZeiten: id.startsWith('cover.tor_') && id !== 'cover.tor_zu' ? { oeffnen: 18, schliessen: 20 } : undefined,
     settings: id === 'cover.tor_dau' ? { torDaueraufEntity: 'light.dauerauf' }

@@ -1087,19 +1087,66 @@ function openSettings(entityId) {
       const resultEl = $('autoLoadResult');
       resultEl.textContent = 'Lade HA-Energie-Konfiguration (kann kurz dauern)...';
       resultEl.className = 'result';
+      // --- Es werden LEISTUNGSSENSOREN gesucht, nicht die Energie-Einstellungen von HA ---------
+      //
+      // Vorher las dieser Knopf `energy/get_prefs` aus und trug ein, was dort steht: die
+      // kWh-ZAEHLER (`stat_energy_from`). Die Karte zeigt aber Leistung. Ein Zaehlerstand von
+      // 1234 kWh erschien dann als "1,23 kW" -- eine Zahl, die aussieht wie eine Leistung und
+      // nichts bedeutet. Im Kleingedruckten stand "ggf. Leistungssensor statt Statistik-ID
+      // nachtragen", und genau das geht unter: Der Knopf hat gefuellt, es sah fertig aus.
+      //
+      // Jetzt sucht er in den Entitaeten nach Sensoren in W oder kW und ordnet sie nach dem
+      // Namen zu. Was er nicht findet, laesst er LEER -- ein leeres Feld ist ein sichtbares
+      // "fehlt noch", ein falsch gefuelltes ist eine stille Luege.
+      // Die BATTERIE wird ausdruecklich NICHT geraten, und das ist keine Faulheit.
+      //
+      // Am Geraet durchprobiert: `battery.?power` trifft `sensor.max_battery_power` -- einen
+      // Handy-Akku. Mit strengerem Muster (`akkuleistung`) trifft es den Speicher des ZWEITEN
+      // Hauses, weil beide Anlagen in derselben Home-Assistant-Instanz haengen. Aus einem
+      // Sensornamen laesst sich nicht ableiten, in welchem Haus er steht.
+      //
+      // Ein falscher Batterieknoten ist dabei schlimmer als keiner: Er zeichnet einen ganzen
+      // Zweig dazu UND geht in die Hausverbrauchs-Rechnung ein. Wer einen Speicher hat, waehlt
+      // ihn selbst -- ein leeres Feld ist ein sichtbares "fehlt noch".
+      const SUCHE = [
+        ['setGrid', /netzbezug|bezug|grid.?(import|consum)|einkauf/i, 'Netzbezug'],
+        ['setGridReturn', /einspeis|grid.?(export|feed|return)|feed.?in/i, 'Einspeisung'],
+        ['setSolar', /wechselrichter|inverter|\bpv\b|solarleistung|solar.?power/i, 'Solar']
+      ];
       try {
-        const r = await fetch('/api/ha/energy-prefs');
+        const r = await fetch('/api/entities?domain=sensor');
         const data = await r.json();
         if (!data.ok) {
           resultEl.textContent = 'Fehler: ' + data.error;
           resultEl.className = 'result err';
           return;
         }
-        if (data.gridConsumption) $('setGrid').value = data.gridConsumption;
-        if (data.gridReturn) $('setGridReturn').value = data.gridReturn;
-        if (data.solar) $('setSolar').value = data.solar;
-        if (data.batteryOut) $('setBattery').value = data.batteryOut;
-        resultEl.textContent = 'Übernommen. Bitte prüfen, ob die Entitäten passen (ggf. Leistungssensor statt Statistik-ID nachtragen) und speichern.';
+        const leistung = (data.entities || []).filter(e =>
+          e.einheit === 'W' || e.einheit === 'kW' || e.klasse === 'power');
+        const gefunden = [];
+        const fehlt = [];
+        for (const [feld, muster, klar] of SUCHE) {
+          const el = $(feld);
+          if (!el) continue;
+          // Der kuerzeste Treffer gewinnt: "sensor.netzbezug" ist wahrscheinlich der Zaehler,
+          // "sensor.netzbezug_heute_mittel_12h" eine Ableitung davon.
+          const treffer = leistung
+            .filter(e => muster.test(e.entity_id) || muster.test(e.name))
+            .sort((a, b) => a.entity_id.length - b.entity_id.length)[0];
+          if (treffer) { el.value = treffer.entity_id; gefunden.push(klar + ': ' + treffer.entity_id); }
+          else fehlt.push(klar);
+        }
+        if (!gefunden.length) {
+          resultEl.textContent = 'Kein Leistungssensor gefunden. Diese Karte braucht Sensoren in '
+            + 'W oder kW (z. B. „Netzbezug", „Wechselrichter") – die kWh-Zähler aus den '
+            + 'Energie-Einstellungen passen hier nicht.';
+          resultEl.className = 'result err';
+          return;
+        }
+        resultEl.textContent = 'Gefunden – ' + gefunden.join(', ')
+          + (fehlt.length ? '. Nicht gefunden: ' + fehlt.join(', ') + ' (leer gelassen)' : '')
+          + '. Batterie wird nicht geraten: Wenn du einen Speicher hast, wähle ihn selbst. '
+          + 'Bitte prüfen und speichern.';
         resultEl.className = 'result ok';
       } catch (e) {
         resultEl.textContent = 'Fehler: ' + e.message;
