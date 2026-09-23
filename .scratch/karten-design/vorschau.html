@@ -38,6 +38,12 @@ const KARTEN = [
   ['energy.batterie',  'energy', null, 2, 2],
   ['energy.breit',     'energy', null, 4, 2],
   ['energy.kaputt',    'energy', null, 2, 2],
+  // Vier Groessenordnungen nebeneinander: Nur so sieht man, ob Staerke und Tempo der
+  // Leitungen ueber den ganzen Bereich unterscheidbar bleiben. Zwischen 12 W und 5 kW liegen
+  // fast drei Zehnerpotenzen.
+  ['energy.wenig',     'energy', null, 2, 2],
+  ['energy.mittel',    'energy', null, 2, 2],
+  ['energy.viel',      'energy', null, 2, 2],
   ['light.wohnzimmer',    'light',       Z('on',  { friendly_name: 'Wohnzimmer', brightness: 180, supported_color_modes: ['color_temp'], min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500, color_temp_kelvin: 2900 }), 1, 1],
   ['light.flur',          'light',       Z('off', { friendly_name: 'Flur' }), 1, 1],
   ['switch.kaffee',       'switch',      Z('on',  { friendly_name: 'Kaffeemaschine' }), 1, 1],
@@ -124,7 +130,10 @@ const ENERGIE = {
   'energy.batterie': { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(300, 'Einspeisung', 'sensor.netzeinspeisung'),
     solar: W(3900, 'Kostal', 'sensor.kostal_wechselrichter'), battery: W(-1500, 'Akku', 'sensor.akkuleistung'), batterySoc: Z('64', { unit_of_measurement: '%' }) },
   'energy.breit': { grid: W(840, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(0, 'Kostal', 'sensor.kostal_wechselrichter') },
-  'energy.kaputt': { grid: KWH(1234.5, 'Netzeinspeisung kWh', 'sensor.netzeinspeisung_kwh'), solar: KWH(5239.1, 'Wechselrichter kWh', 'sensor.kwh_kostal_wechselrichter_kwh') }
+  'energy.kaputt': { grid: KWH(1234.5, 'Netzeinspeisung kWh', 'sensor.netzeinspeisung_kwh'), solar: KWH(5239.1, 'Wechselrichter kWh', 'sensor.kwh_kostal_wechselrichter_kwh') },
+  'energy.wenig':  { grid: W(12, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(35, 'Kostal', 'sensor.kostal_wechselrichter') },
+  'energy.mittel': { grid: W(420, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(680, 'Kostal', 'sensor.kostal_wechselrichter') },
+  'energy.viel':   { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(3100, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(8200, 'Kostal', 'sensor.kostal_wechselrichter') }
 };
 
 const nur = new URLSearchParams(location.search).get('nur');

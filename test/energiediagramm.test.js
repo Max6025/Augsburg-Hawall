@@ -137,3 +137,40 @@ test('Die alte Energiekarte ist restlos weg', () => {
     }
   }
 });
+
+test('Staerke und Tempo richten sich nach der Leistung', () => {
+  // Der Unterschied zwischen einer Grafik, die Zahlen zeigt, und einer, an der man im
+  // Vorbeigehen sieht, dass etwas passiert.
+  const wert = (w) => {
+    const svg = mach({ solarW: w, netzBezugW: 0, netzEinspeisungW: 0, hausW: w });
+    const m = /stroke-width:([\d.]+)px;stroke-dasharray:[\d.]+ [\d.]+;animation-duration:([\d.]+)s/.exec(svg);
+    assert.ok(m, 'kein Stil an der Leitung: ' + svg.slice(0, 200));
+    return { dicke: Number(m[1]), dauer: Number(m[2]) };
+  };
+  const klein = wert(12), mittel = wert(800), gross = wert(5200);
+  assert.ok(klein.dicke < mittel.dicke && mittel.dicke < gross.dicke,
+    `Dicke steigt nicht: ${klein.dicke} / ${mittel.dicke} / ${gross.dicke}`);
+  assert.ok(klein.dauer > mittel.dauer && mittel.dauer > gross.dauer,
+    `Tempo steigt nicht: ${klein.dauer} / ${mittel.dauer} / ${gross.dauer}`);
+});
+
+test('Die Skala ist logarithmisch, nicht linear', () => {
+  // Linear waere die 12-W-Leitung ein unsichtbarer Haarstrich und ab etwa 2 kW jede gleich
+  // dick -- man saehe genau im interessanten Bereich keinen Unterschied. Pruefung: Der Schritt
+  // von 12 auf 120 W muss aehnlich viel bringen wie der von 500 auf 5000 W.
+  const dicke = (w) => Number(/stroke-width:([\d.]+)px/.exec(
+    mach({ solarW: w, netzBezugW: 0, hausW: w }))[1]);
+  const unten = dicke(120) - dicke(12);
+  const oben = dicke(5000) - dicke(500);
+  assert.ok(unten > 1, 'die kleinen Werte muessen sich unterscheiden: ' + unten);
+  assert.ok(oben > 0.8, 'die grossen auch: ' + oben);
+  assert.ok(unten / oben < 4 && oben / unten < 4,
+    `die Schritte liegen zu weit auseinander -- das ist keine log-Skala: ${unten} / ${oben}`);
+});
+
+test('Eine ruhende Leitung bleibt duenn und ohne Muster', () => {
+  // Sie zeigt, dass der Weg da ist, nicht dass etwas fliesst.
+  const svg = mach({ solarW: 2, netzBezugW: 1, netzEinspeisungW: 0, hausW: 3, schwelleW: 5 });
+  assert.ok(!svg.includes('ed-fliesst'), 'nichts darf fliessen');
+  assert.ok(!svg.includes('stroke-dasharray'), 'und kein Strichmuster tragen');
+});

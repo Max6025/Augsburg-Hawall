@@ -59,6 +59,30 @@
   // Eine Kurve von A nach ED_B, die durch die Mitte ausholt. Der Kontrollpunkt liegt auf der
   // Verbindung zur Mitte -- so biegt jede Leitung zur Mitte hin und die vier sehen wie ein
   // System aus und nicht wie vier Striche.
+  // Staerke, Punktdichte und Tempo einer Leitung nach der Leistung.
+  //
+  // LOGARITHMISCH, und das ist der ganze Trick: Zwischen 12 W Netzbezug und 5,2 kW Solar
+  // liegen fast drei Zehnerpotenzen. Linear skaliert waere die 12-W-Leitung ein unsichtbarer
+  // Haarstrich und ab etwa 2 kW jede Leitung gleich dick -- man saehe also genau im
+  // interessanten Bereich keinen Unterschied mehr.
+  //
+  // Das Tempo laeuft mit: viel Leistung heisst schnelle Punkte. Zusammen ist das der
+  // Unterschied zwischen einer Grafik, die Zahlen zeigt, und einer, an der man im Vorbeigehen
+  // sieht, dass gerade etwas passiert.
+  const ED_BEZUG_W = 6000;      // ab hier ist die Leitung "voll"
+  function edFluss(w) {
+    const a = Math.abs(Number(w) || 0);
+    const rel = Math.min(1, Math.log10(1 + a / 8) / Math.log10(1 + ED_BEZUG_W / 8));
+    return {
+      dicke: (2.4 + 7.4 * rel).toFixed(1),
+      // Punkte wachsen mit, Luecken schrumpfen: sonst wirkt eine dicke Leitung gestrichelt
+      // statt fliessend.
+      punkt: (3.5 + 6 * rel).toFixed(1),
+      luecke: (19 - 5 * rel).toFixed(1),
+      dauer: (2.3 - 1.6 * rel).toFixed(2)
+    };
+  }
+
   function edBahn(a, b) {
     const ax = a.x + (ED_MITTE.x - a.x) * (ED_R / ED_BAHN);
     const ay = a.y + (ED_MITTE.y - a.y) * (ED_R / ED_BAHN);
@@ -143,22 +167,23 @@
     const solarAktiv = hatSolar && Math.abs(d.solarW) > s;
     const battAktiv = hatBatterie && Math.abs(d.batterieW) > s;
 
+    // Jede Leitung traegt ihre LEISTUNG mit: Staerke und Tempo haengen daran (edFluss).
     const leitungen = [];
     if (hatSolar) {
-      leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.haus), farbe: ED_FARBE.solar, aktiv: solarAktiv, um: false });
+      leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.haus), farbe: ED_FARBE.solar,
+        aktiv: solarAktiv, w: d.solarW });
       if (einspeisung > s) {
-        leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.netz), farbe: ED_FARBE.solar, aktiv: true, um: false });
+        leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.netz), farbe: ED_FARBE.solar,
+          aktiv: true, w: einspeisung });
       }
     }
-    if (bezug > s) {
-      leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz, aktiv: true, um: false });
-    } else {
-      leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz, aktiv: false, um: false });
-    }
+    // Die Netzleitung wird IMMER gezeichnet, auch ohne Fluss: Sie zeigt, dass der Weg da ist.
+    leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz,
+      aktiv: bezug > s, w: bezug });
     if (hatBatterie) {
       leitungen.push({
         d: d.batterieLaedt ? edBahn(ED_ORT.solar, ED_ORT.batterie) : edBahn(ED_ORT.batterie, ED_ORT.haus),
-        farbe: ED_FARBE.batterie, aktiv: battAktiv, um: false
+        farbe: ED_FARBE.batterie, aktiv: battAktiv, w: d.batterieW
       });
     }
 
@@ -170,8 +195,16 @@
     return `
       <svg class="ed" viewBox="0 ${-LUFT} ${ED_B} ${hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
         <g>
-          ${leitungen.map(l => `<path d="${l.d}" class="ed-leitung ${l.aktiv ? 'ed-fliesst' : ''}"
-             style="stroke:${l.aktiv ? l.farbe : ED_FARBE.ruhe}"/>`).join('')}
+          ${leitungen.map(l => {
+            const f = edFluss(l.w);
+            // Eine ruhende Leitung bleibt duenn und gleichmaessig -- sie zeigt den Weg, nicht
+            // einen Fluss.
+            const stil = l.aktiv
+              ? `stroke:${l.farbe};stroke-width:${f.dicke}px;`
+                + `stroke-dasharray:${f.punkt} ${f.luecke};animation-duration:${f.dauer}s`
+              : `stroke:${ED_FARBE.ruhe};stroke-width:2.4px`;
+            return `<path d="${l.d}" class="ed-leitung ${l.aktiv ? 'ed-fliesst' : ''}" style="${stil}"/>`;
+          }).join('')}
         </g>
         ${hatSolar ? edKnoten('solar', ED_ORT.solar, d.solarW, n.solar, solarAktiv, '', symbole, true) : ''}
         ${edKnoten('netz', ED_ORT.netz, netzWert, n.netz, netzAktiv,

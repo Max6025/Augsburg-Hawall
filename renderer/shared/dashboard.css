@@ -531,8 +531,13 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 /* Groessere Punkte mit mehr Luft: Aus fuenf Metern muss man einzelne Punkte wandern SEHEN.
    Mit 2/14 war es eine gepunktete Linie, bei der die Bewegung erst auffiel, wenn man davor
    stand -- und genau darum geht es hier nicht. */
-.ed-leitung.ed-fliesst { stroke-dasharray: 5 19; animation: ed-fluss 1.2s linear infinite; }
-@keyframes ed-fluss { to { stroke-dashoffset: -24; } }
+/* Strichmuster, Staerke und Dauer setzt das Diagramm am Element -- sie haengen an der
+   Leistung. Hier steht nur, DASS animiert wird. Eine Dauer im CSS waere eine zweite Zahl neben
+   der gerechneten und beim naechsten Aendern eine andere. */
+.ed-leitung.ed-fliesst { animation: ed-fluss 1.2s linear infinite; }
+/* Der Versatz muss zum Muster passen, sonst ruckelt der Uebergang. Er wird deshalb relativ
+   gerechnet: ein voller Musterdurchlauf, unabhaengig von der gesetzten Punktlaenge. */
+@keyframes ed-fluss { to { stroke-dashoffset: -100; } }
 
 /* Wer Bewegung abgeschaltet hat, bekommt eine durchgezogene Leitung statt einer, die still
    blinkt -- dieselbe Ruecksicht wie bei der Tor- und der Klima-Karte. */
