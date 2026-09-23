@@ -80,6 +80,23 @@ _Vermeiden_: Not-Aus, Override, Wartungsmodus
 **Karenzzeit**:
 Eine Spanne nach dem Start der Anwendung, in der nie abgeschaltet wird.
 
+**Abschied**:
+Die Ankündigung des Abschaltens. Kippt `decide()` von an auf aus, bleibt das Panel noch 2,5
+Sekunden an und der Zustand trägt `abschied` — in dieser Zeit blendet die Anzeige aus. Erst
+danach geht die Hintergrundbeleuchtung wirklich aus.
+Verschiebt nur den **Zeitpunkt**, nie die Entscheidung: Die Rangfolge steht weiterhin allein in
+`decide()`.
+_Vermeiden_: Verzögerung, Nachlauf (hieß in der Vorlage etwas anderes — dort eine Spanne nach
+einem Kalendertermin)
+
+**Blende**:
+Die schwarze Fläche über allem, die den Übergang zwischen „Panel an" und „Panel aus" macht. Ein
+**Overlay** wie der Bildschirmschoner — sie schaltet nichts. Sie schließt sich beim Abschied und
+öffnet sich beim Aufwachen.
+_Vermeiden_: Nachtschwarz (das war ein Overlay über einem *dauerhaft* leuchtenden Panel und ist
+ersatzlos entfallen, siehe [ADR 0002](docs/adr/0002-nachts-wirklich-aus.md)); die Blende liegt
+nur während des Übergangs, danach ist das Panel wirklich aus
+
 **Wartung**:
 Der Ausstieg für jemanden, der **vor dem Gerät steht**: Pause *und* sichtbare Taskleiste in
 einem Griff. Drei Wege führen hinein — der Knopf auf der Einstellungsseite, fünfmal schnell in

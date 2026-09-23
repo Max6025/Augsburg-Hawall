@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Blende ansehen</title>
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  /* Nur fuer die Probe: ein Dashboard andeuten, damit man sieht, WORUEBER die Blende liegt. */
+  body { margin: 0; background: #0b0a12; font-family: 'Segoe UI', system-ui, sans-serif; color: #f2f2f0; }
+  .raster { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 18px; height: 100vh; box-sizing: border-box; }
+  .kachel { background: rgba(255,255,255,.07); border-radius: 18px; padding: 16px;
+    border: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; justify-content: space-between; }
+  .kachel b { font-size: 2rem; font-weight: 700; }
+  .kachel span { font-size: .8rem; color: #8a8b91; }
+  .bedienung { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 10000; display: flex; gap: 8px; background: #17181b; padding: 10px 12px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,.1); }
+  .bedienung button { background: #4f7cff; color: #fff; border: 0; border-radius: 999px;
+    padding: 8px 16px; font-size: .85rem; cursor: pointer; }
+  .bedienung .aus { background: #2a2b31; }
+</style>
+</head>
+<body>
+  <div class="raster">
+    <div class="kachel"><span>Küche</span><b>21,4 °C</b><span>Innen</span></div>
+    <div class="kachel"><span>Außen</span><b>8,1 °C</b><span>Terrasse</span></div>
+    <div class="kachel"><span>Uhr</span><b>23:00</b><span>Mittwoch</span></div>
+    <div class="kachel"><span>Tor</span><b>Zu</b><span>Hoftor</span></div>
+    <div class="kachel"><span>Licht</span><b>An</b><span>Wohnzimmer</span></div>
+    <div class="kachel"><span>Luftdruck</span><b>1013</b><span>Außen</span></div>
+    <div class="kachel"><span>Feuchte</span><b>54 %</b><span>Bad</span></div>
+    <div class="kachel"><span>Müll</span><b>Bio</b><span>Morgen</span></div>
+  </div>
+
+  <div class="panel-blende" id="panelBlende"></div>
+
+  <div class="bedienung">
+    <button id="zu">Abschied (2500 ms → zu)</button>
+    <button id="auf" class="aus">Aufwachen (900 ms → auf)</button>
+    <span id="stand" style="align-self:center; font-size:.8rem; color:#8a8b91;">offen</span>
+  </div>
+
+<script>
+  // Genau die Logik aus renderer/dashboard.html, damit die Probe nicht etwas anderes zeigt
+  // als die Anzeige.
+  function blendeSetzen(zu, dauerMs) {
+    const el = document.getElementById('panelBlende');
+    if (!el) return;
+    if (dauerMs) el.style.setProperty('--blende-dauer', dauerMs + 'ms');
+    el.classList.toggle('blende-zu', !!zu);
+    document.getElementById('stand').textContent = zu ? 'zu (blendet aus)' : 'offen (blendet auf)';
+  }
+  document.getElementById('zu').onclick = () => blendeSetzen(true, 2500);
+  document.getElementById('auf').onclick = () => blendeSetzen(false);
+</script>
+</body>
+</html>

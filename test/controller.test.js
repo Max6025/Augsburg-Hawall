@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { Controller, isWithinNightLock, GRACE_MS, TASKLEISTE_MS } = require('../control/controller');
+const { Controller, isWithinNightLock, GRACE_MS, TASKLEISTE_MS, ABSCHIED_MS } = require('../control/controller');
 
 // Ein Speicher, der sich wie electron-store verhaelt, ohne Electron zu brauchen.
 function fakeStore(values = {}) {
@@ -558,4 +558,93 @@ test('Der Updater-Zustand trennt "nicht geprueft" von "nichts gefunden"', () => 
   assert.notStrictEqual(nachher, -1, 'die Rueckgabe wurde umbenannt -- Test nachziehen');
   assert.ok(vorher < nachher,
     'die Pruefung muss VOR der Aktualitaets-Behauptung stehen, sonst wirkt sie nicht');
+});
+
+// --- Abschied: ausblenden, bevor das Panel dunkel wird ---------------------------------------
+//
+// Ohne Vorlauf schaltet die Nachtsperre die Hintergrundbeleuchtung mitten im Bild ab. Auf einer
+// Wand faellt genau dieser Sprung auf -- nicht das Abschalten selbst.
+//
+// Der Vorlauf verschiebt nur den ZEITPUNKT. An decide() aendert er nichts, und das ist der
+// Punkt: Die Rangfolge bleibt die eine Stelle, an der entschieden wird.
+
+function controllerAbschied() {
+  const c = controllerMitLeiste(IMMER_NACHT);
+  c.state = { panelOn: true };   // es war ein Bild da, von dem man sich verabschieden kann
+  return c;
+}
+
+test('Beim Kippen auf AUS bleibt das Panel erst an und kuendigt an', () => {
+  const c = controllerAbschied();
+  const d = c.abschiedEinlegen(c.decide());
+  assert.strictEqual(d.on, true, 'das Panel bleibt noch an');
+  assert.strictEqual(d.reason, 'abschied');
+  assert.strictEqual(d.danach, 'nachtsperre', 'und es steht dran, warum es gleich ausgeht');
+});
+
+test('Nach dem Vorlauf geht das Panel wirklich aus', () => {
+  const c = controllerAbschied();
+  c.abschiedEinlegen(c.decide());
+  c.abschiedBis = Date.now() - 1;
+  const d = c.abschiedEinlegen(c.decide());
+  assert.strictEqual(d.on, false);
+  assert.strictEqual(d.reason, 'nachtsperre');
+});
+
+test('Wer IN die Nachtsperre hinein startet, blendet nicht aus', () => {
+  // Da war nie ein Bild. Ein Ausblenden aus dem Nichts waere eine Verzoegerung ohne Wirkung --
+  // und nach einem Windows-Update mitten in der Nacht faellt genau die auf.
+  const c = controllerMitLeiste(IMMER_NACHT);
+  c.state = null;
+  const d = c.abschiedEinlegen(c.decide());
+  assert.strictEqual(d.on, false, 'sofort aus');
+  assert.strictEqual(c.abschiedBis, 0, 'und kein Vorlauf gesetzt');
+});
+
+test('Wird wieder eingeschaltet, ist der Vorlauf zurueckgesetzt', () => {
+  const c = controllerAbschied();
+  c.abschiedEinlegen(c.decide());
+  assert.ok(c.abschiedBis > 0);
+  c.abschiedEinlegen({ on: true, reason: 'pause' });
+  assert.strictEqual(c.abschiedBis, 0, 'sonst greift beim naechsten Abschalten kein Vorlauf');
+});
+
+test('Der Zustand meldet den Abschied und seine Dauer', () => {
+  // Die Dauer reist MIT. Eine zweite Zahl im CSS waere beim naechsten Aendern eine andere --
+  // dieselbe Lehre wie bei TOR_TAKT.
+  const c = controllerAbschied();
+  c.tick();
+  assert.strictEqual(c.state.abschied, true);
+  assert.strictEqual(c.state.abschiedMs, ABSCHIED_MS);
+  assert.strictEqual(c.state.panelOn, true, 'waehrend des Abschieds bleibt das Panel an');
+});
+
+test('Der Vorlauf aendert die Rangfolge in decide() nicht', () => {
+  // Wer eine neue Regel braucht, baut sie in decide() ein und nicht in den Vorlauf.
+  const c = controllerAbschied();
+  assert.strictEqual(c.decide().on, false, 'decide() sagt weiterhin AUS');
+  assert.strictEqual(c.decide().reason, 'nachtsperre');
+});
+
+test('Die Blende haengt an BEIDEN Wegen -- Zustand und Beruehrung', () => {
+  // Eine Beruehrung weckt die Beleuchtung sofort (echte Eingabe, panel.js), die Steuerung
+  // erfaehrt es erst beim naechsten Takt. Wer nur auf den Zustand hoert, zeigt dem, der gerade
+  // angefasst hat, bis zu fuenf Sekunden Schwarz.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'dashboard.html'), 'utf8');
+  assert.match(html, /id="panelBlende"/, 'die Blende fehlt im Markup');
+  assert.match(html, /function blendeSetzen/, 'die Blende wird nie gesetzt');
+  assert.match(html, /state\.abschied \|\| state\.panelOn === false/,
+    'der Zustand schliesst die Blende nicht');
+  // Der Eingabe-Weg: im selben Block, in dem letzteBedienung gesetzt wird.
+  const block = html.slice(html.indexOf("['pointerdown', 'keydown'].forEach"));
+  assert.match(block.slice(0, 600), /blendeSetzen\(false\)/,
+    'eine Beruehrung blendet nicht auf -- dann klebt das Schwarz bis zum naechsten Takt');
+
+  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard.css'), 'utf8');
+  assert.match(css, /\.panel-blende\b/, 'die Blende hat kein CSS');
+  assert.match(css, /pointer-events:\s*none/,
+    'ohne das verschluckt die Blende den ersten Tipp -- genau den, der aufwecken soll');
+  assert.match(css, /--blende-dauer/, 'die Dauer muss aus dem Zustand kommen, nicht aus dem CSS');
 });

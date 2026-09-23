@@ -90,6 +90,10 @@
        gezeichnet und blieb mit `forwards` stehen -- beim Ausblenden verschwand nur der
        dunkle Hintergrund, Rahmen und Text standen weiter auf der Wand. Jetzt eine
        Glaskarte wie der Rest, und das Ausblenden nimmt alles mit. -->
+  <!-- Die Blende. Liegt über allem und blendet aus, BEVOR das Panel dunkel wird -- und beim
+       Aufwachen wieder ein. Siehe .panel-blende in shared/dashboard.css. -->
+  <div class="panel-blende" id="panelBlende"></div>
+
   <div class="notify-overlay" id="notifyOverlay">
     <div class="notify-box" id="notifyBox">
       <div class="notify-kopf" id="notifyKopf"></div>
@@ -781,8 +785,13 @@ function wirdGeradeBedient() {
   // (panel.js), und das wuerde sich hier als Bedienung zurueckmelden -- der Schoner laege
   // dann nie wieder.
   ['pointerdown', 'keydown'].forEach(ev =>
-    document.addEventListener(ev, () => { letzteBedienung = Date.now(); },
-      { passive: true, capture: true }));
+    document.addEventListener(ev, () => {
+      letzteBedienung = Date.now();
+      // Sofort aufblenden, ohne auf den Takt der Steuerung zu warten -- siehe blendeSetzen().
+      // Ohne dieses `false` hier sähe der, der ein dunkles Panel anfasst, bis zu fünf Sekunden
+      // Schwarz: Die Beleuchtung ist längst an, die App weiß es nur noch nicht.
+      blendeSetzen(false);
+    }, { passive: true, capture: true }));
 })();
 
 async function refresh() {
@@ -1521,9 +1530,32 @@ document.addEventListener('pointerdown', () => {
   letzteBedienungAufUnterdashboard = Date.now();
 }, { capture: true, passive: true });
 
+// --- Die Blende ------------------------------------------------------------------------------
+//
+// Zwei Wege führen hinein, und das ist Absicht:
+//
+//   1. Der Zustand der Steuerung. `abschied` heißt: Das Panel geht gleich aus, blende aus.
+//   2. Eine Berührung. Die weckt die Hintergrundbeleuchtung SOFORT (echte Eingabe, siehe
+//      panel.js), aber die Steuerung erfährt das erst beim nächsten Takt -- bis zu fünf
+//      Sekunden später. Wer nur auf den Zustand hört, zeigt dem, der gerade angefasst hat,
+//      fünf Sekunden Schwarz. Also reagiert die Blende selbst, ohne auf den Takt zu warten.
+//
+// Wer zuerst merkt, gewinnt.
+function blendeSetzen(zu, dauerMs) {
+  const el = $('panelBlende');
+  if (!el) return;
+  if (dauerMs) el.style.setProperty('--blende-dauer', dauerMs + 'ms');
+  el.classList.toggle('blende-zu', !!zu);
+}
+
 function applyControlState(state) {
   if (!state) return;
   letzterSteuerungszustand = state;
+
+  // `abschied` (Panel geht gleich aus) und `panelOn: false` (Panel ist aus) führen beide zur
+  // geschlossenen Blende: Im ersten Fall blendet sie aus, im zweiten bleibt sie geschlossen,
+  // damit das Aufwachen etwas hat, aus dem es aufblenden kann.
+  blendeSetzen(state.abschied || state.panelOn === false, state.abschiedMs);
 }
 
 // Dritter Weg in die Wartung: fuenfmal schnell in die obere linke Ecke tippen. Das ist der

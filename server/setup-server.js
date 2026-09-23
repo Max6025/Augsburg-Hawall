@@ -13,6 +13,11 @@ const { TorBeobachter } = require('../control/torzeiten');
 const { SCHWELLE_MINDESTENS } = require('../renderer/shared/akku.js');
 const systemstatus = require('./systemstatus');
 
+// Die Adresse der Gesundheitspruefung steht an EINER Stelle: Sie wird von der
+// Zugangscode-Ausnahme und von der Route selbst gebraucht, und zwei Zeichenketten laufen beim
+// naechsten Umbenennen auseinander -- dann haengt die Pruefung ploetzlich hinter dem Code.
+const GESUNDHEIT_PFAD = '/api/gesundheit';
+
 // Domains, die keine sinnvollen Wall-Display-Karten sind (Helfer/System-Entitaeten)
 // -- werden weder im Editor angeboten noch als Karten dargestellt.
 const EXCLUDED_DOMAINS = new Set([
@@ -160,6 +165,16 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   app.use((req, res, next) => {
     // Das Wall Display selbst ruft ueber localhost auf und wird nie abgefragt.
     if (isLoopback(req)) return next();
+    // Die Gesundheitspruefung bleibt frei, auch mit gesetztem Zugangscode.
+    //
+    // Sie ist fuer eine Ueberwachung von aussen gedacht (Uptime Kuma), und die kann sich nicht
+    // anmelden: Sie ruft alle sechzig Sekunden dieselbe Adresse ab und erwartet 200 oder 503.
+    // Haengt sie hinter dem Code, meldet sie ab dem Tag, an dem einer gesetzt wird, dauerhaft
+    // "down" -- und zwar aus dem falschen Grund.
+    //
+    // Was dabei nach draussen geht, ist bewusst wenig: eine Stufe, eine Liste von Namen, keine
+    // Adressen, keine Kennungen, kein Token. Siehe /api/gesundheit weiter unten.
+    if (req.path === GESUNDHEIT_PFAD) return next();
     // Solange kein Code gesetzt ist, muss die Ersteinrichtung erreichbar bleiben -- sonst
     // sperrt sich das Geraet selbst aus, bevor ueberhaupt ein Code vergeben werden konnte.
     if (!store.get('setupCode')) return next();
@@ -697,6 +712,64 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       return [];
     }
   }
+
+  // --- Gesundheitspruefung fuer eine Ueberwachung von aussen ---------------------------------
+  //
+  // Eine Adresse, ein Urteil, und ausdruecklich MAGER: Sie ist die einzige Route, die ohne
+  // Zugangscode erreichbar bleibt, also geht hier nur das Noetigste raus -- die Stufe, die
+  // Namen der auffaelligen Pruefungen, die Version. Keine IP-Adressen, keine Entitaeten, kein
+  // Protokoll, kein Token.
+  //
+  // WAS "DOWN" HEISST, IST EINE ENTSCHEIDUNG:
+  //
+  //   fehler    -> 503. Hier geht wirklich etwas nicht.
+  //   hinweis   -> 200. Faellt auf, ist aber kein Schaden -- ein fehlender Zugangscode darf
+  //                niemanden nachts aus dem Bett holen.
+  //   unbekannt -> 200. Nicht zu ermitteln ist kein Ausfall. Wer daraus "down" macht, erzeugt
+  //                Fehlalarme, und nach dem dritten glaubt niemand mehr der Anzeige (dieselbe
+  //                Lehre wie bei der Ueberfaellig-Warnung der Tor-Karte).
+  //
+  // Das Schluesselwort im Koerper ist fuer die Ueberwachungsart "HTTP(s) - Keyword" da: Sie
+  // sucht Text, nicht Struktur. HAWALL-OK und HAWALL-FEHLER stehen deshalb wortwoertlich drin
+  // und duerfen nicht umbenannt werden, ohne dass die Ueberwachung nachgezogen wird.
+  app.get(GESUNDHEIT_PFAD, (req, res) => {
+    let urteil;
+    try {
+      urteil = systemstatus.pruefungen({
+        konfiguriert: !!(store.get('haUrl') && store.get('token')),
+        haVerbunden: haLive ? haLive.istVerbunden() : undefined,
+        panel: controller ? controller.getState() : null,
+        akku: akkuStand().akku || null,
+        zugangscodeGesetzt: !!store.get('setupCode'),
+        dashboards: Array.isArray(store.get('dashboards')) ? store.get('dashboards').length : 0,
+        hauptKarten: (store.get('layout') || []).length,
+        sperrenStand: process.platform === 'win32' ? (store.get('kioskLockdownStand') || 0) : undefined,
+        sperrenSoll: process.platform === 'win32' ? sperrenSoll : undefined,
+        version: updater ? updater.currentVersion : undefined,
+        laeuftSeit: gestartetAm,
+        warnungen: []
+      });
+    } catch (e) {
+      // Selbst ein Fehler hier muss eine Antwort geben. Eine Ueberwachung, die eine
+      // Zeitueberschreitung sieht, weiss nur "irgendwas", nicht "was".
+      return res.status(503).type('application/json').send(JSON.stringify({
+        status: 'HAWALL-FEHLER', stufe: 'fehler',
+        auffaellig: ['Gesundheitspruefung selbst fehlgeschlagen: ' + String(e.message || e)]
+      }, null, 1));
+    }
+
+    const schlimm = urteil.pruefungen.filter(e => e.stufe === 'fehler');
+    const gesund = schlimm.length === 0;
+    res.status(gesund ? 200 : 503).type('application/json').send(JSON.stringify({
+      status: gesund ? 'HAWALL-OK' : 'HAWALL-FEHLER',
+      stufe: urteil.stufe,
+      version: updater ? updater.currentVersion : null,
+      // Nur Titel, keine Werte: "Schlaf-Fristen" sagt genug, der Wert gehoert auf die
+      // Statusseite hinter dem Zugangscode.
+      auffaellig: schlimm.map(e => e.titel),
+      hinweise: urteil.pruefungen.filter(e => e.stufe === 'hinweis').map(e => e.titel)
+    }, null, 1));
+  });
 
   app.get('/api/status/system', (req, res) => {
     const dashboards = store.get('dashboards');
@@ -1265,4 +1338,4 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   return app;
 }
 
-module.exports = { startServer };
+module.exports = { GESUNDHEIT_PFAD, startServer };

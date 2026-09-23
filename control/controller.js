@@ -63,6 +63,20 @@ const TASKLEISTE_MS = 5 * 60 * 1000;
 // (Windows verteilt Zeitgeber nicht auf die Millisekunde) ist keine Meldung wert, zwanzig
 // Sekunden Stille dagegen schon.
 const SCHLAF_SCHWELLE_MS = 4 * TICK_MS;
+// --- Abschied: die Anzeige darf ausblenden, BEVOR das Panel dunkel wird --------------------
+//
+// Ohne das schaltet die Nachtsperre die Hintergrundbeleuchtung mitten im Bild ab -- aus einem
+// vollen Dashboard wird von einem Takt auf den anderen Schwarz. Auf einer Wand faellt genau
+// dieser Sprung auf, nicht das Abschalten selbst.
+//
+// Deshalb wird das Abschalten ANGEKUENDIGT: Der Waechter laesst das Panel noch an, meldet
+// `abschied` an die Anzeige, und die blendet in dieser Zeit weich aus. Erst im naechsten Takt
+// geht die Beleuchtung wirklich aus -- dann ist das Bild schon schwarz.
+//
+// Zwei Sekunden und ein halbes: lang genug, dass es wie ein Uebergang aussieht, kurz genug,
+// dass niemand denkt, das Geraet haenge. Der Takt ist fuenf Sekunden, das Ausblenden ist also
+// immer fertig, bevor abgeschaltet wird.
+const ABSCHIED_MS = 2500;
 
 function parseHM(str) {
   const parts = String(str || '').split(':').map(Number);
@@ -123,6 +137,7 @@ class Controller {
     this.kioskZuletzt = null;   // zuletzt gesetzter Kiosk-Zustand, null = noch nie gesetzt
     this.letzterTakt = 0;
     this.letzteSchlafluecke = null;
+    this.abschiedBis = 0;
     this.state = null;
     this.tickTimer = null;
   }
@@ -181,6 +196,11 @@ class Controller {
       nightEnd: cfg.nightEnd,
       pausedUntil: this.pausedUntil > now.getTime() ? this.pausedUntil : 0,
       graceUntil: this.startedAt + GRACE_MS,
+      // Die Anzeige blendet aus, das Panel geht gleich dunkel. `abschiedMs` reist mit, damit
+      // die Dauer NUR HIER steht -- eine zweite Zahl im CSS wuerde beim naechsten Aendern
+      // auseinanderlaufen (dieselbe Lehre wie bei TOR_TAKT, siehe CLAUDE.md).
+      abschied: this.abschiedBis > now.getTime(),
+      abschiedMs: ABSCHIED_MS,
       // Damit die Einrichtungsseite zeigen kann, dass gerade jemand am Geraet arbeitet -- und
       // ab wann die Leiste von selbst wieder verschwindet.
       taskleisteBis: this.taskleisteSoll(now) ? this.taskleisteBis : 0,
@@ -233,6 +253,8 @@ class Controller {
       decision = this.decide(now);
     }
 
+    decision = this.abschiedEinlegen(decision, now);
+
     this.panel.setPower(decision.on);
 
     // Unabhaengig davon, ob das Panel an oder aus ist.
@@ -250,6 +272,39 @@ class Controller {
 
   schlafZeitgeberLesen() {
     try { return this.schlafZeitgeber(); } catch (e) { return null; }
+  }
+
+  /**
+   * Das Abschalten ankuendigen, statt es mitten im Bild zu tun.
+   *
+   * Kippt die Entscheidung von AN auf AUS, bleibt das Panel noch einen Moment an und der
+   * Zustand traegt `abschied`. Die Anzeige blendet in dieser Zeit aus (renderer/dashboard.html,
+   * die Blende); erst danach geht die Beleuchtung wirklich aus.
+   *
+   * Das verschiebt das Abschalten um bis zu einen Takt. Das ist der Preis, und er ist klein:
+   * Die Nachtsperre beginnt dann fuenf Sekunden spaeter.
+   *
+   * ES AENDERT NICHTS AN decide(). Die Rangfolge bleibt unberuehrt -- hier wird nur der
+   * Zeitpunkt der Ausfuehrung verschoben, nicht die Entscheidung. Wer eine neue Regel braucht,
+   * baut sie weiterhin in decide() ein und nicht hier.
+   */
+  abschiedEinlegen(decision, now = new Date()) {
+    if (decision.on) {
+      this.abschiedBis = 0;
+      return decision;
+    }
+    // Gerade gekippt? Dann Vorlauf setzen. `!this.state` faengt den ersten Takt nach dem Start
+    // ab: Wer in die Nachtsperre hinein startet, soll nicht erst ausblenden -- da war nie ein
+    // Bild, von dem man sich verabschieden muesste.
+    if (this.abschiedBis === 0 && this.state && this.state.panelOn) {
+      this.abschiedBis = now.getTime() + ABSCHIED_MS;
+      this.log('info', `Abschalten angekuendigt -- die Anzeige blendet ${ABSCHIED_MS} ms aus`);
+    }
+    if (now.getTime() < this.abschiedBis) {
+      // Panel bleibt an, aber der Grund sagt, was gerade passiert.
+      return { on: true, reason: 'abschied', danach: decision.reason };
+    }
+    return decision;
   }
 
   /**
@@ -427,5 +482,5 @@ class Controller {
 
 module.exports = {
   Controller, isWithinNightLock, parseHM,
-  TICK_MS, GRACE_MS, PAUSE_MS, EINGABE_SEKUNDEN, EINGABE_PAUSE_MS, TASKLEISTE_MS
+  TICK_MS, GRACE_MS, PAUSE_MS, EINGABE_SEKUNDEN, EINGABE_PAUSE_MS, TASKLEISTE_MS, ABSCHIED_MS
 };

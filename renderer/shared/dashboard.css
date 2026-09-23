@@ -1398,6 +1398,30 @@ body.light-theme .notify-box .as-text strong { color: #17151d; }
 
    Fest dunkel, unabhaengig vom Design: Die Buehne ist auf Dunkel entworfen (mix-blend-mode:
    screen), auf hellem Grund verschwinden die Wolken. */
+/* --- Die Blende: der Übergang zwischen "Panel an" und "Panel aus" -------------------------
+   Ohne sie schaltet die Nachtsperre die Hintergrundbeleuchtung mitten im Bild ab, und beim
+   Aufwachen steht das volle Dashboard von einem Bild auf das andere da. Beides fällt auf einer
+   Wand auf -- nicht das Abschalten selbst, sondern der Sprung.
+
+   Sie liegt ÜBER allem, auch über der Ankündigungs-Box (9998): Wenn das Panel dunkel wird,
+   wird alles dunkel, ohne Ausnahme. Und sie fängt keine Berührung ab (`pointer-events: none`),
+   sonst wäre der erste Tipp beim Aufwachen verschluckt -- genau der, der aufwecken soll.
+
+   Die DAUER steht nicht hier, sondern kommt aus dem Zustand (`abschiedMs`) und wird am Element
+   gesetzt. Eine zweite Zahl im CSS würde beim nächsten Ändern auseinanderlaufen; dieselbe
+   Lehre wie bei TOR_TAKT und HVAC_ANIMATIONEN. */
+.panel-blende {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #000;
+  opacity: 0; visibility: hidden;
+  pointer-events: none;
+  transition: opacity 900ms ease, visibility 0s linear 900ms;
+}
+.panel-blende.blende-zu {
+  opacity: 1; visibility: visible;
+  transition: opacity var(--blende-dauer, 2500ms) ease, visibility 0s linear 0s;
+}
+
 .bildschirmschoner {
   position: fixed; inset: 0; z-index: 9990;
   background: #07070c;

@@ -29,6 +29,9 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `control/panel.js` | Win32 über einen dauerhaft offenen PowerShell-Prozess: Panel per `SC_MONITORPOWER` schalten, System wach halten, Taskleiste verstecken |
 | `control/controller.js` | Zustandsautomat; die Rangfolge steht vollständig in `decide()`, die Taskleiste in `taskleisteSoll()` |
 | `control/energie.js` | Die Schlaf-Fristen des Energieschemas auf „nie" setzen — **das** hält das Gerät nachts erreichbar |
+| `server/systemstatus.js` | Das Urteil der Statusseite: reine Funktion, rein die Rohwerte, raus die Liste mit Stufen |
+| `renderer/setup/status.html` | Die Statusseite — zeigt nur an, bewertet nicht |
+| `renderer/dashboard.html` (Blende) | Der Übergang zwischen „Panel an" und „Panel aus", zwei Wege hinein |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -214,6 +217,41 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Dashboards und Bilder. Eine Umbenennung ohne **Mitnehmen dieses Ordners** startet die App wie
   frisch installiert: keine Home-Assistant-Verbindung, keine Dashboards, und am Panel sieht es
   aus wie ein Totalverlust.
+- **Die Blende hat ZWEI Wege hinein, und der zweite ist der wichtigere.** Sie macht den
+  Übergang zwischen „Panel an" und „Panel aus" — ohne sie schaltet die Nachtsperre die
+  Hintergrundbeleuchtung mitten im Bild ab, und beim Aufwachen steht das volle Dashboard von
+  einem Bild auf das andere da. Auf einer Wand fällt der **Sprung** auf, nicht das Abschalten.
+  1. **Der Zustand der Steuerung.** `abschiedEinlegen()` lässt das Panel beim Kippen noch 2,5 s
+     an und meldet `abschied`; die Anzeige blendet in dieser Zeit aus. Das verschiebt nur den
+     *Zeitpunkt* — an `decide()` ändert es nichts, und das muss so bleiben.
+  2. **Eine Berührung.** Die weckt die Beleuchtung **sofort** (echte Eingabe, siehe `panel.js`),
+     aber die Steuerung erfährt das erst beim nächsten Takt — bis zu **fünf Sekunden** später.
+     Wer nur auf den Zustand hört, zeigt dem, der gerade angefasst hat, fünf Sekunden Schwarz —
+     also *schlimmer* als ohne Blende. Deshalb blendet der `pointerdown`/`keydown`-Handler
+     selbst auf. Wer zuerst merkt, gewinnt.
+
+  Zwei Dinge sind leicht zu übersehen: Die Blende braucht `pointer-events: none`, sonst
+  verschluckt sie den ersten Tipp — genau den, der aufwecken soll. Und die **Dauer** kommt aus
+  dem Zustand (`abschiedMs`), nicht aus dem CSS: eine zweite Zahl dort läuft beim nächsten
+  Ändern auseinander, dieselbe Lehre wie bei `TOR_TAKT` und `HVAC_ANIMATIONEN`. Ansehen ohne
+  Gerät: `.scratch/uebergaenge/blende-probe.html`.
+- **`/api/gesundheit` ist die einzige Route ohne Zugangscode — und das ist eine Entscheidung.**
+  Sie ist für eine Überwachung von außen gedacht (Uptime Kuma), und die kann sich nicht
+  anmelden. Hängt sie hinter dem Code, meldet die Überwachung ab dem Tag, an dem einer gesetzt
+  wird, dauerhaft „down" — aus dem falschen Grund. Drei Dinge hängen daran:
+  1. **Die Ausnahme steht VOR der Code-Prüfung** in der Mittelschicht. Dahinter wäre sie
+     wirkungslos, und das fällt erst auf, wenn jemand einen Code setzt. Ein Test vergleicht die
+     Reihenfolge im Quelltext.
+  2. **Jedes Feld ist eine Preisgabe.** Raus gehen Stufe, Version und die *Titel* der
+     auffälligen Prüfungen — keine Adressen, keine Entitäten, kein Protokoll, kein Token. Ein
+     Test prüft die Antwort gegen eine feste Feldliste und gegen konkrete Fremdwerte.
+  3. **Nur `fehler` ist 503.** `hinweis` und `unbekannt` liefern 200: Ein fehlender Zugangscode
+     darf niemanden nachts aus dem Bett holen, und nach dem dritten Fehlalarm glaubt niemand
+     mehr der Anzeige — dieselbe Lehre wie bei der Überfällig-Warnung der Tor-Karte.
+
+  Das Schlüsselwort `HAWALL-OK` steht **wortwörtlich** im Körper, weil die Überwachungsart
+  „HTTP(s) - Keyword" Text sucht und nicht Struktur. Wer es umbenennt, muss die Überwachung
+  nachziehen.
 - **Auf dem Sperrbildschirm greift kein einziger Fluchtweg.** Die Tipp-Geste erreicht das
   Dashboard nicht (der Sperrbildschirm liegt davor), globale Tastenkuerzel laesst Windows dort
   nicht durch, und der Schalter in der Weboberflaeche braucht einen Server, der beim Aufwachen
@@ -743,7 +781,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-342 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+377 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
