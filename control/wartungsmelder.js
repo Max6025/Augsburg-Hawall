@@ -219,7 +219,13 @@ class Wartungsmelder {
       while (uebrig-- > 0) {
         const r = await this.abschliessen();
         if (r.ok || r.still) return r;
-        if (uebrig > 0) await new Promise(f => setTimeout(f, abstand).unref?.());
+        // KEIN unref() hier. Das nimmt der Ereignisschleife den Grund zu warten, und dann
+        // feuert der Zeitgeber nie: Node sieht nichts mehr zu tun, beendet sich, und das
+        // Versprechen loest sich nicht mehr auf. Unter Linux hielten zufaellig andere Handles
+        // die Schleife am Leben, auf dem Windows-Laeufer nicht -- dort brach `node --test`
+        // mitten im Lauf ab ("Promise resolution is still pending but the event loop has
+        // already resolved"), OHNE dass eine Zusicherung fehlgeschlagen waere.
+        if (uebrig > 0) await new Promise(f => setTimeout(f, abstand));
       }
       this.log('warn', 'Offene Wartungen liessen sich nicht schliessen. Sie laufen durch ihr Fenster ab.');
       return { ok: false };

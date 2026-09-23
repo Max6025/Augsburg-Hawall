@@ -157,6 +157,15 @@ test('abschliessen ohne offene Wartung fragt gar nicht', async () => {
   assert.strictEqual(rufe.length, 0, 'bei jedem Start eine Anfrage ohne Grund ist Laerm');
 });
 
+test('der Warte-Zeitgeber haelt die Ereignisschleife am Leben', () => {
+  // Mit unref() beendet sich Node, bevor der Zeitgeber feuert -- die Wiederholung findet dann
+  // nie statt. Auf dem Windows-Laeufer brach genau daran der ganze Testlauf ab, und zwar mit
+  // "fail 0": Keine Zusicherung war fehlgeschlagen, der Prozess war einfach weg.
+  const quelle = fs.readFileSync(path.join(__dirname, '..', 'control', 'wartungsmelder.js'), 'utf8');
+  assert.ok(!/setTimeout\([^)]*\)\s*\.unref/.test(quelle),
+    'kein unref() am Warte-Zeitgeber -- sonst wird die Wiederholung stillschweigend uebersprungen');
+});
+
 test('abschliessenWiederholt gibt nach dem ersten Erfolg Ruhe', async () => {
   const { melder, rufe } = bauen({ ablage: { eins: {} }, antworten: [{ status: 502 }, { status: 200 }] });
   await melder.abschliessenWiederholt(5, 1);
