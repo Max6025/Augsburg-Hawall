@@ -12,7 +12,21 @@
  * aus: `AllowEdgeSwipe=0` stand in der Registry, die Wischgeste funktionierte weiter, und im
  * Protokoll stand eine Zeile ueber eine ganz andere Sperre.
  *
- * Genau eine Sperre war daran schuld, und sie ist UNMOEGLICH: `TaskbarDa` (der Widget-Knopf)
+ * NICHTS AUS EINEM `Policies`-ZWEIG. Das gilt zweimal gemessen und ist keine Vorsichtsregel:
+ * `HKCU\\Software\\Policies` und `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies`
+ * geben dem Benutzerkonto nur `ReadKey`; Vollzugriff haben allein SYSTEM und die Gruppe
+ * Administratoren, und die App laeuft unelevert. In 1.0.16 standen hier trotzdem
+ * `DisableNotificationCenter` und `NoWinKeys` -- beide scheiterten am Geraet mit "Zugriff
+ * verweigert", und zwar NACHDEM die Messung sie fuer moeglich erklaert hatte: gemessen wurde
+ * ueber SSH, und OpenSSH gibt einem Administratorkonto ein volles Token ohne UAC-Filterung.
+ * Wer hier etwas prueft, prueft es unelevert.
+ *
+ * Ersetzt sind die beiden durch Mechanismen, die keine Rechte brauchen:
+ * `control/wintasten.js` (Tastenkombinationen ueber globalShortcut) und
+ * `control/vordergrund.js` (das Benachrichtigungscenter schliesst sich, sobald es den Fokus
+ * verliert). Beide haben denselben Vorteil: Es bleibt nichts liegen, wenn die App abstuerzt.
+ *
+ * Genau eine Sperre war an der alten Sammel-Buchfuehrung schuld, und sie ist UNMOEGLICH: `TaskbarDa` (der Widget-Knopf)
  * laesst sich auf Windows 11 25H2 Build 26200 nicht schreiben. Gemessen am 2026-09-23 auf dem
  * Surface Go: Der Schluessel `Explorer\\Advanced` gibt dem Benutzer Vollzugriff, ein anderer
  * Wert darin liess sich anlegen und wieder loeschen -- nur dieser eine Wert antwortet mit
@@ -26,7 +40,7 @@
 
 // Hochzaehlen, wenn sich die Liste aendert -- dann wird alles erneut gesetzt. Ein neuer Eintrag
 // in der Liste wuerde sonst bei jedem, der die alten Sperren schon hat, nie gesetzt werden.
-const STAND = 3;
+const STAND = 4;
 
 const SPERREN = [
   {
@@ -43,23 +57,6 @@ const SPERREN = [
     name: 'Ecke oben rechts',
     pfad: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\ImmersiveShell\\EdgeUi',
     wert: 'DisableTRcorner', zahl: 1
-  },
-  // Das ist die Sperre, die die Wischgeste von rechts wirklich erledigt. `AllowEdgeSwipe`
-  // stammt aus der Zeit der Charms-Leiste und laesst das Benachrichtigungscenter von
-  // Windows 11 unberuehrt -- am Geraet nachgemessen: Der Wert stand auf 0, und das Center
-  // ging trotzdem auf. Braucht einen Explorer-Neustart.
-  {
-    name: 'Benachrichtigungscenter',
-    pfad: 'HKCU\\Software\\Policies\\Microsoft\\Windows\\Explorer',
-    wert: 'DisableNotificationCenter', zahl: 1
-  },
-  // Nimmt den Windows-Tastenkombinationen die Wirkung (Win+A, Win+C, Win+X ...). Die
-  // Windows-Taste ALLEIN oeffnet damit weiter das Startmenue -- das erledigt der
-  // Fokus-Rueckholer in control/vordergrund.js, nicht die Registry.
-  {
-    name: 'Windows-Tastenkombinationen',
-    pfad: 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer',
-    wert: 'NoWinKeys', zahl: 1
   },
   {
     name: 'Benachrichtigungen',
@@ -113,7 +110,7 @@ function standFortschreiben(gespeichert, ergebnisse, stand = STAND) {
  *
  * Nur wenn sich wirklich etwas geaendert hat. Der Neustart nimmt fuer einen Moment die
  * Taskleiste und alle offenen Explorer-Fenster mit -- das ist bei jedem Programmstart zu tun
- * unzumutbar, und ohne ihn greifen `DisableNotificationCenter` und `NoWinKeys` nicht.
+ * unzumutbar, und ohne ihn liest der Explorer die geaenderten Werte nicht.
  */
 function explorerNeustartNoetig(ergebnisse) {
   return (ergebnisse || []).some(e => e.ok);
@@ -153,7 +150,17 @@ function bericht(gespeichert, stand = STAND, sperren = SPERREN) {
   };
 }
 
+/**
+ * Steht eine Sperre in einem `Policies`-Zweig? Die sind unelevert nicht schreibbar.
+ *
+ * Als Funktion und nicht als Kommentar, damit ein Test es prueefen kann: Der Fehler ist schon
+ * zweimal passiert, und beim zweiten Mal hatte die Datei die Warnung dagegen im Kopf stehen.
+ */
+function istPolicyPfad(pfad) {
+  return /\\Policies\\/i.test(String(pfad || ''));
+}
+
 module.exports = {
   SPERREN, STAND, offeneSperren, standFortschreiben, explorerNeustartNoetig, istUnmoeglich,
-  bericht
+  bericht, istPolicyPfad
 };

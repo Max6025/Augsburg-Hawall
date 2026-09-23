@@ -13,6 +13,7 @@ const hintergrund = require('./control/hintergrund');
 const { Wartungsmelder } = require('./control/wartungsmelder');
 const kiosksperren = require('./control/kiosksperren');
 const { Vordergrund } = require('./control/vordergrund');
+const wintasten = require('./control/wintasten');
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -127,6 +128,30 @@ async function gesundAbwarten(versuche = 20, abstand = 3000) {
 const vordergrund = new Vordergrund({
   log: (stufe, text) => { if (controller) controller.log(stufe, text); }
 });
+
+// Die Windows-Tastenkombinationen. Ueber globalShortcut und nicht ueber die Registry -- die
+// Begruendung steht in control/wintasten.js und ist am Geraet gemessen.
+let wintastenAktiv = false;
+function windowsTastenAnpassen(state) {
+  if (process.platform !== 'win32') return;
+  const r = wintasten.anpassen(state, {
+    aktiv: wintastenAktiv,
+    greifen: (taste) => {
+      try {
+        // Ein leerer Rueckruf genuegt: Die Kombination ist damit vergeben, und Windows
+        // bekommt sie nicht mehr.
+        return globalShortcut.register(taste, () => {});
+      } catch (e) { return false; }
+    },
+    freigeben: () => {
+      for (const [taste] of wintasten.KOMBINATIONEN) {
+        try { globalShortcut.unregister(taste); } catch (e) { /* war nie vergeben */ }
+      }
+    },
+    log: (stufe, text) => { if (controller) controller.log(stufe, text); }
+  });
+  if (r.geaendert) wintastenAktiv = r.aktiv;
+}
 
 // Die Vorort-Wartung endet, wenn die Taskleiste wieder verschwindet -- das ist der Moment, in
 // dem niemand mehr davor steht. Gemerkt wird der letzte Stand, weil `onStateChange` bei jedem
@@ -387,9 +412,10 @@ function createWindow() {
   // Startmenue und Benachrichtigungscenter wieder wegdruecken.
   //
   // Beides sind Ausklappfenster: Sie schliessen sich von selbst, sobald sie den Fokus
-  // verlieren. Die Windows-Taste ALLEIN laesst sich nicht per Registry abfangen -- weder
-  // `NoWinKeys` (gilt nur fuer Kombinationen) noch ein globales Tastenkuerzel (die nackte
-  // Windows-Taste nimmt Windows fuer sich). Bleibt der Fokus, und der kostet keine Rechte.
+  // verlieren. Die Windows-Taste ALLEIN ist auf keinem anderen Weg zu erreichen -- ein
+  // Registry-Wert dafuer liegt in einem `Policies`-Zweig und ist unelevert nicht schreibbar,
+  // und ein globales Tastenkuerzel auf die nackte Windows-Taste gibt Windows nicht her. Die
+  // KOMBINATIONEN erledigt control/wintasten.js; hier geht es um die Taste allein.
   //
   // Waehrend einer Wartung passiert das AUSDRUECKLICH nicht: Dann ist die Taskleiste absichtlich
   // da, und wer davor steht, will an Windows.
@@ -508,7 +534,7 @@ function applyWindowsKioskLockdown() {
 
     if (!kiosksperren.explorerNeustartNoetig(ergebnisse)) return;
     // Nur wenn sich wirklich etwas geaendert hat: Der Neustart nimmt fuer einen Moment die
-    // Taskleiste mit, und ohne ihn greifen DisableNotificationCenter und NoWinKeys nicht.
+    // Taskleiste mit, und ohne ihn liest der Explorer die geaenderten Werte nicht.
     exec('taskkill /f /im explorer.exe', { timeout: 5000 }, () => {
       exec('start explorer.exe', { timeout: 5000 }, () => {});
     });
@@ -523,6 +549,7 @@ function pushControlState(state) {
     mainWindow.webContents.send('control-state', state);
   }
   vorortEnde(state);
+  windowsTastenAnpassen(state);
 }
 
 // Ohne diesen Schalter laesst Chromium Ton erst zu, nachdem jemand die Seite angefasst hat.

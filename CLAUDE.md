@@ -35,6 +35,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `control/wartungsmelder.js` | Der Überwachung sagen, dass gerade gearbeitet wird — und dass es vorbei ist |
 | `control/kiosksperren.js` | Welche Windows-Einstellungen im Weg sind, und welche davon noch zu setzen sind |
 | `control/vordergrund.js` | Startmenü und Benachrichtigungscenter wieder wegdrücken — die Entscheidung, nicht das Fenster |
+| `control/wintasten.js` | Die Windows-Tastenkombinationen schlucken, solange die Taskleiste versteckt ist |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -221,6 +222,20 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   ist ausdrücklich **kein offener Posten** — weder für den nächsten Start noch auf der
   Statusseite. Eine Warnung, die bei jedem Start wiederkommt, liest nach dem dritten Mal
   niemand mehr, und dann geht die echte darin unter.
+- **Nichts aus einem `Policies`-Zweig. Zweimal gemessen, zweimal geglaubt, einmal trotzdem
+  wieder eingebaut.** `HKCU\Software\Policies` und
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies` geben dem Benutzerkonto nur
+  **`ReadKey`**; Vollzugriff haben allein SYSTEM und die Gruppe Administratoren — und die App
+  läuft unelevert. In 1.0.16 standen dort trotzdem `DisableNotificationCenter` und `NoWinKeys`,
+  und am Gerät stand zweimal „Zugriff verweigert" im Protokoll.
+
+  **Der Grund, warum die Messung das Gegenteil sagte, ist die eigentliche Lehre:** Geprüft wurde
+  über SSH — und **OpenSSH gibt einem Administratorkonto ein volles Token ohne UAC-Filterung**
+  (`IsInRole(Administrator)` ist dort `True`). Die Sperre ließ sich in der SSH-Sitzung setzen und
+  scheiterte in der App. Wer etwas an der Registry prüft, das die App später setzen soll, prüft
+  es **unelevert** — sonst prüft er ein anderes Programm.
+  `istPolicyPfad()` gibt es deshalb als Funktion und nicht als Kommentar: Ein Test hält die Liste
+  frei davon, und ein Kommentar hat es beim zweiten Mal nicht verhindert.
 - **Die Windows-Taste allein lässt sich nicht per Registry abfangen.** `NoWinKeys` nimmt nur den
   **Kombinationen** die Wirkung (Win+A, Win+C, Win+X); die nackte Windows-Taste öffnet weiter
   das Startmenü, und ein globales Tastenkürzel darauf lässt Windows nicht zu. Windows' eigene
@@ -231,6 +246,13 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Dinge hängen daran:
   1. **Nur bei versteckter Taskleiste.** Läuft eine Wartung, ist die Leiste absichtlich da, und
      wer davor steht, will an Windows — ihm den Fokus zu nehmen wäre das Gegenteil von Hilfe.
+     Dieselbe Regel gilt für `control/wintasten.js`, das die **Kombinationen** (Win+M, Win+D,
+     Win+A, Win+E …) über `globalShortcut` schluckt: Windows vergibt eine Tastenkombination an
+     den Prozess, der sie zuerst anfordert, und das braucht keine Rechte. Zwei Vorteile gegenüber
+     der Registry, die schwerer wiegen als der Umstand: Es **bleibt nichts liegen**, wenn die App
+     abstürzt (eine Registry-Sperre hinterließe ein Gerät, auf dem Win+E nicht mehr geht und
+     niemand weiß, warum), und es braucht **keinen Explorer-Neustart**. `Super+M` und `Super+D`
+     stehen in der Liste an erster Stelle: Sie legen den nackten Desktop frei.
   2. **Eine Bremse.** Auf dem Sperrbildschirm lässt sich das Fenster nicht nach vorne holen;
      ohne Bremse rennt der Rückholer endlos gegen Windows an. Nach einer Häufung gibt er eine
      halbe Minute Ruhe und schreibt **eine** Zeile, nicht eine pro Versuch.
@@ -933,7 +955,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-442 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+451 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

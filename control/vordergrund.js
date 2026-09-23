@@ -6,10 +6,12 @@
  * WARUM DIE REGISTRY HIER NICHT REICHT
  *
  * Die Windows-Taste ALLEIN oeffnet das Startmenue, und dafuer gibt es keinen Registry-Wert,
- * den ein unelevierter Prozess setzen koennte. `NoWinKeys` nimmt nur den Kombinationen die
- * Wirkung (Win+A, Win+C, Win+X). Windows' eigene Antwort waere "Zugewiesener Zugriff", also
- * der echte Kioskmodus -- der braucht Administratorrechte und legt das Geraet auf ein
- * einziges Programm fest. Beides passt hier nicht.
+ * den ein unelevierter Prozess setzen koennte: `NoWinKeys` liegt in einem `Policies`-Zweig, und
+ * dort hat das Benutzerkonto nur `ReadKey` (am 2026-09-23 nachgemessen). Die KOMBINATIONEN
+ * (Win+A, Win+C, Win+X) faengt control/wintasten.js ueber globalShortcut ab -- das braucht
+ * keine Rechte, die nackte Windows-Taste gibt Windows aber nicht her. Windows' eigene Antwort
+ * waere "Zugewiesener Zugriff", also der echte Kioskmodus -- Administratorrechte und ein Geraet,
+ * das auf ein einziges Programm festgelegt ist. Passt hier nicht.
  *
  * Was bleibt, ist der Umstand, dass Startmenue und Benachrichtigungscenter **Ausklappfenster**
  * sind: Sie schliessen sich von selbst, sobald sie den Fokus verlieren. Holt man den Fokus

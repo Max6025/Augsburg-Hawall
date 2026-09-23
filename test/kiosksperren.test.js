@@ -89,7 +89,7 @@ test('"nicht moeglich" ist KEIN offener Posten auf der Statusseite', () => {
   const r = pruefungen({ sperren: k.bericht(nach) });
   const e = r.pruefungen.find(x => x.schluessel === 'sperren');
   assert.strictEqual(e.stufe, 'ok');
-  assert.match(e.wert, /7 von 8/);
+  assert.match(e.wert, new RegExp(`${k.SPERREN.length - 1} von ${k.SPERREN.length}`));
   assert.match(e.erklaerung, /nicht setzen/, 'und es wird trotzdem erwaehnt');
 });
 
@@ -112,10 +112,15 @@ test('main.js benutzt das Modul und nicht mehr seine eigene Liste', () => {
   assert.ok(!/TaskbarDa/.test(quelle), 'und die unmoegliche Sperre auch');
 });
 
-test('die Sperren decken Startmenue-Umfeld UND Benachrichtigungscenter ab', () => {
+test('in der Liste steht nur, was unelevert wirklich geht', () => {
+  // Drei Werte sind hier schon gescheitert, jeder auf seine Art:
+  //   TaskbarDa                  -- von Windows einzeln geschuetzt (25H2 Build 26200)
+  //   DisableNotificationCenter  -- liegt in HKCU\Software\Policies: nur ReadKey
+  //   NoWinKeys                  -- liegt in CurrentVersion\Policies: nur ReadKey
+  // Ersetzt sind die beiden letzten durch control/wintasten.js und control/vordergrund.js.
   const werte = k.SPERREN.map(s => s.wert);
-  assert.ok(werte.includes('DisableNotificationCenter'),
-    'AllowEdgeSwipe allein reicht nicht -- am Geraet stand es auf 0 und das Center ging auf');
-  assert.ok(werte.includes('NoWinKeys'), 'Win+A und Win+C muessen weg');
-  assert.ok(!werte.includes('TaskbarDa'), 'der geschuetzte Wert gehoert nicht in die Liste');
+  for (const tot of ['TaskbarDa', 'DisableNotificationCenter', 'NoWinKeys']) {
+    assert.ok(!werte.includes(tot), `${tot} laesst Windows unelevert nicht setzen`);
+  }
+  assert.ok(werte.includes('AllowEdgeSwipe'), 'was geht, soll auch drinstehen');
 });
