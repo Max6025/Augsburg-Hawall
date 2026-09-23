@@ -85,6 +85,10 @@ const melder = new Wartungsmelder({
     url: store.get('wartungsmelderUrl') || '',
     schluessel: store.get('wartungsmelderSchluessel') || ''
   }),
+  // Der Name, unter dem das Gerät auf der Statusseite auftaucht. Aus `app.getName()` und
+  // nicht aus dem Dashboard-Titel: Der kann "Zuhause" heißen, und auf einer Statusseite mit
+  // mehreren Geräten sagt das niemandem, welches gemeint ist.
+  geraet: () => app.getName(),
   offeneLesen: () => store.get('wartungenOffen') || {},
   offeneSchreiben: (d) => store.set('wartungenOffen', d),
   log: (stufe, text) => { if (controller) controller.log(stufe, text); else console.log(stufe, text); }

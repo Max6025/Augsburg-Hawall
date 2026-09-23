@@ -29,21 +29,53 @@ function bauen({ url = 'http://ha:8099', schluessel = 'geheim', antworten = [], 
 
 // --- Die Texte ------------------------------------------------------------------------------
 
-test('anlassText nennt beide Versionen und den Zeitpunkt', () => {
-  const t = anlassText('update', { von: '1.0.14', nach: '1.0.15' }, new Date('2026-09-23T11:42:00'));
+test('anlassText nennt beide Versionen im Titel', () => {
+  const t = anlassText('update', { von: '1.0.14', nach: '1.0.15' });
   assert.match(t.titel, /1\.0\.14/);
   assert.match(t.titel, /1\.0\.15/);
-  assert.match(t.beschreibung, /11:42/, 'ohne Uhrzeit beantwortet die Beschreibung nicht, wann');
   assert.ok(t.dauer_minuten >= 10);
+});
+
+test('die Beschreibung wiederholt NICHT das Zeitfenster', () => {
+  // Uptime Kuma zeigt "von - bis" als eigenes Feld direkt unter der Beschreibung an. Eine
+  // Uhrzeit im Text daneben ist dieselbe Angabe zweimal -- und die zweite stimmt schon nicht
+  // mehr, sobald sich etwas verschiebt.
+  for (const art of ['update', 'vorort', 'irgendwas']) {
+    const t = anlassText(art, { von: '1', nach: '2', minuten: 5 });
+    assert.ok(!/\d{1,2}:\d{2}/.test(t.beschreibung), `"${t.beschreibung}" nennt eine Uhrzeit`);
+    assert.ok(!/\d{1,2}\.\d{2}\./.test(t.beschreibung), `"${t.beschreibung}" nennt ein Datum`);
+  }
+});
+
+test('die Beschreibung enthaelt keinen Innenjargon', () => {
+  // Sie steht auf einer Statusseite, die andere lesen. Wer dort hinschaut, will wissen, was
+  // fuer IHN nicht geht -- nicht, was dieses Programm intern tut.
+  const innen = /Taskleiste|Kiosk|pausiert|Waechter|IPC|Controller|Blende|Schoner/i;
+  for (const art of ['update', 'vorort', 'irgendwas']) {
+    const t = anlassText(art, { von: '1', nach: '2', minuten: 5 });
+    assert.ok(!innen.test(t.beschreibung), `"${t.beschreibung}" erklaert Innereien`);
+    assert.ok(/erreichbar/.test(t.beschreibung),
+      'sie muss sagen, was nicht geht -- sonst beantwortet sie die eine Frage nicht');
+  }
 });
 
 test('anlassText traegt keine ASCII-Ersatzschreibung in die Statusseite', () => {
   for (const art of ['update', 'vorort', 'irgendwas']) {
     const t = anlassText(art, { von: '1', nach: '2', minuten: 5 });
     const text = `${t.titel} ${t.beschreibung}`;
-    assert.ok(!/\b(fuer|Geraet|ueber|laeuft|waehrend)\b/.test(text),
+    assert.ok(!/\b(fuer|Geraet|ueber|laeuft|waehrend|moeglicherweise)\b/.test(text),
       `"${text}" steht so in Uptime Kuma -- dort gehoeren echte Umlaute hin`);
   }
+});
+
+test('der Geraetename kommt in den Titel', () => {
+  // Auf einer Statusseite mit mehreren Geraeten ist der Titel das einzige, was sagt, welches
+  // gemeint ist.
+  const { melder, rufe } = bauen();
+  melder.geraet = () => 'HA Wall Eurasburg';
+  return melder.beginnen('vorort', { minuten: 5 }).then(() => {
+    assert.match(rufe[0].koerper.titel, /^HA Wall Eurasburg: /);
+  });
 });
 
 test('vorort-Fenster ist nie kuerzer als zehn Minuten', () => {

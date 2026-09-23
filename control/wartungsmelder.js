@@ -47,23 +47,28 @@ const ZEITGRENZE_MS = 8000;
 /**
  * Titel und Beschreibung aus dem Anlass -- reine Funktion, damit sie pruefbar ist.
  *
- * Die Beschreibung ist fuer den, der in vier Wochen auf der Statusseite nachsieht, warum es
- * an diesem Abend eine Luecke gibt. "Wartung" allein beantwortet das nicht.
+ * DAS STEHT AUF EINER STATUSSEITE, DIE ANDERE LESEN.
+ *
+ * Daran haben sich drei Dinge entschieden, und der erste Entwurf hat alle drei falsch gemacht:
+ *
+ * 1. **Kein Innenjargon.** "Die Taskleiste ist freigegeben und die Anzeige pausiert" beschreibt
+ *    die Innereien dieser Anwendung. Wer auf eine Statusseite schaut, will wissen, was fuer ihn
+ *    nicht geht -- nicht, was das Programm intern tut.
+ * 2. **Keine Uhrzeit.** Uptime Kuma zeigt das Zeitfenster als eigenes Feld direkt darunter an.
+ *    "Begonnen 23.09., 14:12" im Text daneben ist dieselbe Angabe zweimal, und die zweite
+ *    stimmt schon nicht mehr, sobald sich etwas verschiebt.
+ * 3. **Zwei Saetze, nicht vier.** Eine Wartungsmeldung wird im Vorbeigehen gelesen.
  */
-function anlassText(art, daten = {}, jetzt = new Date()) {
-  const uhr = new Intl.DateTimeFormat('de-DE', {
-    hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
-  }).format(jetzt);
+function anlassText(art, daten = {}) {
   const geraet = daten.geraet || 'Wandpanel';
 
   if (art === 'update') {
     const von = daten.von || '?';
     const nach = daten.nach || '?';
     return {
-      titel: `${geraet}: Update ${von} → ${nach}`,
-      beschreibung: `Die App installiert das Update ${von} → ${nach} und startet danach neu. `
-        + `Begonnen ${uhr}. Der Webserver ist in dieser Zeit weg; folgt ein Windows-Neustart, `
-        + 'dauert es bis zur Anmeldung.',
+      titel: `${geraet}: Update ${von} \u2192 ${nach}`,
+      beschreibung: 'Das Gerät installiert ein Update und startet danach neu. '
+        + 'Die Weboberfläche ist in dieser Zeit nicht erreichbar.',
       dauer_minuten: DAUER_STANDARD_MIN
     };
   }
@@ -71,16 +76,17 @@ function anlassText(art, daten = {}, jetzt = new Date()) {
   if (art === 'vorort') {
     const min = Number(daten.minuten) || 5;
     return {
-      titel: `${geraet}: Wartung vor Ort`,
-      beschreibung: `Jemand steht am Gerät: Die Taskleiste ist freigegeben und die Anzeige `
-        + `pausiert für ${min} Minuten. Begonnen ${uhr}.`,
+      titel: `${geraet}: Wartung`,
+      beschreibung: 'Am Gerät wird gearbeitet. Die Weboberfläche und die Anzeige können '
+        + 'in dieser Zeit kurz nicht erreichbar sein.',
       dauer_minuten: Math.max(min, 10)
     };
   }
 
   return {
     titel: `${geraet}: Wartung`,
-    beschreibung: `Am Gerät wird gearbeitet. Begonnen ${uhr}.`,
+    beschreibung: 'Am Gerät wird gearbeitet. Die Weboberfläche ist in dieser Zeit '
+      + 'möglicherweise nicht erreichbar.',
     dauer_minuten: DAUER_STANDARD_MIN
   };
 }
@@ -90,14 +96,16 @@ class Wartungsmelder {
    * @param {object} o
    * @param {() => ({url: string, schluessel: string})} o.konfig  Bei jedem Aufruf frisch gelesen
    *   -- wer die Adresse in den Einstellungen nachtraegt, soll nicht neu starten muessen.
+   * @param {() => string} [o.geraet]        Wie das Geraet auf der Statusseite heisst
    * @param {() => object} o.offeneLesen      Die abgelegten Schluessel (ueberlebt einen Neustart)
    * @param {(d: object) => void} o.offeneSchreiben
    * @param {Function} [o.holen]              fetch, hereingereicht fuer die Tests
    * @param {Function} [o.log]
    * @param {() => Date} [o.jetzt]
    */
-  constructor({ konfig, offeneLesen, offeneSchreiben, holen, log, jetzt } = {}) {
+  constructor({ konfig, geraet, offeneLesen, offeneSchreiben, holen, log, jetzt } = {}) {
     this.konfig = konfig || (() => ({ url: '', schluessel: '' }));
+    this.geraet = geraet || (() => 'Wandpanel');
     this.offeneLesen = offeneLesen || (() => ({}));
     this.offeneSchreiben = offeneSchreiben || (() => {});
     this.holen = holen || ((...a) => fetch(...a));
@@ -153,7 +161,7 @@ class Wartungsmelder {
     if (!this.konfiguriert()) return { ok: false, fehler: 'nicht eingerichtet', still: true };
 
     const schluessel = daten.schluessel || `wandpanel-${art}`;
-    const text = anlassText(art, daten, this.jetzt());
+    const text = anlassText(art, { geraet: this.geraet(), ...daten });
 
     const offene = { ...this.offeneLesen() };
     offene[schluessel] = { art, seit: this.jetzt().toISOString(), titel: text.titel };

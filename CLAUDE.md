@@ -261,6 +261,22 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
 
   Ohne eingetragene Adresse ist der Melder **still**: kein Fehler, keine Verzögerung beim
   Update. Die Überwachung ist eine Zugabe, und ein Panel muss ohne sie genauso laufen.
+- **Die Beschreibung einer Wartung steht auf einer Statusseite, die andere lesen.** Der erste
+  Entwurf lautete „Jemand steht am Gerät: Die Taskleiste ist freigegeben und die Anzeige
+  pausiert für 5 Minuten. Begonnen 23.09., 14:12." — und hatte damit drei Fehler in einem Satz:
+  1. **Innenjargon.** „Taskleiste freigegeben" beschreibt die Innereien dieser Anwendung. Wer
+     auf eine Statusseite schaut, will wissen, was für **ihn** nicht geht.
+  2. **Die Uhrzeit doppelt.** Uptime Kuma zeigt das Zeitfenster als eigenes Feld direkt
+     darunter an. Dieselbe Angabe zweimal, und die zweite stimmt nicht mehr, sobald sich etwas
+     verschiebt.
+  3. **Der Merker sichtbar als Maschinenkram.** Er *muss* in der Beschreibung stehen — eine
+     Wartung in Uptime Kuma hat kein weiteres Textfeld —, also ist er jetzt ein Satz:
+     „Automatisch eingetragen und automatisch entfernt (`<schlüssel>`)." Das sagt dem Leser
+     sogar etwas. Die alte Klammer-Schreibweise wird weiter **gelesen**, sonst bleiben
+     Wartungen von vorher für immer stehen.
+
+  Tests prüfen die Beschreibung auf Uhrzeiten, auf Innenjargon und darauf, dass das Wort
+  „erreichbar" vorkommt — ohne das beantwortet sie die einzige Frage nicht, die jemand hat.
 - **Eine Wartung ohne zugeordnete Monitore unterdrückt keinen einzigen Alarm.** Sie ist dann
   angelegt, in der Liste sichtbar — und wirkungslos; dasselbe gilt für eine fehlende
   Statusseiten-Zuordnung. Das Add-on macht nach dem Anlegen deshalb immer beide Zuordnungen,
@@ -847,7 +863,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-421 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+425 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
