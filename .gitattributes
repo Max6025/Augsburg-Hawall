@@ -1,0 +1,6 @@
+# Windows-Werkzeuge muessen CRLF behalten.
+#
+# Eine Batch-Datei mit Unix-Zeilenenden stolpert bei `goto`-Marken, und Windows
+# PowerShell 5.1 liest eine .ps1 ohne BOM als ANSI -- git darf an beidem nichts drehen.
+*.cmd text eol=crlf
+werkzeuge/*.ps1 text eol=crlf
