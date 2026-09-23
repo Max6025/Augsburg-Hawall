@@ -34,7 +34,6 @@ dreht fast jede Regel um — siehe [docs/adr/](docs/adr/).
 - **Akku-Überwachung** des Geräts mit abgestufter Warnung und Warnton
 - **Ankündigungs-Box** über eine `input_text`-Entität
 - **Hell/Dunkel-Design**, gesteuert über eine Sonnenstand-Entität, plus Design-Import
-- **Zugangscode** für die Einrichtungsseite
 - **Updates nur auf Knopfdruck** und nur mit den geänderten Teilen — die Anwendung kontaktiert
   GitHub von sich aus nie
 
@@ -59,10 +58,13 @@ Die Einrichtung läuft **von einem anderen Gerät aus im Browser**, nicht auf de
 1. Beim ersten Start zeigt das Display „Bereit zum Einrichten" und seine IP-Adresse
 2. Im Browser `http://<IP>:8788/setup/` öffnen
 3. Home-Assistant-Adresse und Long-Lived Access Token eintragen
-4. Auf der Seite **Einstellungen** unter **Zugangscode** einen Code vergeben — ohne ihn ist die
-   Einrichtungsseite für jeden im selben Netzwerk offen
-5. Unter **Bildschirmschoner** einstellen, nach wie vielen Minuten er sich hinlegt und was er
+4. Unter **Bildschirmschoner** einstellen, nach wie vielen Minuten er sich hinlegt und was er
    zeigt; unter **Nachtsperre** das Zeitfenster, in dem das Panel aus bleibt
+
+> **Die Einrichtungsseite ist nicht geschützt.** Wer im selben Netz die Adresse kennt, kann
+> Dashboards ändern und über Home Assistant Geräte schalten — Licht, Heizung, Tore. Das
+> Home-Assistant-Token bleibt auf dem Gerät und geht nie heraus. Wer mehr Schutz braucht, trennt
+> das Panel im Router in ein eigenes Netz.
 
 ## Wenn du ans Gerät musst
 

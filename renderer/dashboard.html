@@ -131,9 +131,8 @@ const params = new URLSearchParams(location.search);
 const IM_PANEL = location.protocol === 'file:';
 
 const PORT = params.get('port') || '8787';
-// Im Browser derselbe Ursprung wie die Seite -- sonst greift der Zugangscode nicht (das
-// Sitzungs-Plaetzchen gilt nur fuer den Ursprung, von dem die Seite kam) und jeder Aufruf
-// scheitert an der Herkunftspruefung.
+// Im Browser derselbe Ursprung wie die Seite. Ein fester `localhost` waere dort die Maschine
+// des Zuschauers und nicht das Panel -- die Live-Ansicht wuerde ins Leere greifen.
 const API = IM_PANEL ? `http://localhost:${PORT}` : location.origin;
 
 // Der Mauszeiger wird nur auf der Wand ausgeblendet. Wer die Live-Ansicht bedient, braucht ihn.

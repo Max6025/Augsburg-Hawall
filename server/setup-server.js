@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
-const crypto = require('crypto');
 const austausch = require('./dashboard-austausch');
 // Das Render-Modul kennt die Kartenarten. Es laesst sich in Node laden (dafuer wurde es
 // seinerzeit vom Fenster geloest) -- so gibt es die Liste nur EINMAL, statt sie hier ein
@@ -14,7 +13,7 @@ const { SCHWELLE_MINDESTENS } = require('../renderer/shared/akku.js');
 const systemstatus = require('./systemstatus');
 
 // Die Adresse der Gesundheitspruefung steht an EINER Stelle: Sie wird von der
-// Zugangscode-Ausnahme und von der Route selbst gebraucht, und zwei Zeichenketten laufen beim
+// Von der Route selbst und von einem Test gebraucht, und zwei Zeichenketten laufen beim
 // naechsten Umbenennen auseinander -- dann haengt die Pruefung ploetzlich hinter dem Code.
 const GESUNDHEIT_PFAD = '/api/gesundheit';
 
@@ -78,113 +77,25 @@ function haWebsocketCommand(haUrl, token, message, timeoutMs = 8000) {
   });
 }
 
-// --- Zugangsschutz fuer die Setup-Oberflaeche -------------------------------------------------
+// --- KEIN Zugangsschutz -----------------------------------------------------------------------
 //
-// Die Vorlage lauscht auf 0.0.0.0 ohne jede Anmeldung: jeder im selben WLAN kann ueber
-// /api/ha/service beliebige Home-Assistant-Dienste schalten (Schloesser, Alarmanlage) und ueber
-// /api/reset die Konfiguration loeschen. Das ist hier bewusst geschlossen.
+// Bis 1.0.16 lag diese Oberflaeche hinter einem Zugangscode (Anmeldeseite, Sitzungs-Keks,
+// Loopback-Ausnahme fuer das Panel selbst). Auf ausdrueckliche Anweisung vom 2026-09-23 ist er
+// entfernt: "weg mit dem Zugangscode das ist ja eh nur ein Bastler Projekt".
 //
-// Die Grenze verlaeuft entlang der Loopback-Schnittstelle: das Wall Display selbst spricht ueber
-// http://localhost mit diesem Server und bleibt deshalb frei; alles, was aus dem Netz kommt,
-// braucht den Zugangscode. Damit ist der Schutz genau dort, wo die Bedrohung ist, und die App
-// muss ihren eigenen Code nicht kennen.
-
-const sessions = new Set();
-
-function isLoopback(req) {
-  const ip = (req.socket && req.socket.remoteAddress) || '';
-  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-}
-
-function readCookie(req, name) {
-  const raw = req.headers.cookie || '';
-  for (const part of raw.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(v.join('='));
-  }
-  return null;
-}
-
-const LOGIN_PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Zugangscode</title>
-<style>
- body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-      background:#111418;color:#e8eaed;font-family:Segoe UI,system-ui,sans-serif}
- form{background:#1b1f24;padding:32px;border-radius:14px;width:min(340px,90vw);
-      box-shadow:0 10px 40px rgba(0,0,0,.5)}
- h1{margin:0 0 6px;font-size:20px} p{margin:0 0 20px;color:#9aa0a6;font-size:14px;line-height:1.5}
- input{width:100%;box-sizing:border-box;padding:12px;font-size:18px;letter-spacing:2px;
-       text-align:center;border-radius:8px;border:1px solid #333a42;background:#0e1216;color:#fff}
- button{width:100%;margin-top:14px;padding:12px;font-size:16px;border:0;border-radius:8px;
-        background:#3b82f6;color:#fff;cursor:pointer}
- .err{color:#f28b82;font-size:14px;margin-top:12px;min-height:20px}
-</style></head><body>
-<form id="f"><h1>Zugangscode</h1>
-<p>Diese Einrichtungsseite ist geschützt. Gib den Code ein, den du bei der Einrichtung festgelegt hast.</p>
-<input id="c" type="password" inputmode="numeric" autocomplete="current-password" autofocus>
-<button type="submit">Anmelden</button><div class="err" id="e"></div></form>
-<script>
-document.getElementById('f').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const r = await fetch('/api/auth/login', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ code: document.getElementById('c').value })
-  });
-  const j = await r.json().catch(() => ({}));
-  if (j.ok) location.href = new URLSearchParams(location.search).get('next') || '/setup/';
-  else { document.getElementById('e').textContent = j.error || 'Code falsch'; document.getElementById('c').value = ''; }
-});
-</script></body></html>`;
+// WAS DAMIT OFFEN IST -- damit es niemand spaeter fuer ein Versehen haelt: Jeder, der im
+// gleichen Netz die Adresse kennt, kann die Dashboards aendern, die Anzeige bedienen und ueber
+// den Home-Assistant-Proxy (/api/ha/service) beliebige Dienste schalten. Dazu gehoeren Licht,
+// Heizung und das Hoftor. Der Zugang zu Home Assistant selbst bleibt geschuetzt: Das Token
+// liegt nur auf dem Geraet und geht aus /api/config nie heraus (dort steht nur `hasToken`).
+//
+// Wer den Schutz zurueckholen will, baut ihn nicht hier wieder ein, sondern davor: Das Geraet
+// haengt in einem Heimnetz, und die richtige Grenze ist das Netz, nicht dieser Express-Prozess.
 
 function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
   sperrenBericht, gestartetAm, melder }) {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
-
-  app.get('/login', (req, res) => res.type('html').send(LOGIN_PAGE));
-
-  app.post('/api/auth/login', (req, res) => {
-    const expected = store.get('setupCode');
-    const given = String((req.body && req.body.code) || '');
-    if (!expected) return res.json({ ok: true, note: 'Es ist noch kein Code gesetzt' });
-    if (given !== expected) return res.status(401).json({ ok: false, error: 'Code falsch' });
-    const sid = crypto.randomBytes(24).toString('hex');
-    sessions.add(sid);
-    // Ein Jahr gueltig: der Code soll nicht bei jedem Blick aufs Handy neu abgefragt werden.
-    res.setHeader('Set-Cookie', `wallcode=${sid}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`);
-    res.json({ ok: true });
-  });
-
-  app.post('/api/auth/logout', (req, res) => {
-    const sid = readCookie(req, 'wallcode');
-    if (sid) sessions.delete(sid);
-    res.setHeader('Set-Cookie', 'wallcode=; Path=/; Max-Age=0');
-    res.json({ ok: true });
-  });
-
-  app.use((req, res, next) => {
-    // Das Wall Display selbst ruft ueber localhost auf und wird nie abgefragt.
-    if (isLoopback(req)) return next();
-    // Die Gesundheitspruefung bleibt frei, auch mit gesetztem Zugangscode.
-    //
-    // Sie ist fuer eine Ueberwachung von aussen gedacht (Uptime Kuma), und die kann sich nicht
-    // anmelden: Sie ruft alle sechzig Sekunden dieselbe Adresse ab und erwartet 200 oder 503.
-    // Haengt sie hinter dem Code, meldet sie ab dem Tag, an dem einer gesetzt wird, dauerhaft
-    // "down" -- und zwar aus dem falschen Grund.
-    //
-    // Was dabei nach draussen geht, ist bewusst wenig: eine Stufe, eine Liste von Namen, keine
-    // Adressen, keine Kennungen, kein Token. Siehe /api/gesundheit weiter unten.
-    if (req.path === GESUNDHEIT_PFAD) return next();
-    // Solange kein Code gesetzt ist, muss die Ersteinrichtung erreichbar bleiben -- sonst
-    // sperrt sich das Geraet selbst aus, bevor ueberhaupt ein Code vergeben werden konnte.
-    if (!store.get('setupCode')) return next();
-    const sid = readCookie(req, 'wallcode');
-    if (sid && sessions.has(sid)) return next();
-    if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ ok: false, error: 'Zugangscode erforderlich', needsAuth: true });
-    }
-    return res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
-  });
 
   // --- Die Live-Ansicht ---------------------------------------------------------------------
   //
@@ -195,8 +106,8 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   // laeuft dieselbe Seite noch einmal -- sie holt ihre Daten ohnehin ueber diesen Server, und
   // ein Tastendruck geht denselben Weg wie auf dem Panel.
   //
-  // Sie liegt HINTER dem Zugangscode (die Pruefung steht weiter oben): Wer die Anzeige
-  // bedienen kann, kann Licht, Tore und die Alarmanlage schalten.
+  // Sie ist OFFEN wie alles hier, seit der Zugangscode entfernt wurde -- und wer die Anzeige
+  // bedienen kann, kann Licht, Tore und die Alarmanlage schalten. Siehe den Block oben.
   //
   // Ohne abschliessenden Schraegstrich, damit `shared/...` in der Seite auf `/shared/...`
   // zeigt. Mit Schraegstrich waere die Grundlage `/live/` und jede Datei ein Fehlschlag.
@@ -424,7 +335,6 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       rueckkehrSekunden: store.get('rueckkehrSekunden') === undefined ? 90 : store.get('rueckkehrSekunden'),
       desktopHintergrund: !!store.get('desktopHintergrund'),
       // Der Code selbst wird nie zurueckgegeben, nur ob einer gesetzt ist.
-      hasSetupCode: !!store.get('setupCode')
       // Token bewusst NICHT an den Dashboard-Client zurueckgeben; HA-Aufrufe laufen ueber /api/ha/*
     });
   });
@@ -437,7 +347,6 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       notifyEntity, batteryThreshold, batterySound, batteryVolume, nightModeEnabled, nightStart, nightEnd, nightModeForceOn,
       notifyTitel, notifySekunden, systemWachhalten,
       wartungsmelderUrl, wartungsmelderSchluessel,
-      setupCode,
       hintergrundBewegung, rueckkehrSekunden, desktopHintergrund,
       schonerEnabled, schonerMinuten, schonerHelligkeit, schonerDashboard, schonerHintergrund
     } = req.body || {};
@@ -506,12 +415,6 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     }
 
     // Mindestlaenge, damit das Feld nicht versehentlich leer bleibt und der Schutz still ausfaellt.
-    if (setupCode !== undefined && String(setupCode).length > 0) {
-      const code = String(setupCode);
-      if (code.length < 4) return res.status(400).json({ ok: false, error: 'Der Zugangscode muss mindestens 4 Zeichen haben' });
-      store.set('setupCode', code);
-      sessions.clear(); // nach einer Code-Aenderung muessen sich alle Geraete neu anmelden
-    }
 
     res.json({ ok: true });
     if (onConfigSaved) onConfigSaved();
@@ -754,14 +657,14 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
   // --- Gesundheitspruefung fuer eine Ueberwachung von aussen ---------------------------------
   //
   // Eine Adresse, ein Urteil, und ausdruecklich MAGER: Sie ist die einzige Route, die ohne
-  // Zugangscode erreichbar bleibt, also geht hier nur das Noetigste raus -- die Stufe, die
+  // Ueberwachung von aussen abgerufen wird, also geht hier nur das Noetigste raus -- die Stufe, die
   // Namen der auffaelligen Pruefungen, die Version. Keine IP-Adressen, keine Entitaeten, kein
   // Protokoll, kein Token.
   //
   // WAS "DOWN" HEISST, IST EINE ENTSCHEIDUNG:
   //
   //   fehler    -> 503. Hier geht wirklich etwas nicht.
-  //   hinweis   -> 200. Faellt auf, ist aber kein Schaden -- ein fehlender Zugangscode darf
+  //   hinweis   -> 200. Faellt auf, ist aber kein Schaden -- ein fehlendes Unterdashboard darf
   //                niemanden nachts aus dem Bett holen.
   //   unbekannt -> 200. Nicht zu ermitteln ist kein Ausfall. Wer daraus "down" macht, erzeugt
   //                Fehlalarme, und nach dem dritten glaubt niemand mehr der Anzeige (dieselbe
@@ -778,11 +681,9 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         haVerbunden: haLive ? haLive.istVerbunden() : undefined,
         panel: controller ? controller.getState() : null,
         akku: akkuStand().akku || null,
-        zugangscodeGesetzt: !!store.get('setupCode'),
         dashboards: Array.isArray(store.get('dashboards')) ? store.get('dashboards').length : 0,
         hauptKarten: (store.get('layout') || []).length,
         sperren: process.platform === 'win32' && sperrenBericht ? sperrenBericht() : undefined,
-
         version: updater ? updater.currentVersion : undefined,
         laeuftSeit: gestartetAm,
         warnungen: []
@@ -803,7 +704,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       stufe: urteil.stufe,
       version: updater ? updater.currentVersion : null,
       // Nur Titel, keine Werte: "Schlaf-Fristen" sagt genug, der Wert gehoert auf die
-      // Statusseite hinter dem Zugangscode.
+      // Statusseite in der Einrichtungsoberflaeche, nicht fuer eine Ueberwachung von aussen.
       auffaellig: schlimm.map(e => e.titel),
       hinweise: urteil.pruefungen.filter(e => e.stufe === 'hinweis').map(e => e.titel)
     }, null, 1));
@@ -818,11 +719,9 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         haVerbunden: haLive ? haLive.istVerbunden() : undefined,
         panel: controller ? controller.getState() : null,
         akku: akkuStand().akku || null,
-        zugangscodeGesetzt: !!store.get('setupCode'),
         dashboards: Array.isArray(dashboards) ? dashboards.length : 0,
         hauptKarten: (store.get('layout') || []).length,
         sperren: process.platform === 'win32' && sperrenBericht ? sperrenBericht() : undefined,
-
         version: updater ? updater.currentVersion : undefined,
         laeuftSeit: gestartetAm,
         warnungen: letzteWarnungen()

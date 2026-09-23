@@ -54,7 +54,19 @@ function konfigurationUebernehmen() {
 }
 const umzug = konfigurationUebernehmen();
 
+// Den alten Zugangscode aus dem Speicher nehmen.
+//
+// Seit 1.0.17 liest ihn nichts mehr (siehe server/setup-server.js). Ein Geheimnis, das
+// niemand benutzt, hat in der config.json nichts zu suchen -- und wer die Datei in einem Jahr
+// liest, haelt es sonst fuer einen aktiven Schutz.
+function zugangscodeAufraeumen(speicher) {
+  if (speicher.get('setupCode') === undefined) return false;
+  speicher.delete('setupCode');
+  return true;
+}
+
 const store = new Store({ name: 'config' });
+const codeEntfernt = zugangscodeAufraeumen(store);
 // Bewusst ein anderer Port als bei HA Wall Display (8787), damit beide Anwendungen auf
 // demselben Gerät nebeneinander laufen können -- siehe docs/adr/0001-...
 const SETUP_PORT = 8788;
@@ -625,6 +637,10 @@ app.whenReady().then(() => {
     melder
   });
   applyWindowsKioskLockdown();
+  if (codeEntfernt && controller) {
+    controller.log('info', 'Der alte Zugangscode wurde aus der Konfiguration entfernt -- '
+      + 'die Einrichtungsoberflaeche ist ohne Schutz erreichbar.');
+  }
 
   // Was vor dem Neustart als Wartung gemeldet wurde, wird jetzt geschlossen -- sobald der
   // eigene Webserver antwortet. Beharrlich, weil Home Assistant (und damit das Add-on) laenger

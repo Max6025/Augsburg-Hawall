@@ -112,10 +112,6 @@ einer Wartung.
 _Vermeiden_: Startleiste, Statusleiste (das ist die Kopfzeile des Dashboards), Unterleiste
 (das ist der Kartenstreifen am unteren Rand des Dashboards)
 
-**Zugangscode**:
-Das Geheimnis, das die Setup-Oberfläche gegen unbefugte Zugriffe aus dem lokalen Netz schützt.
-_Vermeiden_: Passwort, PIN, Token (Token meint hier immer den Home-Assistant-Zugang)
-
 ### Was es hier NICHT gibt
 
 Diese Begriffe stammen aus der Vorlage und sind in diesem Projekt ersatzlos entfallen. Sie
@@ -124,6 +120,7 @@ Fehlen Absicht ist und kein Versehen:
 
 | Begriff | Warum weg |
 |---|---|
+| **Zugangscode** | Die Einrichtungsoberfläche hat keinen Schutz mehr — entfernt am 2026-09-23 auf Anweisung („nur ein Bastler-Projekt“). Was damit offen ist, steht in CLAUDE.md; das Home-Assistant-**Token** bleibt geschützt, und nur das meint „Token“ hier noch. |
 | **Kalendersteuerung**, Keyword, Treffer, Anzeigefenster, Vorlauf/Nachlauf | Hier wohnt jemand. Es gibt nichts, worauf ein Kalender das Panel einschalten müsste. |
 | **Ankunftsschirm**, Abschiedsschirm, Terminankündigung | Gäste, die begrüßt und verabschiedet werden, gibt es in einem bewohnten Haus nicht. Die Bühne des Ankunftsschirms ist geblieben. |
 | **Ankunft**, Verworfen | Hing am Kalender und an der Alarmanlage. |

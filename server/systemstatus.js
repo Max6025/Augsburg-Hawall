@@ -16,7 +16,7 @@
 // DIE STUFEN
 //
 //   ok        -- laeuft
-//   hinweis   -- faellt auf, ist aber kein Schaden (Wartung laeuft, kein Zugangscode)
+//   hinweis   -- faellt auf, ist aber kein Schaden (eine Wartung laeuft, kein Dashboard da)
 //   fehler    -- hier geht etwas nicht, und zwar so, dass es jemandem auffallen wird
 //   unbekannt -- nicht zu ermitteln. AUSDRUECKLICH NICHT "ok": Eine Seite, die Gewissheit
 //                behauptet, die sie nicht hat, ist schlimmer als eine, die zugibt, dass sie
@@ -168,11 +168,6 @@ function pruefungen(d = {}) {
     }
   }
 
-  // --- Zugangscode ---------------------------------------------------------------------------
-  p('code', 'Zugangscode', d.zugangscodeGesetzt ? 'ok' : 'hinweis',
-    d.zugangscodeGesetzt ? 'gesetzt' : 'nicht gesetzt',
-    d.zugangscodeGesetzt ? 'Diese Oberfläche ist im Netz geschützt.'
-      : 'Jeder im WLAN kann hier Geräte schalten und die Konfiguration löschen.');
 
   // --- Dashboards ----------------------------------------------------------------------------
   if (d.dashboards === undefined) {

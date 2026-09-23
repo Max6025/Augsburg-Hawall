@@ -28,7 +28,7 @@ function fakeStore(werte) {
 
 const GUT = {
   haUrl: 'http://ha.invalid', token: 'geheim', title: 'Eurasburg',
-  setupCode: 'abcd', kioskLockdownStand: 2,
+  kioskSperren: {},
   layout: Array.from({ length: 8 }, (_, i) => ({ entity_id: 'light.x' + i, card_type: 'light' })),
   dashboards: [{ id: 'a', name: 'Küche' }, { id: 'b', name: 'Bad' }]
 };

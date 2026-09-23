@@ -84,9 +84,6 @@ async function load() {
   hintergrundBereichAnzeigen();
   schonerDashboardsLaden(configRes.schonerDashboard || '');
 
-  $('codeState').textContent = configRes.hasSetupCode
-    ? 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.'
-    : 'Es ist noch KEIN Zugangscode gesetzt – diese Seite ist derzeit für jeden im Netzwerk offen.';
 
 }
 
@@ -213,13 +210,6 @@ function alleFelder() {
     schonerHintergrund: (document.querySelector('input[name="schonerHintergrund"]:checked') || {}).value || 'wolken'
   };
 
-  // Der Zugangscode NUR, wenn wirklich etwas eingegeben wurde. Ein leeres Feld heisst
-  // "nicht aendern", nicht "Code loeschen" -- sonst haette jedes Speichern der Seite den
-  // Schutz stillschweigend aufgehoben, und niemand haette es gemerkt, bis das Geraet
-  // offen im Netz stand.
-  const code = $('setupCode').value;
-  if (code) felder.setupCode = code;
-
   // Dasselbe beim Zugriffsschluessel des Wartungsmelders, aus demselben Grund: Ein leeres Feld
   // heisst "unveraendert". Wuerde es mitgeschickt, loeschte jedes Speichern der Seite den
   // Schluessel -- und aufgefallen waere das erst beim naechsten Update, wenn die Wartung
@@ -233,7 +223,6 @@ function alleFelder() {
 async function speichereAlles() {
   const el = $('saveAllResult');
   const knopf = $('saveAllBtn');
-  const hatteCode = !!$('setupCode').value;
   el.className = 'result';
   el.textContent = 'Speichere...';
   knopf.disabled = true;
@@ -246,13 +235,7 @@ async function speichereAlles() {
     const data = await r.json();
     if (data.ok) {
       el.className = 'result ok';
-      el.textContent = hatteCode
-        ? 'Gespeichert. Der Zugangscode wurde geändert – alle angemeldeten Geräte müssen ihn neu eingeben.'
-        : 'Gespeichert.';
-      if (hatteCode) {
-        $('setupCode').value = '';
-        $('codeState').textContent = 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.';
-      }
+      el.textContent = 'Gespeichert.';
     } else {
       el.className = 'result err';
       el.textContent = 'Fehler: ' + data.error;

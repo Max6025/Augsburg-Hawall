@@ -40,7 +40,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
 | `renderer/shared/akku.js` | Wie dringend die Akkuwarnung ist: Stufe, Abstand, Lautstärke, Stummschalten |
 | `renderer/shared/mdi-pfade.js` | **Erzeugt.** Alle Material-Design-Symbole; wird nur bei Bedarf nachgeladen |
-| `server/setup-server.js` | Express auf Port 8788, HA-Proxy, Zugangscode |
+| `server/setup-server.js` | Express auf Port 8788, HA-Proxy — **ohne jeden Zugangsschutz** |
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
 | `renderer/dashboard.html` | Anzeige; empfängt den Steuerungszustand per IPC, entscheidet nichts selbst. Läuft auch als **Live-Ansicht** unter `/live` im Browser |
@@ -89,8 +89,21 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Alle Deklarationen in `panel.js` stehen deshalb einzeilig, der Prozess meldet seine
   Bereitschaft zurück, und bleibt die Meldung aus, fällt die App auf Einzelaufrufe zurück.
   `test/panel.test.js` prüft das gegen einen echten PowerShell-Prozess.
-- **Zugangscode und Loopback**: Das Wall Display selbst ruft über `http://localhost` auf und ist
-  vom Code ausgenommen. Diese Grenze nicht aufweichen, sonst sperrt sich das Gerät selbst aus.
+- **Die Einrichtungsoberfläche hat KEINEN Zugangsschutz — und das ist eine Entscheidung, kein
+  Versehen.** Bis 1.0.16 lag sie hinter einem Zugangscode (Anmeldeseite, Sitzungs-Keks,
+  Loopback-Ausnahme für das Panel selbst). Auf ausdrückliche Anweisung vom 2026-09-23 ist er
+  entfernt: *„weg mit dem Zugangscode das ist ja eh nur ein Bastler Projekt."*
+  **Was damit offen ist**, damit es niemand später für ein Übersehen hält: Jeder im selben Netz
+  kann Dashboards ändern, die Anzeige bedienen und über `/api/ha/service` beliebige
+  Home-Assistant-Dienste schalten — Licht, Heizung, **Hoftor**.
+  **Was trotzdem nicht herausgeht:** das Home-Assistant-Token. `/api/config` liefert nur
+  `hasToken`, und `test/server-offen.test.js` prüft die ganze Antwort gegen den Klartext des
+  Tokens. Das ist der einzige Wert hier, mit dem jemand auch außerhalb des Netzes etwas anfangen
+  könnte.
+  Wer den Schutz zurückholen will, baut ihn **nicht** hier wieder ein, sondern davor — die
+  richtige Grenze ist das Netz, nicht dieser Express-Prozess. Und halbe Reste sind schlimmer als
+  beides: Eine Anmeldeseite ohne Prüfung dahinter sieht aus wie Schutz und ist keiner. Ein Test
+  hält deshalb fest, dass nichts liegen geblieben ist.
 - **Electrons `prevent-app-suspension` hält ein Modern-Standby-Gerät NICHT wach.** Gemessen am
   2026-09-22 auf dem Surface Go: In derselben Sekunde, in der das Panel abgeschaltet wurde,
   begann Connected Standby (Kernel-Power 506) — Setup-Server weg, SSH weg, zurück erst durch
@@ -328,19 +341,19 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Hand gepflegte Liste ließe ausgerechnet die neue Seite ungeprüft. IDs, die das Skript selbst
   erzeugt (der Editor baut seine Einstellungsfelder vollständig in JS), zählen mit — ein Test,
   dem man nicht glaubt, wird abgeschaltet statt gelesen.
-- **`/api/gesundheit` ist die einzige Route ohne Zugangscode — und das ist eine Entscheidung.**
+- **`/api/gesundheit` ist für eine Überwachung von außen gedacht — und gibt deshalb fast nichts her.**
   Sie ist für eine Überwachung von außen gedacht (Uptime Kuma), und die kann sich nicht
   anmelden. Hängt sie hinter dem Code, meldet die Überwachung ab dem Tag, an dem einer gesetzt
   wird, dauerhaft „down" — aus dem falschen Grund. Drei Dinge hängen daran:
-  1. **Die Ausnahme steht VOR der Code-Prüfung** in der Mittelschicht. Dahinter wäre sie
-     wirkungslos, und das fällt erst auf, wenn jemand einen Code setzt. Ein Test vergleicht die
-     Reihenfolge im Quelltext.
+  1. **Der Pfad steht genau einmal als Zeichenkette** im Quelltext. Zwei Kopien laufen beim
+     nächsten Umbenennen auseinander, und das fällt erst der Überwachung auf — Wochen später.
   2. **Jedes Feld ist eine Preisgabe.** Raus gehen Stufe, Version und die *Titel* der
      auffälligen Prüfungen — keine Adressen, keine Entitäten, kein Protokoll, kein Token. Ein
      Test prüft die Antwort gegen eine feste Feldliste und gegen konkrete Fremdwerte.
-  3. **Nur `fehler` ist 503.** `hinweis` und `unbekannt` liefern 200: Ein fehlender Zugangscode
-     darf niemanden nachts aus dem Bett holen, und nach dem dritten Fehlalarm glaubt niemand
-     mehr der Anzeige — dieselbe Lehre wie bei der Überfällig-Warnung der Tor-Karte.
+  3. **Nur `fehler` ist 503.** `hinweis` und `unbekannt` liefern 200: Ein fehlendes
+     Unterdashboard darf niemanden nachts aus dem Bett holen, und nach dem dritten Fehlalarm
+     glaubt niemand mehr der Anzeige — dieselbe Lehre wie bei der Überfällig-Warnung der
+     Tor-Karte.
 
   Das Schlüsselwort `HAWALL-OK` steht **wortwörtlich** im Körper, weil die Überwachungsart
   „HTTP(s) - Keyword" Text sucht und nicht Struktur. Wer es umbenennt, muss die Überwachung
@@ -920,7 +933,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-445 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+442 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

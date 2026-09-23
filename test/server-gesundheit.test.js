@@ -1,9 +1,9 @@
 // Die Gesundheitspruefung fuer eine Ueberwachung von aussen (Uptime Kuma).
 //
-// Sie ist die EINZIGE Route, die ohne Zugangscode erreichbar bleibt. Das ist eine Entscheidung
-// mit Folgen, und diese Tests halten beide Seiten davon fest: dass sie wirklich frei ist (sonst
-// meldet die Ueberwachung ab dem Tag, an dem ein Code gesetzt wird, dauerhaft "down"), und dass
-// dabei nichts nach draussen geht, was nicht muss.
+// Seit 1.0.17 ist die ganze Oberflaeche offen (siehe test/server-offen.test.js), diese Route
+// war es schon vorher. Was bleibt, ist die zweite Haelfte der damaligen Entscheidung, und die
+// gilt unveraendert: Es geht nur das Noetigste nach draussen. Kein Token, keine Adressen, keine
+// Entitaeten, keine Protokollzeilen -- eine Ueberwachung braucht eine Stufe, keinen Bericht.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -29,11 +29,11 @@ const PANEL_GUT = {
 // Stehende Schlaf-Fristen: der Fall, an dem zwei Releases vorbeigingen.
 const PANEL_KAPUTT = { ...PANEL_GUT, schlafZeitgeber: { ac: 1800, dc: 300 } };
 
-async function serverMit({ panel = PANEL_GUT, code = null } = {}) {
+async function serverMit({ panel = PANEL_GUT } = {}) {
   const app = startServer({
     port: 0,
     store: fakeStore({
-      haUrl: 'http://ha.invalid', token: 'GEHEIMES-TOKEN-4711', setupCode: code,
+      haUrl: 'http://ha.invalid', token: 'GEHEIMES-TOKEN-4711',
       layout: [{ entity_id: 'light.kueche' }], dashboards: []
     }),
     onConfigSaved: () => {}, getLocalIps: () => ['192.168.1.174'],
@@ -68,9 +68,9 @@ async function hol(port, pfad, kopf = {}) {
 }
 
 test('Ein HINWEIS ist kein Ausfall -- 200', async (t) => {
-  // Ein fehlender Zugangscode darf niemanden nachts aus dem Bett holen. Nach dem dritten
-  // Fehlalarm glaubt niemand mehr der Anzeige -- dieselbe Lehre wie bei der
-  // Ueberfaellig-Warnung der Tor-Karte.
+  // Ein Hinweis darf niemanden nachts aus dem Bett holen. Nach dem dritten Fehlalarm glaubt
+  // niemand mehr der Anzeige -- dieselbe Lehre wie bei der Ueberfaellig-Warnung der Tor-Karte.
+  // Der Hinweis kommt hier daher, dass kein einziges Unterdashboard eingerichtet ist.
   const s = await serverMit({});
   t.after(() => { s.server.close(); if (s.live) s.live.stop(); });
   const r = await hol(s.port, GESUNDHEIT_PFAD);
@@ -97,39 +97,19 @@ test('Das Schluesselwort steht WORTWOERTLICH im Koerper', async (t) => {
   assert.ok(r.text.includes('HAWALL-OK'), r.text);
 });
 
-test('Mit gesetztem Zugangscode bleibt sie erreichbar -- alles andere nicht', async (t) => {
-  // Der eigentliche Punkt. Haengt die Pruefung hinter dem Code, meldet die Ueberwachung ab dem
-  // Tag, an dem einer gesetzt wird, dauerhaft "down" -- aus dem falschen Grund.
-  //
-  // Angesprochen wird ueber die LAN-Adresse. Ueber 127.0.0.1 ist alles frei, dort waere der
-  // Test wertlos -- und genau so ist er beim ersten Anlauf durchgefallen.
-  const ip = lanAdresse();
-  if (!ip) return t.skip('kein Netzwerkadapter mit LAN-Adresse vorhanden');
-  const s = await serverMit({ code: 'geheim' });
-  t.after(() => { s.server.close(); if (s.live) s.live.stop(); });
-
-  const frei = await fetch(`http://${ip}:${s.port}${GESUNDHEIT_PFAD}`);
-  assert.strictEqual(frei.status, 200, 'die Gesundheitspruefung muss aus dem Netz frei bleiben');
-  assert.ok((await frei.text()).includes('HAWALL-'), 'und einen brauchbaren Koerper liefern');
-
-  const zu = await fetch(`http://${ip}:${s.port}/api/status/system`);
-  assert.strictEqual(zu.status, 401, 'die ausfuehrliche Statusroute NICHT');
-  const zu2 = await fetch(`http://${ip}:${s.port}/api/config`);
-  assert.strictEqual(zu2.status, 401, 'und die Konfiguration schon gar nicht');
-});
 
 test('Nach draussen geht nur das Noetigste', async (t) => {
   // Sie ist ohne Code erreichbar, also ist jedes Feld hier eine Preisgabe. Token, Adressen,
   // Entitaeten und Protokollzeilen haben darin nichts verloren.
   const ip = lanAdresse();
-  const s = await serverMit({ panel: PANEL_KAPUTT, code: 'geheim' });
+  const s = await serverMit({ panel: PANEL_KAPUTT });
   t.after(() => { s.server.close(); if (s.live) s.live.stop(); });
   // Ueber das Netz abrufen, also genau so, wie die Ueberwachung es tut.
   const r = ip
     ? await (async () => { const x = await fetch(`http://${ip}:${s.port}${GESUNDHEIT_PFAD}`);
         const t2 = await x.text(); return { status: x.status, text: t2, json: JSON.parse(t2) }; })()
     : await hol(s.port, GESUNDHEIT_PFAD);
-  for (const verboten of ['GEHEIMES-TOKEN-4711', '192.168.1.174', 'light.kueche', 'ha.invalid', 'geheim']) {
+  for (const verboten of ['GEHEIMES-TOKEN-4711', '192.168.1.174', 'light.kueche', 'ha.invalid']) {
     assert.ok(!r.text.includes(verboten), `"${verboten}" steht in der Antwort: ${r.text}`);
   }
   assert.deepStrictEqual(Object.keys(r.json).sort(),
@@ -137,15 +117,3 @@ test('Nach draussen geht nur das Noetigste', async (t) => {
     'unerwartetes Feld -- jedes ist eine Preisgabe');
 });
 
-test('Die Ausnahme steht VOR der Code-Pruefung', async () => {
-  // Reihenfolge im Quelltext: Stuende die Ausnahme dahinter, waere sie wirkungslos -- und das
-  // faellt erst auf, wenn jemand einen Code setzt.
-  const q = fs.readFileSync(path.join(__dirname, '..', 'server', 'setup-server.js'), 'utf8');
-  const ausnahme = q.indexOf('if (req.path === GESUNDHEIT_PFAD) return next();');
-  const pruefung = q.indexOf("if (!store.get('setupCode')) return next();");
-  assert.notStrictEqual(ausnahme, -1, 'die Ausnahme fehlt');
-  assert.ok(ausnahme < pruefung, 'die Ausnahme muss vor der Code-Pruefung stehen');
-  // Und der Pfad steht an einer Stelle, nicht zweimal als Zeichenkette.
-  assert.strictEqual((q.match(/'\/api\/gesundheit'/g) || []).length, 1,
-    'der Pfad darf nur EINMAL als Zeichenkette vorkommen, sonst laufen die beiden auseinander');
-});
