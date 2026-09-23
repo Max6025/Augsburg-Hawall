@@ -168,6 +168,43 @@ function pruefungen(d = {}) {
     }
   }
 
+  // --- SSH-Dienst ----------------------------------------------------------------------------
+  //
+  // Nur ein HINWEIS, nie ein Fehler -- auch wenn der Dienst ganz fehlt. Das Panel funktioniert
+  // ohne SSH vollstaendig: Die Anzeige laeuft, die Weboberflaeche antwortet, Home Assistant ist
+  // verbunden. Ein 503 hier wuerde die Ueberwachung nachts Alarm schlagen lassen fuer etwas,
+  // das niemandem auffaellt, und nach dem dritten Fehlalarm glaubt niemand mehr der Anzeige --
+  // dieselbe Lehre wie bei der Ueberfaellig-Warnung der Tor-Karte.
+  //
+  // Auffallen soll es trotzdem, denn SSH ist der Weg, auf dem man ohne Hingehen an das Geraet
+  // kommt. Faellt er aus, merkt man es sonst genau dann, wenn man ihn braucht.
+  if (d.ssh === undefined) {
+    // Kein Windows oder nicht abgefragt -- dann wird die Zeile weggelassen, statt "unbekannt"
+    // zu behaupten.
+  } else if (!d.ssh || d.ssh.vorhanden === null) {
+    p('ssh', 'SSH-Dienst', 'unbekannt', 'nicht zu ermitteln',
+      (d.ssh && d.ssh.grund) || 'Die Abfrage hat nichts Verwertbares geliefert.');
+  } else if (d.ssh.vorhanden === false) {
+    p('ssh', 'SSH-Dienst', 'hinweis', 'nicht installiert',
+      'Auf dieses Gerät kommt man aus der Ferne nicht mehr. Das Skript '
+      + 'werkzeuge/ssh-dienst-reparieren.cmd baut den Dienst wieder auf.');
+  } else if (!d.ssh.laeuft) {
+    p('ssh', 'SSH-Dienst', 'hinweis', 'installiert, läuft aber nicht',
+      'Fernzugriff geht gerade nicht. Nach einem Neustart des Geräts sollte er von selbst '
+      + 'wiederkommen — wenn nicht, hilft werkzeuge/ssh-dienst-reparieren.cmd.');
+  } else {
+    const fehlt = [];
+    if (!d.ssh.startAutomatisch) fehlt.push('er startet nicht automatisch mit (nach dem nächsten Neustart ist er weg)');
+    if (!d.ssh.wiederherstellung) fehlt.push('nach einem Absturz startet ihn niemand neu');
+    if (fehlt.length) {
+      p('ssh', 'SSH-Dienst', 'hinweis', 'läuft, aber nicht abgesichert',
+        fehlt.join('; ') + '. werkzeuge/ssh-dienst-reparieren.cmd setzt beides.');
+    } else {
+      p('ssh', 'SSH-Dienst', 'ok', 'läuft und ist abgesichert',
+        'Automatischer Start, und nach einem Absturz startet Windows ihn von selbst neu.');
+    }
+  }
+
 
   // --- Dashboards ----------------------------------------------------------------------------
   if (d.dashboards === undefined) {

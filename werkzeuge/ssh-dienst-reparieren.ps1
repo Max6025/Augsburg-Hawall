@@ -309,6 +309,66 @@ function ZugangFreiMachen {
 
 ZugangFreiMachen
 
+function GegenAusfallAbsichern {
+  # --- Der Teil, der DIESES Skript vorher nicht hatte -----------------------------------------
+  #
+  # Am 2026-09-23 auf dem Surface Go nachgemessen: `sc qfailure sshd` meldete
+  # RESET_PERIOD 0 und KEINE Aktionen. Der Dienst lief, war auf Automatisch gestellt -- und
+  # waere er abgestuerzt, haette ihn niemand neu gestartet. Von aussen sieht das aus wie ein
+  # Geraet ohne Netz, und man merkt es erst, wenn man draufmuss.
+  #
+  # LAEUFT IMMER, auch wenn der Dienst schon laeuft. Die Schritte 1-7 oben werden uebersprungen,
+  # sobald sshd laeuft ("Nur anfassen, was nicht laeuft") -- und genau dort stand bisher der
+  # Starttyp. Wer nur einen laufenden Dienst hatte, bekam die Absicherung deshalb nie. Das ist
+  # derselbe Fehler, an dem die erste Fassung dieses Skripts schon einmal vorbeigelaufen ist.
+
+  Titel 'H. Gegen erneutes Ausfallen absichern'
+
+  try {
+    $d = Get-Service -Name sshd -ErrorAction Stop
+    if ($d.StartType -ne 'Automatic') {
+      Set-Service -Name sshd -StartupType Automatic -ErrorAction Stop
+      Sagen 'Starttyp auf Automatisch gestellt.' 'Green'
+    } else {
+      Sagen 'Starttyp ist Automatisch.' 'Green'
+    }
+  } catch {
+    Sagen "Starttyp nicht pruefbar: $($_.Exception.Message)" 'Yellow'
+    return
+  }
+
+  # Nach 5 s, nach 20 s, nach 60 s. Danach greift der Zaehler erst nach einem Tag wieder, damit
+  # ein dauerhaft kaputter Dienst nicht in einer Endlosschleife neu gestartet wird.
+  $vorher = (sc.exe qfailure sshd 2>&1 | Out-String)
+  sc.exe failure sshd reset= 86400 actions= restart/5000/restart/20000/restart/60000 2>&1 | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    Sagen 'Wiederherstellung gesetzt: Neustart nach 5 s, 20 s, 60 s.' 'Green'
+  } else {
+    Sagen "Wiederherstellung nicht setzbar (Code $LASTEXITCODE)." 'Yellow'
+  }
+
+  # OHNE DAS greift die Wiederherstellung nur bei einem ABSTURZ. Beendet sich sshd mit einem
+  # Fehlercode -- der haeufigere Fall, etwa bei einer kaputten sshd_config --, gilt das fuer
+  # Windows nicht als Absturz, und es passiert nichts.
+  sc.exe failureflag sshd 1 2>&1 | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    Sagen 'Gilt auch, wenn der Dienst sich mit einem Fehler beendet.' 'Green'
+  } else {
+    Sagen "Fehler-Kennzeichen nicht setzbar (Code $LASTEXITCODE)." 'Yellow'
+  }
+
+  # Nicht dem Rueckgabewert glauben, sondern nachlesen -- dieselbe Regel wie bei powercfg.
+  $nachher = (sc.exe qfailure sshd 2>&1 | Out-String)
+  if ($nachher -match 'RESTART') {
+    Sagen 'Nachgelesen: Es stehen jetzt Neustart-Aktionen drin.' 'Green'
+  } else {
+    Sagen 'Nachgelesen: Es stehen KEINE Aktionen drin. Dann hat es nicht gegriffen.' 'Red'
+    Write-Host $nachher
+  }
+}
+
+GegenAusfallAbsichern
+
 Titel 'Ergebnis'
 
 $d = Get-Service -Name sshd -ErrorAction SilentlyContinue

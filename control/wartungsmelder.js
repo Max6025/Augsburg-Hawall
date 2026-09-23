@@ -72,6 +72,14 @@ function anlassText(art, daten = {}) {
     };
   }
 
+  if (art === 'neustart') {
+    return {
+      titel: `${geraet}: Wartung`,
+      beschreibung: 'Das Gerät startet neu.',
+      dauer_minuten: DAUER_STANDARD_MIN
+    };
+  }
+
   if (art === 'vorort') {
     const min = Number(daten.minuten) || 5;
     return {

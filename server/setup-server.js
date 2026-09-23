@@ -93,7 +93,7 @@ function haWebsocketCommand(haUrl, token, message, timeoutMs = 8000) {
 // haengt in einem Heimnetz, und die richtige Grenze ist das Netz, nicht dieser Express-Prozess.
 
 function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
-  sperrenBericht, gestartetAm, melder }) {
+  sperrenBericht, gestartetAm, melder, sshLesen, geraetNeustarten }) {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
@@ -710,8 +710,16 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     }, null, 1));
   });
 
-  app.get('/api/status/system', (req, res) => {
+  app.get('/api/status/system', async (req, res) => {
     const dashboards = store.get('dashboards');
+    // Der SSH-Zustand wird NUR hier gelesen, nicht in /api/gesundheit. Dort fragt eine
+    // Ueberwachung jede Minute an, und drei Prozessaufrufe im Minutentakt fuer eine Auskunft,
+    // die den Rueckgabecode ohnehin nicht aendert (SSH ist immer nur ein Hinweis), sind Aufwand
+    // ohne Ertrag.
+    let ssh;
+    if (sshLesen) {
+      try { ssh = await sshLesen(); } catch (e) { ssh = null; }
+    }
     res.json({
       ok: true,
       ...systemstatus.pruefungen({
@@ -722,6 +730,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
         dashboards: Array.isArray(dashboards) ? dashboards.length : 0,
         hauptKarten: (store.get('layout') || []).length,
         sperren: process.platform === 'win32' && sperrenBericht ? sperrenBericht() : undefined,
+        ssh,
         version: updater ? updater.currentVersion : undefined,
         laeuftSeit: gestartetAm,
         warnungen: letzteWarnungen()
@@ -730,6 +739,34 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       port,
       panelGroesse: getPanelSize ? getPanelSize() : null
     });
+  });
+
+  /**
+   * Das Geraet neu starten.
+   *
+   * Warum es das ueberhaupt gibt: Nach einem Windows-Update, einem haengenden Dienst oder einer
+   * WLAN-Sonderlage ist "einmal neu starten" die Loesung -- und die einzige Alternative war
+   * hingehen. Ein Neustart braucht keine erhoehten Rechte; das darf jeder angemeldete Benutzer
+   * fuer seine eigene Sitzung.
+   *
+   * Mit ZWEI Vorkehrungen:
+   *   1. `bestaetigt` muss mitkommen. Ein Knopf, den man im Vorbeigehen trifft, waere auf
+   *      einer Statusseite die falsche Art von Knopf.
+   *   2. Die Ueberwachung wird vorher benachrichtigt, sonst ist der Neustart ein Ausfall.
+   *      Beendet wird die Wartung von selbst, sobald der Webserver wieder antwortet.
+   */
+  app.post('/api/geraet/neustart', async (req, res) => {
+    if (!geraetNeustarten) return res.status(400).json({ ok: false, error: 'Auf diesem System nicht moeglich' });
+    if (!(req.body && req.body.bestaetigt)) {
+      return res.status(400).json({ ok: false, error: 'Nicht bestaetigt' });
+    }
+    if (melder) {
+      // Abgewartet, nicht abgeschickt: Gleich ist das Geraet weg, und eine Anfrage, die noch
+      // unterwegs ist, kommt dann nie an -- dieselbe Reihenfolge wie bei updater.install().
+      try { await melder.beginnen('neustart', {}); } catch (e) { /* haelt den Neustart nicht auf */ }
+    }
+    const r = geraetNeustarten();
+    res.json({ ok: true, ...r });
   });
 
   // Update-Steuerung aus dem Webinterface

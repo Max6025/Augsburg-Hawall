@@ -68,6 +68,10 @@
   .status-fuss { max-width: 760px; margin: 0 auto; display: flex; gap: 0.6rem;
     align-items: center; flex-wrap: wrap; }
   .status-fuss button { max-width: 220px; }
+  /* Der Neustart-Knopf sieht anders aus, BEVOR man ihn trifft -- nicht erst danach. Farbe
+     allein reicht nicht, deshalb wechselt im scharfen Zustand auch die Beschriftung. */
+  button.gefaehrlich { border: 1px solid #a8514b; background: transparent; color: #f0a9a4; }
+  button.gefaehrlich.scharf { background: #a8514b; color: #fff; border-color: #a8514b; }
   .status-fuss .stand { font-size: 0.8rem; color: var(--muted); }
 </style>
 </head>
@@ -131,6 +135,14 @@
         <strong>obere linke Ecke</strong> des Displays tippen, oder <strong>Strg+Alt+W</strong>
         drücken. <strong>Strg+Alt+Q</strong> beendet die App und gibt die Taskleiste dauerhaft
         zurück.</p>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1.2rem;">
+        <button id="geraetNeustartBtn" class="gefaehrlich" style="max-width:240px;">Gerät neu starten</button>
+      </div>
+      <p class="hint-text">Startet <strong>Windows</strong> neu, nicht nur die App. Das hilft
+        nach einem Windows-Update, bei einem hängenden Dienst oder wenn das WLAN sich verhakt
+        hat – und ersetzt den Weg zum Gerät. Es braucht <strong>zwei Tipps</strong>, und die
+        Überwachung wird vorher benachrichtigt, damit der Neustart kein Ausfall ist. Das Gerät
+        ist etwa eine Minute weg.</p>
       <p id="aktionErgebnis" class="result"></p>
     </div>
 

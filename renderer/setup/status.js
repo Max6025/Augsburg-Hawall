@@ -129,13 +129,14 @@ $('neuBtn').addEventListener('click', laden);
 // Die Knoepfe standen bis 1.0.11 unter "Einstellungen". Dort waren sie falsch: Eine Einstellung
 // gilt bis auf Widerruf, das hier sind Handlungen fuer genau jetzt. Und wer nachsieht, ob alles
 // laeuft, ist auch derjenige, der eingreifen will -- beides auf einer Seite erspart den Wechsel.
-async function handeln(pfad, meldung) {
+async function handeln(pfad, meldung, koerper) {
   const el = $('aktionErgebnis');
   el.className = 'result';
   el.textContent = 'Wird ausgeführt …';
   try {
     const r = await fetch(pfad, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(koerper || {})
     }).then(a => a.json());
     if (!r.ok) throw new Error(r.error || 'abgelehnt');
     el.className = 'result ok';
@@ -156,6 +157,39 @@ $('panelWartungBtn').addEventListener('click', () =>
   handeln('/api/panel/wartung', 'Taskleiste ist 5 Minuten sichtbar, der Bildschirm pausiert.'));
 $('panelTaskleisteAusBtn').addEventListener('click', () =>
   handeln('/api/panel/taskleiste-aus', 'Taskleiste wieder ausgeblendet.'));
+
+// --- Neu starten: zwei Tipps, nicht einer ----------------------------------------------------
+//
+// Ein Neustart ist die einzige Handlung auf dieser Seite, die man nicht zuruecknehmen kann --
+// und das Geraet ist danach eine Minute weg. Ein einzelner Knopf, den man im Vorbeigehen
+// trifft, waere hier die falsche Art von Knopf. Der zweite Tipp muss innerhalb von acht
+// Sekunden kommen, sonst faellt der Knopf in seinen ruhigen Zustand zurueck: Ein Knopf, der
+// stundenlang scharf bleibt, ist wieder derselbe Einzelknopf.
+const neustartBtn = document.getElementById('geraetNeustartBtn');
+if (neustartBtn) {
+  const ruhe = neustartBtn.textContent;
+  let scharfBis = 0;
+  let uhr = null;
+  const entspannen = () => {
+    scharfBis = 0;
+    neustartBtn.textContent = ruhe;
+    neustartBtn.classList.remove('scharf');
+    if (uhr) { clearTimeout(uhr); uhr = null; }
+  };
+  neustartBtn.addEventListener('click', () => {
+    if (Date.now() < scharfBis) {
+      entspannen();
+      neustartBtn.disabled = true;
+      handeln('/api/geraet/neustart', 'Das Gerät startet in fünf Sekunden neu. Es ist etwa eine '
+        + 'Minute weg; diese Seite lädt danach von selbst wieder.', { bestaetigt: true });
+      return;
+    }
+    scharfBis = Date.now() + 8000;
+    neustartBtn.textContent = 'Wirklich? Noch einmal tippen';
+    neustartBtn.classList.add('scharf');
+    uhr = setTimeout(entspannen, 8000);
+  });
+}
 
 // Alle 15 Sekunden von selbst. Kurz genug, dass man beim Zusehen die Änderung mitbekommt (etwa
 // wenn die Nachtsperre greift), und lang genug, dass es das Gerät nicht beschäftigt -- der

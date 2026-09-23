@@ -82,7 +82,15 @@ const app = startServer({
   updater: { currentVersion: '1.0.11', getState: () => ({ geprueft: false }), check: () => {}, install: () => {} },
   controller,
   getPanelSize: () => ({ breite: 1280, hoehe: 854, fenster: { breite: 1280, hoehe: 854 }, skalierung: 1, drehung: 0 }),
-  sperrenSoll: 2,
+  sperrenBericht: () => (fall === 'schlecht'
+    ? { stand: 4, gesamt: 6, gesetzt: 4, offen: ['Suchfeld in der Taskleiste'], unmoeglich: [] }
+    : { stand: 4, gesamt: 6, gesetzt: 6, offen: [], unmoeglich: [] }),
+  // Der SSH-Zustand kommt auf einem Linux-Rechner nicht von sc.exe -- hier untergeschoben,
+  // damit die Zeile ueberhaupt zu sehen ist. `?schlecht` zeigt den ungesicherten Fall.
+  sshLesen: async () => (fall === 'schlecht'
+    ? { vorhanden: true, laeuft: true, startAutomatisch: true, wiederherstellung: false, grund: '' }
+    : { vorhanden: true, laeuft: true, startAutomatisch: true, wiederherstellung: true, grund: '' }),
+  geraetNeustarten: () => ({ in_sekunden: 5, probe: true }),
   gestartetAm: Date.now() - 3 * 60 * 60 * 1000
 });
 

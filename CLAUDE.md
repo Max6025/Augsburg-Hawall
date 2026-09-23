@@ -36,6 +36,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `control/kiosksperren.js` | Welche Windows-Einstellungen im Weg sind, und welche davon noch zu setzen sind |
 | `control/vordergrund.js` | Startmenü und Benachrichtigungscenter wieder wegdrücken — die Entscheidung, nicht das Fenster |
 | `control/wintasten.js` | Die Windows-Tastenkombinationen schlucken, solange die Taskleiste versteckt ist |
+| `control/sshdienst.js` | Den Zustand des OpenSSH-Dienstes lesen — sprachunabhängig, ohne erhöhte Rechte |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -363,6 +364,32 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Hand gepflegte Liste ließe ausgerechnet die neue Seite ungeprüft. IDs, die das Skript selbst
   erzeugt (der Editor baut seine Einstellungsfelder vollständig in JS), zählen mit — ein Test,
   dem man nicht glaubt, wird abgeschaltet statt gelesen.
+- **`sc.exe` übersetzt die Beschriftungen, aber nicht die Werte.** Auf deutschem Windows 11
+  25H2 steht dort `STATE : 4  RUNNING` und `START_TYPE : 2   AUTO_START` — die englischen Marken
+  bleiben, und für einen fehlenden Dienst kommt Rückgabecode **1060**. `control/sshdienst.js`
+  liest deshalb die **Zahlen** und den **Code**, nie einen übersetzten Text. Das ist derselbe
+  Fallstrick, der `modernstandby.js` zwei Releases gekostet hat: Dort wurde auf „nicht
+  vorhanden" geprüft, das Gerät sagte „nicht gefunden", und die Antwort war `null` statt `false`.
+  Ein Test verfremdet die englischen Wörter absichtlich und erwartet dieselbe Antwort — sonst
+  beweist er nicht, dass es wirklich an den Zahlen hängt.
+- **Der SSH-Dienst ist auf der Statusseite nie ein FEHLER, auch wenn er ganz fehlt.** Das Panel
+  funktioniert ohne SSH vollständig: Anzeige, Weboberfläche, Home Assistant. Ein 503 würde die
+  Überwachung nachts Alarm schlagen lassen für etwas, das niemandem auffällt — nach dem dritten
+  Fehlalarm glaubt niemand mehr der Anzeige. Auffallen soll es trotzdem, denn SSH ist der Weg,
+  auf dem man ohne Hingehen an das Gerät kommt; sonst merkt man den Ausfall genau dann, wenn man
+  ihn braucht.
+  **Reparieren kann die App ihn nicht** — einen Dienst zu starten braucht erhöhte Rechte. Was
+  sie kann, ist **lesen**, und das reicht: `werkzeuge/ssh-dienst-reparieren.ps1` setzt in
+  Abschnitt **H** die Wiederherstellung (`sc failure` plus `sc failureflag 1`), damit ein Absturz
+  sich selbst heilt. Am 2026-09-23 gemessen: `sc qfailure sshd` meldete `RESET_PERIOD 0` und
+  **keine Aktionen** — der Dienst lief, stand auf Automatisch, und wäre er abgestürzt, hätte ihn
+  niemand neu gestartet. Ohne `failureflag 1` greift die Wiederherstellung außerdem nur bei
+  einem **Absturz**, nicht wenn sich der Dienst mit einem Fehlercode beendet — der häufigere
+  Fall, etwa bei kaputter `sshd_config`.
+  Abschnitt H läuft **immer**, auch bei laufendem Dienst. Die Schritte 1–7 werden übersprungen,
+  sobald sshd läuft („Nur anfassen, was nicht läuft") — und dort stand bisher der Starttyp. Wer
+  nur einen laufenden Dienst hatte, bekam die Absicherung deshalb nie; dasselbe frühe Aussteigen
+  hat schon die erste Fassung dieses Skripts unbrauchbar gemacht.
 - **`/api/gesundheit` ist für eine Überwachung von außen gedacht — und gibt deshalb fast nichts her.**
   Sie ist für eine Überwachung von außen gedacht (Uptime Kuma), und die kann sich nicht
   anmelden. Hängt sie hinter dem Code, meldet die Überwachung ab dem Tag, an dem einer gesetzt
@@ -955,7 +982,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-451 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+464 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

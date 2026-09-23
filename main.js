@@ -14,6 +14,7 @@ const { Wartungsmelder } = require('./control/wartungsmelder');
 const kiosksperren = require('./control/kiosksperren');
 const { Vordergrund } = require('./control/vordergrund');
 const wintasten = require('./control/wintasten');
+const sshdienst = require('./control/sshdienst');
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -273,6 +274,24 @@ function keepSystemAwake(reason) {
   } catch (err) {
     if (controller) controller.log('warn', `System konnte nicht wachgehalten werden: ${err.message}`);
   }
+}
+
+/**
+ * Einen Befehl ausfuehren und Code UND Text zurueckgeben.
+ *
+ * Beides, nicht nur eines: `sc query` fuer einen fehlenden Dienst antwortet mit Code 1060 und
+ * einer uebersetzten Meldung. Wer nur den Text liest, muss auf Uebersetzungen hoeren; wer nur
+ * den Code liest, verliert den Zustand. Siehe control/sshdienst.js.
+ */
+function befehlAusfuehren(befehl) {
+  return new Promise((fertig) => {
+    exec(befehl, { timeout: 6000, windowsHide: true }, (err, stdout, stderr) => {
+      fertig({
+        code: err && typeof err.code === 'number' ? err.code : 0,
+        text: String(stdout || '') + String(stderr || '')
+      });
+    });
+  });
 }
 
 function getLocalIps() {
@@ -658,6 +677,18 @@ app.whenReady().then(() => {
     // Fuer die Statusseite. Als Funktion, nicht als Wert: Die Sperren werden nach dem
     // Serverstart gesetzt, und ein Wert waere dann fuer immer der von vorher.
     sperrenBericht: () => kiosksperren.bericht(store.get('kioskSperren')),
+    // Der Zustand des SSH-Dienstes fuer die Statusseite. Lesen genuegt und braucht keine
+    // erhoehten Rechte -- starten koennte die App ihn nicht, siehe control/sshdienst.js.
+    sshLesen: process.platform !== 'win32' ? null : () => sshdienst.lesen(befehlAusfuehren),
+    geraetNeustarten: process.platform !== 'win32' ? null : () => {
+      // Fuenf Sekunden Vorlauf, damit die Antwort noch durch die Leitung geht. Ohne das bricht
+      // die Verbindung mitten im Aufruf ab, und wer den Knopf gedrueckt hat, sieht einen
+      // Fehler statt einer Bestaetigung -- und drueckt noch einmal.
+      exec('shutdown /r /t 5 /c "Neustart ueber die Statusseite des Wandpanels"',
+        { timeout: 5000 }, () => {});
+      if (controller) controller.log('info', 'Neustart des Geraets ueber die Statusseite angefordert');
+      return { in_sekunden: 5 };
+    },
     gestartetAm: GESTARTET_AM,
     // Damit die Einstellungsseite den Wartungsmelder auf demselben Weg pruefen kann, den ein
     // Update spaeter nimmt.
