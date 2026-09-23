@@ -474,6 +474,141 @@
     return state != null && state.state !== undefined && state.state !== '' && !isNaN(parseFloat(state.state));
   }
 
+  // --- Englische Sensornamen ins Deutsche ---------------------------------------------------
+  //
+  // Wetterstationen liefern ihre Namen auf Englisch, und zwar wortgleich bei jedem Geraet
+  // derselben Familie ("Solar Radiation", "Max Daily Gust"). Auf einer deutschen Wand steht
+  // das dann englisch, und man liest zweimal hin.
+  //
+  // DREI ENTSCHEIDUNGEN, die den Unterschied machen:
+  //
+  // 1. **Fachbegriffe, keine Wort-fuer-Wort-Uebersetzung.** "Solar Radiation" ist im Deutschen
+  //    die GLOBALSTRAHLUNG, nicht "Sonnenstrahlung". "Rain Rate" ist die REGENINTENSITAET,
+  //    nicht die "Regenrate". "Dew Point" ist der TAUPUNKT, nicht der "Tau-Punkt". Wer hier
+  //    Wort fuer Wort uebersetzt, bekommt Saetze, die zwar deutsch aussehen, aber kein
+  //    Meteorologe schreiben wuerde -- und genau das war die Vorgabe: richtiges Deutsch.
+  //
+  // 2. **Nur der GANZE Name wird ersetzt, nie ein Teil davon.** Eine Teil-Ersetzung macht aus
+  //    "Garage Door Sensor" ein "Garage Tür Sensor" -- halb uebersetzt ist schlimmer als gar
+  //    nicht, weil es aussieht wie ein Fehler statt wie eine Sprache. Was nicht in der Tabelle
+  //    steht, bleibt unangetastet; ein fehlender Eintrag ist eine Zeile Arbeit.
+  //
+  // 3. **Der eigene Name gewinnt immer.** Wer eine Karte selbst benannt hat, bekommt seinen
+  //    Text -- unuebersetzt. Das ist auch der Notausgang, falls eine Uebersetzung im Einzelfall
+  //    nicht passt: ein Name in den Karteneinstellungen, und die Tabelle ist aussen vor.
+  //
+  // Modellkuerzel davor werden abgestreift ("WH90 Capacitor Voltage" -> "Kondensatorspannung"):
+  // Die Ecowitt-Integration schreibt den Sensortyp vor den Namen, und das ist auf einer Karte
+  // ohnehin einer zu viel.
+  const SENSORNAMEN = {
+    // Temperatur
+    'temperature': 'Temperatur',
+    'outdoor temperature': 'Außentemperatur',
+    'indoor temperature': 'Innentemperatur',
+    'dewpoint temperature': 'Taupunkt',
+    'dew point': 'Taupunkt',
+    'dewpoint': 'Taupunkt',
+    'feels like': 'Gefühlte Temperatur',
+    'apparent temperature': 'Gefühlte Temperatur',
+    'heat index': 'Hitzeindex',
+    'wind chill': 'Windchill',
+    // Feuchte
+    'humidity': 'Luftfeuchte',
+    'outdoor humidity': 'Luftfeuchte (außen)',
+    'indoor humidity': 'Luftfeuchte (innen)',
+    'absolute humidity': 'Absolute Luftfeuchte',
+    'vapor pressure deficit': 'Dampfdruckdefizit',
+    // Luftdruck
+    'pressure': 'Luftdruck',
+    'atmospheric pressure': 'Luftdruck',
+    'relative pressure': 'Luftdruck (relativ)',
+    'absolute pressure': 'Luftdruck (absolut)',
+    // Wind
+    'wind speed': 'Windgeschwindigkeit',
+    'wind gust': 'Böe',
+    'gust': 'Böe',
+    'max daily gust': 'Stärkste Böe (heute)',
+    'wind direction': 'Windrichtung',
+    'wind direction avg': 'Windrichtung (Mittel)',
+    'wind bearing': 'Windrichtung',
+    // Regen. "Rain Event" ist bei Ecowitt die Menge des LAUFENDEN Schauers -- nicht "Regen-
+    // Ereignis", das sagt niemand.
+    'precipitation': 'Niederschlag',
+    'rain rate': 'Regenintensität',
+    'rain event': 'Regen (laufender Schauer)',
+    'hourly rain': 'Regen (letzte Stunde)',
+    'daily rain': 'Regen (heute)',
+    '24-hour rain': 'Regen (24 Stunden)',
+    '24 hour rain': 'Regen (24 Stunden)',
+    'weekly rain': 'Regen (diese Woche)',
+    'monthly rain': 'Regen (dieser Monat)',
+    'yearly rain': 'Regen (dieses Jahr)',
+    'total rain': 'Regen (gesamt)',
+    // "Srain Piezo" ist ein Tippfehler der Integration, den sie seit Jahren mitschleppt.
+    'srain piezo': 'Regen (Piezo)',
+    'rain piezo': 'Regen (Piezo)',
+    // Strahlung und Licht
+    'solar radiation': 'Globalstrahlung',
+    'solar irradiance': 'Bestrahlungsstärke',
+    'solar illuminance': 'Beleuchtungsstärke',
+    'illuminance': 'Beleuchtungsstärke',
+    'uv index': 'UV-Index',
+    // Strom und Energie
+    'power': 'Leistung',
+    'energy': 'Energie',
+    'voltage': 'Spannung',
+    'current': 'Stromstärke',
+    'frequency': 'Frequenz',
+    'consumption': 'Verbrauch',
+    'production': 'Erzeugung',
+    'grid consumption': 'Netzbezug',
+    'grid feed-in': 'Netzeinspeisung',
+    'state of charge': 'Ladezustand',
+    'charging power': 'Ladeleistung',
+    'yield day': 'Tagesertrag',
+    'yield today': 'Tagesertrag',
+    'daily yield': 'Tagesertrag',
+    'yield total': 'Gesamtertrag',
+    'total yield': 'Gesamtertrag',
+    // Geraetezustand
+    'battery': 'Batterie',
+    'battery level': 'Batteriestand',
+    'battery voltage': 'Batteriespannung',
+    'capacitor voltage': 'Kondensatorspannung',
+    'weather station battery': 'Batterie (Wetterstation)',
+    'signal strength': 'Signalstärke',
+    'signal quality': 'Signalqualität',
+    'hardware id': 'Hardware-Kennung',
+    'online': 'Erreichbar',
+    'last seen': 'Zuletzt gesehen',
+    'uptime': 'Laufzeit',
+    // Haus
+    'motion': 'Bewegung',
+    'occupancy': 'Anwesenheit',
+    'door': 'Tür',
+    'window': 'Fenster',
+    'lock': 'Schloss',
+    'smoke': 'Rauch',
+    'water leak': 'Wasseraustritt',
+    'brightness': 'Helligkeit'
+  };
+
+  // Modellkuerzel, die manche Integrationen vor den Namen setzen: WH90, WS2900, GW2000A, HP2551.
+  const MODELLKUERZEL = /^(?:wh|ws|wn|gw|hp|wittboy)[0-9]{2,5}[a-z]?(?:[._-][a-z0-9.]+)?\s+/i;
+
+  /**
+   * Einen englischen Sensornamen ins Deutsche uebersetzen -- oder unveraendert zurueckgeben.
+   *
+   * Reine Funktion, damit die Tabelle pruefbar ist. Gibt IMMER einen Namen zurueck: Ist nichts
+   * bekannt, kommt das Original heraus, und zwar unangetastet.
+   */
+  function sensornameDeutsch(name) {
+    const roh = String(name == null ? '' : name).trim().replace(/\s+/g, ' ');
+    if (!roh) return roh;
+    const treffer = (s) => SENSORNAMEN[s.toLowerCase()];
+    return treffer(roh) || treffer(roh.replace(MODELLKUERZEL, '')) || roh;
+  }
+
   // Temperatur-Erkennung: primaer ueber device_class/Einheit, zusaetzlich ueber den
   // Namen -- manche Integrationen (z.B. manche Wetterstationen/Vorlagen) setzen weder
   // device_class noch eine erkennbare Einheit korrekt.
@@ -1627,9 +1762,11 @@
     // Kennung. Der kurze Name ist der, den Home Assistant in seiner Oberflaeche zeigt
     // ("Solar Radiation"); friendly_name traegt bei den meisten Integrationen den Geraetenamen
     // davor ("Ecowitt Sensor 11DC2 Solar Radiation") und passt auf keine Karte.
+    // Uebersetzt wird NUR, was von Home Assistant kommt -- der eigene Name bleibt, wie er
+    // eingetippt wurde. Siehe sensornameDeutsch().
     const name = esc((settings.name && String(settings.name).trim())
-      || (opts.namen && opts.namen[entity_id])
-      || attrs.friendly_name || entity_id);
+      || sensornameDeutsch((opts.namen && opts.namen[entity_id])
+        || attrs.friendly_name || entity_id));
     const dis = editable ? 'disabled' : '';
 
     // Verlauf und Tendenz stehen allen Zahlenkarten zur Verfuegung. Ohne Verlaufsdaten bleiben
@@ -2738,6 +2875,7 @@
     sizeToSpan, minSpanFor, clampSpan, resolveSpan, schonerSpanne, SCHONER_SPALTEN, SCHONER_ZEILEN, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen, ortErmitteln, ORT_TYPEN,
+    sensornameDeutsch, SENSORNAMEN,
     ORT_TYPEN_WAHL,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,

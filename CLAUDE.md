@@ -824,6 +824,32 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   nicht". Jetzt: ein Pfeil, der in eine Fläche **hineingeht**, derselbe Aufbau wie bei jeder
   anderen Karte, ein fester Akzent, ein Pfeil am rechten Rand und die Bildunterschrift
   „Dashboard wechseln". Das Symbol allein reicht nicht, und der Text allein auch nicht.
+- **Englische Sensornamen werden übersetzt — mit Fachbegriffen, nicht Wort für Wort.**
+  Wetterstationen liefern ihre Namen auf Englisch und bei jedem Gerät derselben Familie
+  wortgleich. `sensornameDeutsch()` in `dashboard-render.js` setzt eine Tabelle davor. Die
+  Vorgabe war „richtiges Deutsch, kein Google-Translater-Deutsch", und das ist keine
+  Geschmacksfrage, sondern prüfbar: „Solar Radiation" ist die **Globalstrahlung** (nicht
+  „Sonnenstrahlung"), „Rain Rate" die **Regenintensität** (nicht „Regenrate"), „Current" die
+  **Stromstärke** (nicht „Strom"). `test/sensornamen.test.js` hält genau die Fälle fest, in
+  denen sich Fachbegriff und naheliegende Variante unterscheiden — sonst rutscht beim nächsten
+  Ergänzen der Tabelle die naheliegende hinein.
+  Drei Regeln, die daran hängen:
+  1. **Nur der ganze Name wird ersetzt, nie ein Teil.** Eine Teil-Ersetzung macht aus „Garage
+     Door Sensor" ein „Garage Tür Sensor" — halb übersetzt sieht aus wie ein Fehler, englisch
+     sieht aus wie eine Sprache. Was nicht in der Tabelle steht, bleibt unangetastet; ein
+     fehlender Eintrag ist eine Zeile Arbeit.
+  2. **Der eigene Name gewinnt.** Wer eine Karte selbst benannt hat, bekommt seinen Text
+     unübersetzt — und das ist auch der Notausgang, wenn eine Übersetzung im Einzelfall nicht
+     passt. Deshalb braucht es keinen Schalter dafür: Ein Schalter würde sechzig gute
+     Übersetzungen abschalten, weil eine nicht gefällt.
+  3. **Der Editor übersetzt mit.** Sonst sucht man „Globalstrahlung" in einer Liste, in der
+     „Solar Radiation" steht, und findet die Karte nicht, die man gerade gebaut hat. Auch der
+     Platzhalter im Namensfeld zeigt den übersetzten Namen — er soll das vorschlagen, was ohne
+     eigene Angabe auf der Karte **steht**.
+
+  Modellkürzel davor werden abgestreift („WH90 Capacitor Voltage" → „Kondensatorspannung"),
+  aber nur echte Kürzel (`WH90`, `WS2900`, `GW2000A`) — „Keller Capacitor Voltage" bleibt, sonst
+  wäre es wieder eine Teil-Ersetzung.
 - **`friendly_name` ist nicht der Name, den Home Assistant anzeigt.** Er trägt bei den meisten
   Integrationen den Gerätenamen davor: „Ecowitt Sensor 11DC2 Solar Radiation" statt
   „Solar Radiation". Auf einer zwei Zentimeter breiten Karte steht davon die Hälfte. Den kurzen
@@ -1029,7 +1055,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-473 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+483 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

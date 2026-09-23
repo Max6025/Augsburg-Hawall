@@ -46,8 +46,12 @@ async function loadAll() {
   allDashboards = dashboardsRes.ok ? dashboardsRes.dashboards : [];
   currentSunEntity = configRes.sunEntity || '';
   DashboardRender.applyCustomTheme(configRes.customTheme || DashboardRender.DEFAULT_THEME);
+  // Auch im Editor deutsch. Sonst sucht man "Globalstrahlung" in einer Liste, in der
+  // "Solar Radiation" steht -- und findet die Karte nicht, die man gerade gebaut hat.
   allEntities = (entitiesRes.ok ? entitiesRes.entities : [])
-    .map(e => Object.assign({}, e, { name: haNamen[e.entity_id] || e.name }));
+    .map(e => Object.assign({}, e, {
+      name: DashboardRender.sensornameDeutsch(haNamen[e.entity_id] || e.name)
+    }));
 
   if (DASHBOARD_ID === 'main') {
     $('title').textContent = 'Wall Display – Karten einrichten (' + (configRes.title || 'Wall Display') + ')';
@@ -247,9 +251,9 @@ function kartenListeRendern() {
   el.innerHTML = eintraege.map((e, i) => {
     const typ = e.card_type || defaultCardType(e.entity_id, statesById[e.entity_id]);
     const label = (e.settings && e.settings.name)
-      || haNamen[e.entity_id]
-      || ((statesById[e.entity_id] || {}).attributes || {}).friendly_name
-      || e.entity_id;
+      || DashboardRender.sensornameDeutsch(haNamen[e.entity_id]
+        || ((statesById[e.entity_id] || {}).attributes || {}).friendly_name
+        || e.entity_id);
     const platz = e.unterleiste ? 'untere Leiste' : `${e.cols || 1}×${e.rows || 1} bei ${e.x || 0},${e.y || 0}`;
     return `
       <div style="display:flex; align-items:center; gap:0.6vh; margin-bottom:0.4vh;">
@@ -666,7 +670,9 @@ function openSettings(entityId) {
   // Derselbe Name wie ueberall sonst: erst der eigene, dann der kurze aus Home Assistant.
   // Ohne den stuende hier "Ecowitt Sensor 11DC2 Solar Radiation" und auf der Karte daneben
   // "Solar Radiation" -- und man fragt sich, ob man die richtige Karte erwischt hat.
-  const haName = haNamen[entityId] || attrs.friendly_name;
+  // Der Platzhalter im Namensfeld zeigt, was ohne eigene Angabe auf der Karte STEHT -- also
+  // den uebersetzten Namen. Sonst schlaegt er etwas vor, das die Karte gar nicht anzeigt.
+  const haName = DashboardRender.sensornameDeutsch(haNamen[entityId] || attrs.friendly_name || '');
   $('settingsTitle').textContent = 'Einstellungen: ' + (settings.name || haName || entityId);
 
   let html = '';
