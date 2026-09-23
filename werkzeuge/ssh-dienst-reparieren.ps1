@@ -169,6 +169,129 @@ if (-not $laeuft) {
   }
 }
 
+function ZugangFreiMachen {
+  # --- Der Teil, der beim ersten Anlauf gefehlt hat -------------------------------------------
+  #
+  # Das Skript meldete "sollte gehen", weil etwas auf Port 22 lauschte -- und von aussen kam
+  # trotzdem keine Verbindung zustande. Ein lauschender Dienst sagt naemlich NICHTS darueber,
+  # ob er auf der Netzwerkadresse lauscht und ob die Firewall jemanden durchlaesst.
+  #
+  # Drei Dinge muessen zusammenkommen, und jedes einzelne sieht bei Ausfall gleich aus
+  # ("Connection timed out"):
+  #   1. sshd lauscht auf 0.0.0.0, nicht nur auf 127.0.0.1
+  #   2. eine EINGEHENDE Erlaubnis-Regel fuer TCP 22 ist aktiv
+  #   3. diese Regel gilt fuer das Profil, in dem das aktuelle Netz steckt
+
+  Titel 'A. Worauf lauscht der Dienst?'
+  $lausch = Get-NetTCPConnection -LocalPort 22 -State Listen -ErrorAction SilentlyContinue
+  if (-not $lausch) {
+    Sagen 'Nichts lauscht auf Port 22 -- dann liegt es nicht am Netz.' 'Red'
+    return
+  }
+  $lausch | Select-Object LocalAddress, LocalPort, State | Format-Table -AutoSize | Out-Host
+  $adressen = @($lausch | ForEach-Object { $_.LocalAddress })
+  $nurLokal = -not ($adressen -contains '0.0.0.0' -or $adressen -contains '::')
+  if ($nurLokal) {
+    Sagen 'Er lauscht NUR lokal (127.0.0.1 / ::1). Von aussen ist er damit unerreichbar.' 'Yellow'
+  } else {
+    Sagen 'Er lauscht auf allen Adressen. Gut.' 'Green'
+  }
+
+  Titel 'B. Was steht in der sshd_config?'
+  $conf = Join-Path $DATEN 'sshd_config'
+  $geaendert = $false
+  if (Test-Path $conf) {
+    $zeilen = Get-Content $conf
+    $port = $zeilen | Where-Object { $_ -match '^\s*Port\s+' }
+    $listen = $zeilen | Where-Object { $_ -match '^\s*ListenAddress\s+' }
+    if ($port) { Sagen ('Port: ' + ($port -join ' | ')) } else { Sagen 'Port: nicht gesetzt (Standard 22)' }
+    if ($listen) {
+      Sagen ('ListenAddress: ' + ($listen -join ' | ')) 'Yellow'
+      # Nur die auf Schleife begrenzten Zeilen stilllegen. Eine bewusst gesetzte
+      # ListenAddress auf eine echte Adresse bleibt unberuehrt -- die hat einen Grund.
+      $schleife = $listen | Where-Object { $_ -match '127\.0\.0\.1|::1|localhost' }
+      if ($schleife) {
+        Copy-Item $conf ($conf + '.vor-reparatur') -Force -ErrorAction SilentlyContinue
+        $neuZeilen = $zeilen | ForEach-Object {
+          if ($_ -match '^\s*ListenAddress\s+' -and $_ -match '127\.0\.0\.1|::1|localhost') {
+            '# von ssh-dienst-reparieren.ps1 stillgelegt: begrenzte den Zugang auf dieses Geraet'
+            '#' + $_
+          } else { $_ }
+        }
+        Set-Content -Path $conf -Value $neuZeilen -Encoding UTF8
+        Sagen 'Auf die Schleifenadresse begrenzte ListenAddress stillgelegt (Sicherung: sshd_config.vor-reparatur).' 'Green'
+        $geaendert = $true
+      }
+    } else { Sagen 'ListenAddress: nicht gesetzt -- er lauscht also auf allen Adressen. Gut.' 'Green' }
+  } else { Sagen 'Keine sshd_config gefunden.' 'Yellow' }
+
+  Titel 'C. In welchem Netzprofil steckt das Geraet?'
+  $profile = Get-NetConnectionProfile -ErrorAction SilentlyContinue
+  if ($profile) {
+    $profile | Select-Object Name, InterfaceAlias, NetworkCategory | Format-Table -AutoSize | Out-Host
+    Sagen 'Die Firewall-Regel muss fuer DIESE Kategorie gelten.' 'Gray'
+  }
+
+  Titel 'D. Firewall-Regeln fuer Port 22'
+  $alle = @()
+  try {
+    $alle = Get-NetFirewallRule -Direction Inbound -Enabled True -ErrorAction Stop |
+      Where-Object {
+        $p = $_ | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
+        $p -and ($p.LocalPort -contains '22' -or $p.LocalPort -eq '22')
+      }
+  } catch { Sagen "Regeln nicht lesbar: $($_.Exception.Message)" 'Yellow' }
+
+  if ($alle) {
+    $alle | Select-Object DisplayName, Action, Profile, Enabled | Format-Table -AutoSize | Out-Host
+    $blockiert = $alle | Where-Object { $_.Action -eq 'Block' }
+    if ($blockiert) {
+      Sagen 'ACHTUNG: Es gibt eine BLOCKIEREN-Regel fuer Port 22. Die gewinnt immer gegen jede' 'Red'
+      Sagen 'Erlaubnis-Regel. Sie wird hier NICHT angetastet -- wer sie angelegt hat, hatte' 'Red'
+      Sagen 'vielleicht einen Grund. Namen bitte weitergeben:' 'Red'
+      $blockiert | Select-Object DisplayName, Profile | Format-Table -AutoSize | Out-Host
+    }
+  } else {
+    Sagen 'Keine aktive eingehende Regel fuer Port 22 gefunden. Das ist die Ursache.' 'Yellow'
+  }
+
+  Titel 'E. Erlaubnis-Regel sicherstellen (alle Profile)'
+  # Eine eigene Regel mit klarem Namen, statt an der von Windows zu drehen: So ist im
+  # Nachhinein zu sehen, was von hier kommt -- und sie gilt fuer ALLE Profile, damit ein
+  # Wechsel von Privat auf Oeffentlich den Zugang nicht wieder zunagelt.
+  $meine = 'Hawall-Eurasburg SSH (Port 22)'
+  $vorhanden = Get-NetFirewallRule -DisplayName $meine -ErrorAction SilentlyContinue
+  if ($vorhanden) {
+    Set-NetFirewallRule -DisplayName $meine -Enabled True -Profile Any -Action Allow -ErrorAction SilentlyContinue
+    Sagen 'Eigene Regel war schon da, auf alle Profile gestellt.' 'Green'
+  } else {
+    try {
+      New-NetFirewallRule -DisplayName $meine -Direction Inbound -Protocol TCP -LocalPort 22 `
+        -Action Allow -Profile Any -Enabled True `
+        -Description 'Eingehender SSH-Zugang, angelegt von ssh-dienst-reparieren.ps1' -ErrorAction Stop | Out-Null
+      Sagen 'Eigene Erlaubnis-Regel fuer alle Profile angelegt.' 'Green'
+    } catch {
+      Sagen "Regel nicht anlegbar: $($_.Exception.Message)" 'Red'
+    }
+  }
+  # Die Windows-eigene Regel, falls vorhanden, ebenfalls auf alle Profile stellen.
+  if (Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue) {
+    Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -Enabled True -Profile Any -ErrorAction SilentlyContinue
+    Sagen 'Windows-Regel OpenSSH-Server-In-TCP aktiv und auf alle Profile gestellt.' 'Green'
+  }
+
+  if ($geaendert) {
+    Titel 'F. Dienst neu starten (die Konfiguration wurde geaendert)'
+    try {
+      Restart-Service sshd -Force -ErrorAction Stop
+      Sagen 'Neu gestartet.' 'Green'
+      Start-Sleep -Seconds 2
+    } catch { Sagen "Neustart fehlgeschlagen: $($_.Exception.Message)" 'Red' }
+  }
+}
+
+ZugangFreiMachen
+
 Titel 'Ergebnis'
 
 $d = Get-Service -Name sshd -ErrorAction SilentlyContinue
@@ -177,7 +300,9 @@ if ($d) { Get-Service sshd | Format-List Name, DisplayName, Status, StartType }
 # Nicht dem Rückgabewert glauben, sondern nachsehen, ob wirklich jemand lauscht.
 $lauscht = Get-NetTCPConnection -LocalPort 22 -State Listen -ErrorAction SilentlyContinue
 if ($lauscht) {
-  Sagen 'Auf Port 22 lauscht jetzt etwas. Der Zugang sollte gehen.' 'Green'
+  # BEWUSST vorsichtig formuliert. Der erste Anlauf schrieb hier "der Zugang sollte gehen",
+  # und von aussen kam trotzdem nichts durch -- ein lauschender Dienst ist kein erreichbarer.
+  Sagen 'Auf Port 22 lauscht etwas. Ob von aussen jemand durchkommt, sagen die Abschnitte A bis E.' 'Green'
   $lauscht | Select-Object LocalAddress, LocalPort, State | Format-Table -AutoSize
   Sagen ''
   Sagen ('Zum Verbinden: ssh ' + $env:USERNAME + '@' + (
