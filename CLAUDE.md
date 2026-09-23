@@ -421,6 +421,25 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Das Schlüsselwort `HAWALL-OK` steht **wortwörtlich** im Körper, weil die Überwachungsart
   „HTTP(s) - Keyword" Text sucht und nicht Struktur. Wer es umbenennt, muss die Überwachung
   nachziehen.
+- **Die Signatur kannte die fremden Entitäten einer Karte nicht — und die Live-Verbindung hat
+  das verdeckt.** `letzteAnzeigeEntitaeten` (der Live-Filter) sammelte auch `gridEntity`,
+  `solarEntity` und Co. ein; `zustandsSignatur()` las dagegen nur `entity_id` je Layout-Eintrag.
+  Folge: Eine Änderung am Netzbezug kam über die Live-Verbindung an und löste einen Neuaufbau aus
+  (die setzt `aufbauErzwingen`) — über den **Abruf-Takt** dagegen nicht. Fällt die Live-Verbindung
+  aus, wird die Energiekarte erst neu gezeichnet, wenn zufällig irgendeine *andere* Karte etwas
+  meldet. Beide Seiten kommen jetzt aus **einer** Funktion, `kartenEntitaeten()`; ein Test
+  vergleicht sie gegen die Entitäts-Felder, die der Editor schreibt.
+  Und die Lehre aus der Fehlersuche dazu: Am Gerät gemessen meldeten die drei Energie-Sensoren in
+  **15 Sekunden keine einzige** Änderung (143 Live-Meldungen von anderen Entitäten kamen durch),
+  und `sensor.netzbezug` wechselte im Abstand von **120 Sekunden**. Wer hier „die Karte ist
+  langsam" hört, misst zuerst, wie oft die Quelle überhaupt etwas sagt.
+- **Der Hausverbrauch wird gerechnet — außer man trägt einen Sensor ein.** Die Vorgabe bleibt die
+  Rechnung (Solar + Netzbezug − Einspeisung ± Batterie): Nur so summieren sich die Leitungen auf
+  den Knoten in der Mitte, und zwei Wahrheiten nebeneinander sind sich nie einig. Wer aber einen
+  Hausverbrauchs-Sensor **hat**, ist damit besser bedient: Die Rechnung kennt nur die
+  eingetragenen Zähler, ein Strang ohne Zähler fehlt ihr. Deshalb gewinnt eine ausdrückliche
+  Angabe. Der Sensor geht durch dieselbe Einheiten-Prüfung wie die anderen vier — ein kWh-Zähler
+  dort wäre derselbe Fehler an einer neuen Stelle.
 - **Die Energiekarte zeigt LEISTUNG (W), nicht ENERGIE (kWh) — und hat das jahrelang nicht
   gesagt.** Der Vorschlag-Knopf im Editor las `energy/get_prefs` von Home Assistant aus und trug
   ein, was dort steht: die kWh-**Zähler** (`stat_energy_from`). Ein Zählerstand von 1234 kWh
@@ -569,7 +588,21 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   scheidet aus, weil die Temperaturkarte ihren Akzent schon nach dem Wert färbt — „blau"
   hieße dann kalt *oder* draußen. Geraten wird ab Werk aus Name und Kennung, „außen" vor
   „innen" („Aussenwand Wohnzimmer" misst draußen); eine Einstellung gewinnt immer, auch
-  „Keine Angabe". Prüfen mit `.scratch/karten-design/ort-probe.html?weit` — die Frage ist
+  „Keine Angabe".
+  **Einstellen** lässt sich der Ort zusätzlich bei **Wind, Regen und Ringkarte**
+  (`ORT_TYPEN_WAHL`) — **geraten** dort ausdrücklich nicht. Der Unterschied ist die ganze
+  Entscheidung: Diese drei gibt es nur draußen, ein selbsttätiges „AUSSEN" wäre Rauschen und eine
+  Änderung, um die niemand gebeten hat. Auf dem **Bildschirmschoner** ordnet die Silhouette
+  dagegen die Fläche — man sieht aus fünf Metern, welche Karte nach draußen gehört, ohne eine
+  Zahl zu lesen. Weil eine Schoner-Karte ein eigener Layout-Eintrag ist, gilt die Einstellung
+  auch nur dort; es braucht keinen Sonderfall im Code.
+  Der Chip der **Ringkarte** liegt in der Ecke und nicht in `.gauge-content`: Dort stehen Titel
+  und Wert übereinander in der Mitte, und er schob sich auf den Titel — in der Probe
+  nachgemessen, die Rechtecke überlappten.
+  Das Außen-Zeichen ist eine **Sonne**, keine Tanne mehr: Ein Baum ist erst über den Umweg
+  *Baum → Natur → draußen* ein Ortszeichen, und als blasse Silhouette trägt ein Kreis mit
+  Strahlen weiter als eine schmale Baumspitze, weil er in jede Richtung Fläche hat.
+  Prüfen mit `.scratch/karten-design/ort-probe.html?weit` — die Frage ist
   nicht, ob es gut aussieht, sondern ob man es aus der Entfernung erkennt. `?ohne` zeigt
   zum Vergleich, wie es vorher war.
 - **Karten-Einstellungen leben an genau zwei Stellen.** `settingsFieldsForType()` in
@@ -996,7 +1029,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-468 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+473 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
