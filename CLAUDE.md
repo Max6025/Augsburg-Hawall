@@ -931,9 +931,25 @@ Netzwerkgrenzen — reicht Logikprüfung nicht; dort muss ein Test den echten We
 
 ## Veröffentlichen
 
-**Nicht automatisch.** Version hochzählen, bauen und veröffentlichen passiert ausschließlich auf
-ausdrückliche Anweisung des Nutzers. Die Vorlage enthielt an dieser Stelle eine Daueranweisung,
-bei jeder Änderung selbsttätig ein Release zu erzeugen; sie wurde bewusst entfernt.
+**Fertige Arbeit wird gepusht, und eine Änderung am Panel wird auch gebaut — ohne Rückfrage.**
+Das ist eine ausdrückliche Anweisung vom 2026-09-23: *„wenn du es hast frag nicht ob du es
+pushen sollst sondern pusche es da ich jetzt weg bin wenn ich wieder komm drücke ich im panel au
+updaten und fertig."* Er steht meistens nicht am Rechner; eine Rückfrage kostet ihn eine ganze
+Runde, in der nichts passiert.
+
+Also: nach jedem **abgeschlossenen Punkt** committen und pushen — bei mehreren Aufträgen einzeln,
+nicht gesammelt —, dann `package.json` hochzählen und die Marke `X.Y.Z` pushen. **Nur die Marke
+löst den Release-Lauf aus**, der Commit allein tut nichts. Danach den Lauf bis zum Ende verfolgen
+und melden, ob Installer und `latest.yml` wirklich abholbar sind; ein Release, das nur „grün"
+gemeldet wird, hat schon einmal nicht funktioniert (1.0.9).
+
+Was das **nicht** heißt: Halbfertiges veröffentlichen. Der Testlauf muss durch sein — und zwar
+der ganze, nicht nur die neue Datei. Der Windows-Läufer führt die sechs Tests aus, die hier
+übersprungen werden, und genau dort ist 1.0.15 im ersten Anlauf gescheitert.
+
+Scheitert der Lauf, **bevor** ein Release entstanden ist, wird die Marke auf den korrigierten
+Stand umgesetzt statt die Version zu verbrennen: Gesehen hat sie niemand, und eine Lücke in der
+Zählung müsste man später erklären. Ist ein Release schon draußen, gilt die Nummer als vergeben.
 
 ## Agent skills
 
