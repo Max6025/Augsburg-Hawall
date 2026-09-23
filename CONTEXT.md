@@ -80,6 +80,21 @@ _Vermeiden_: Not-Aus, Override, Wartungsmodus
 **Karenzzeit**:
 Eine Spanne nach dem Start der Anwendung, in der nie abgeschaltet wird.
 
+**Wartung**:
+Der Ausstieg für jemanden, der **vor dem Gerät steht**: Pause *und* sichtbare Taskleiste in
+einem Griff. Drei Wege führen hinein — der Knopf auf der Einstellungsseite, fünfmal schnell in
+die obere linke Ecke tippen, `Strg+Alt+W`. Endet von selbst, wie die Pause.
+_Vermeiden_: Wartungsmodus (klingt nach einem Zustand, den man erst wieder verlassen muss),
+Not-Aus, Servicemodus
+
+**Taskleiste**:
+Die Leiste von *Windows*, nicht Teil des Wall Display. Im Normalbetrieb ist ihr Fenster
+**versteckt** — nicht nur vom Kiosk-Modus zugedeckt, sondern für Windows selbst unsichtbar, und
+deshalb auch durch eine Wischgeste vom Rand nicht hervorzuholen. Sichtbar wird sie nur während
+einer Wartung.
+_Vermeiden_: Startleiste, Statusleiste (das ist die Kopfzeile des Dashboards), Unterleiste
+(das ist der Kartenstreifen am unteren Rand des Dashboards)
+
 **Zugangscode**:
 Das Geheimnis, das die Setup-Oberfläche gegen unbefugte Zugriffe aus dem lokalen Netz schützt.
 _Vermeiden_: Passwort, PIN, Token (Token meint hier immer den Home-Assistant-Zugang)

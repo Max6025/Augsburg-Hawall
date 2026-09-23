@@ -1526,9 +1526,12 @@ function applyControlState(state) {
   letzterSteuerungszustand = state;
 }
 
-// Dritter Weg in die Pause: fuenfmal schnell in die obere linke Ecke tippen. Das ist der
+// Dritter Weg in die Wartung: fuenfmal schnell in die obere linke Ecke tippen. Das ist der
 // einzige, der auch ohne Tastatur und ohne Netzwerk funktioniert -- also genau dann, wenn man
 // vor einem Panel steht, das sich alle fuenf Sekunden selbst abschaltet.
+//
+// Er pausiert nicht nur den Waechter, er holt auch die Taskleiste zurueck: Wer hier tippt,
+// steht am Geraet und will daran arbeiten. Das Fenster verlaesst dafuer den Kiosk-Modus.
 function initCornerEscapeGesture() {
   const CORNER_PX = 80;
   const NEEDED_TAPS = 5;
@@ -1542,8 +1545,8 @@ function initCornerEscapeGesture() {
     taps.push(now);
     if (taps.length < NEEDED_TAPS) return;
     taps = [];
-    if (window.wallApi && window.wallApi.pausePanelControl) {
-      window.wallApi.pausePanelControl().then(() => showPauseToast()).catch(() => {});
+    if (window.wallApi && window.wallApi.wartungAnfordern) {
+      window.wallApi.wartungAnfordern().then(() => showPauseToast()).catch(() => {});
     }
   }, { passive: true });
 }
@@ -1558,7 +1561,7 @@ function showPauseToast() {
       'font-family:Segoe UI,system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.45)';
     document.body.appendChild(el);
   }
-  el.textContent = 'Bildschirmsteuerung für 30 Minuten pausiert';
+  el.textContent = 'Wartung: 30 Minuten pausiert, Taskleiste 5 Minuten sichtbar';
   el.style.display = 'block';
   clearTimeout(showPauseToast._t);
   showPauseToast._t = setTimeout(() => { el.style.display = 'none'; }, 6000);

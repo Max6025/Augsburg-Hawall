@@ -26,8 +26,9 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 
 | Datei | Aufgabe |
 |---|---|
-| `control/panel.js` | Panel per `SC_MONITORPOWER` schalten, über einen dauerhaft offenen PowerShell-Prozess |
-| `control/controller.js` | Zustandsautomat; die Rangfolge steht vollständig in `decide()` |
+| `control/panel.js` | Win32 über einen dauerhaft offenen PowerShell-Prozess: Panel per `SC_MONITORPOWER` schalten, System wach halten, Taskleiste verstecken |
+| `control/controller.js` | Zustandsautomat; die Rangfolge steht vollständig in `decide()`, die Taskleiste in `taskleisteSoll()` |
+| `control/modernstandby.js` | Modern Standby am Gerät abschalten (`PlatformAoAcOverride`) und nachlesen, ob es abgeschaltet ist |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -125,12 +126,78 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   gehört ein Test auf die **Verbindung** dazu, nicht nur auf die Teile — `test/controller.test.js`
   prüft deshalb, dass jeder Takt `setSystemWach()` ruft, und liest `main.js` daraufhin, ob der
   Akkuzustand überhaupt hereingereicht wird.
-- **Modern Standby frisst die Anwendung.** Gemessen am 2026-09-09 auf dem Surface Go: eine
-  Minute nach dem Abschalten des Panels ging das *Gerät* in Connected Standby (Kernel-Power 506),
-  die App war weg, der Setup-Server unerreichbar, und der Wächter lief nicht mehr.
-  Dagegen hält `keepSystemAwake()` in `main.js` eine `prevent-app-suspension`-Anforderung. Wird
-  hier je etwas an der Panel-Abschaltung geändert, muss dieser Fall neu gemessen werden --
-  „Panel aus" und „Gerät schläft" sehen von außen identisch aus.
+- **Modern Standby frisst die Anwendung — und KEINE Wach-Anforderung hält das auf.** Das ist der
+  teuerste Irrtum in diesem Projekt, und er stand zwei Versionen lang genau hier als Lösung.
+  Gemessen am 2026-09-09: eine Minute nach dem Abschalten des Panels ging das *Gerät* in
+  Connected Standby (Kernel-Power 506), die App war weg, der Setup-Server unerreichbar, der
+  Wächter stand. Dagegen wurde erst `keepSystemAwake()` gesetzt (`prevent-app-suspension`, landet
+  als **Away Mode** und wirkt auf Modern Standby nicht), dann `ES_SYSTEM_REQUIRED` in `panel.js`.
+  Am 2026-09-23 um 00:41 war das Gerät trotz beidem und trotz Netzbetrieb wieder nicht
+  erreichbar.
+
+  **Warum nichts davon greifen kann:** Auf einem Modern-Standby-Gerät ist das **Abschalten des
+  Bildschirms selbst** der Auslöser für den Standby — kein Leerlauf-Timeout. Die eigene Messung
+  sagt das bereits: Connected Standby begann *in derselben Sekunde*, in der das Panel abgeschaltet
+  wurde. Eine SYSTEM-Anforderung verhindert klassischen Leerlaufschlaf (S3), nicht diesen
+  Übergang; und gegen den Desktop Activity Moderator, der kurz darauf Win32-Anwendungen
+  suspendiert, hilft sie auch nicht. Deshalb hängen beide Symptome immer zusammen: Weboberfläche
+  weg **und** „Berührung pausiert zwei Minuten" feuert nicht — die Regel lebt in `tick()`, und
+  `tick()` läuft nicht.
+
+  **Die Antwort ist `PlatformAoAcOverride = 0`** (`control/modernstandby.js`): Modern Standby
+  abschalten, danach klassischer S3-Schlaf, und die Wach-Anforderung greift wieder. Drei Dinge
+  daran sind leicht zu übersehen:
+  1. **Wirksam erst nach einem Neustart** des Geräts. Bis dahin ändert sich nichts, und der
+     Registrierungswert allein ist kein Beweis, dass es hilft — das sagt erst eine ausbleibende
+     Taktlücke.
+  2. **Der Wert liegt unter HKLM und braucht erhöhte Rechte.** Der Installer ist eine
+     Per-User-Installation und läuft unelevert; er versucht es (`build/installer.nsh`), kommt aber
+     normalerweise nicht durch. `perMachine: true` ist der falsche Ausweg — dann bräuchte **jedes**
+     Update erhöhte Rechte, und ein UAC-Dialog auf einem Wandpanel, vor dem niemand steht, ist ein
+     Update, das für immer hängt. Deshalb fragt die **App** genau einmal, und ausschließlich bei
+     einer Wartung **vor Ort** (Tipp-Geste, Strg+Alt+W): Der Dialog erscheint auf dem Panel, und
+     wer ihn aus dem Netz auslöst, hat ihn nicht vor sich. Der Merker wird **vor** dem Versuch
+     gesetzt — einmal fragen ist Hilfe, bei jeder Wartung fragen ist Nötigung.
+  3. **Dem Rückgabewert nicht glauben, nachlesen.** Ein abgelehnter UAC-Dialog endet ohne
+     Fehlermeldung — „kein Fehler" hieße dann fälschlich „erledigt".
+
+  **Und die Vorlage hat dafür keine Lösung**, auch wenn es so aussieht: Italien-Hawall hat
+  denselben `prevent-app-suspension`-Aufruf mit dem Vorbehalt im Kommentar, kein `powercfg`, kein
+  `PlatformAoAcOverride`, und `.scratch/aufwecken-und-echtes-ausschalten/spec.md` dort trägt den
+  Status „erfasst, nicht entschieden, nicht gebaut". Augsburg hat mit `setSystemWach()` sogar
+  **mehr** als Italien. Ist ein Gerät nachts erreichbar und das andere nicht, liegt der
+  Unterschied am **Gerät**, nicht am Code.
+- **Ein stilles „false" ist kein Fehlerbericht.** `setSystemWach()` gab bei fehlendem Dauerprozess
+  nur `false` zurück: kein Protokolleintrag, und die Einrichtungsseite meldete weiter „Das Gerät
+  wird wachgehalten", weil sie den **Wunsch** anzeigte statt der Tatsache. Ein Haken, der nichts
+  tut, ist schlimmer als ein Haken, der aus ist — man verlässt sich darauf. Jetzt trennt der
+  Zustand `systemWach` (gewünscht) von `systemWachGestellt` (wirklich angefordert), und das
+  Scheitern wird beim Wechsel protokolliert.
+- **Der eigene Takt ist der einzige Zeuge für den eigenen Schlaf.** Während Connected Standby
+  läuft nichts — kein Takt, kein Server —, und hinterher läuft alles wieder: Von außen ist das
+  nicht von einem Absturz und nicht von einem WLAN-Problem zu unterscheiden, und am Gerät findet
+  man keine Spur. `schlaflueckeMessen()` meldet deshalb jede Taktlücke über 20 Sekunden ins
+  Protokoll und in den Zustand. `powercfg /requests` wäre genauer, **verlangt aber erhöhte
+  Rechte** und fällt damit aus — die App läuft unelevert.
+- **Die Taskleiste wird versteckt, nicht zugedeckt.** Der Kiosk-Modus legt sich nur *über* sie;
+  auf einem Touch-Gerät holt eine Wischgeste vom unteren Rand sie darüber, und ein
+  Explorer-Neustart oder eine Anmeldung bringt sie ohnehin zurück. `AllowEdgeSwipe=0` nimmt der
+  Geste die Wirkung, aber nur ihr. Deshalb versteckt `panel.js` das **Fenster** der Leiste
+  (`ShowWindow(SW_HIDE)` auf `Shell_TrayWnd`, dazu jede `Shell_SecondaryTrayWnd`), und der
+  Wächter schaltet bei **jedem Takt** nach — dieselbe Nachschalt-Logik, mit der das Panel
+  nachts dunkel bleibt. Drei Dinge hängen daran:
+  1. **Sichtbar heißt raus aus dem Kiosk-Modus**, und zwar *mit* dem Vollbild: `setKiosk(false)`
+     allein lässt das Fenster im Vollbild, und die Leiste bliebe zugedeckt — von außen sieht das
+     aus, als hätte das Einblenden nicht funktioniert. Das Fenster zieht sich danach auf
+     `workArea` zusammen, also auf den Bildschirm ohne den Streifen der Leiste.
+  2. **Der Kiosk-Modus wird nur beim Wechsel angefasst.** Alle fünf Sekunden neu gesetzt,
+     flackert das Fenster und zieht den Fokus an sich; anders als die Leiste bringt Windows es
+     nicht von selbst durcheinander.
+  3. **Nichts davon steht in der Registry.** Es gibt keinen gespeicherten Zustand, der ein Gerät
+     unbrauchbar zurücklassen könnte: Ein Neustart legt eine frische, sichtbare Leiste an. Das
+     ist der Rettungsanker, wenn die App abstürzt, während die Leiste versteckt ist —
+     `Strg+Alt+Q` gibt sie ausdrücklich zurück, `dispose()` bewusst **nicht** (beim Update ist
+     der nackte Desktop gewollt).
 - **Auf dem Sperrbildschirm greift kein einziger Fluchtweg.** Die Tipp-Geste erreicht das
   Dashboard nicht (der Sperrbildschirm liegt davor), globale Tastenkuerzel laesst Windows dort
   nicht durch, und der Schalter in der Weboberflaeche braucht einen Server, der beim Aufwachen
@@ -660,9 +727,9 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-296 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+341 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
-nicht gebraucht; vier Tests werden außerhalb von Windows übersprungen.
+nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
 Neue Regeln in `decide()` gehören durch einen Test abgedeckt — dort steckt die Logik. Aber die
 Lehre aus 1.0.0 ist eine andere: Der einzige Fehler, der es bis aufs Gerät geschafft hat, lag in

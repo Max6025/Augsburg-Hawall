@@ -45,6 +45,38 @@ const ON_REASSERT_MS = 60 * 1000;
 
 const MOUSEEVENTF_MOVE = 0x0001;
 
+// --- Die Taskleiste dauerhaft ausblenden ----------------------------------------------------
+//
+// Ein Drittes haengt hier, aus demselben Grund wie das Wachhalten unten: Es ist ein
+// Win32-Aufruf, und der dauerhaft offene PowerShell-Prozess macht ohnehin schon Win32-Aufrufe.
+// Ein zweiter Dauerprozess nur fuer die Taskleiste waere ein zweiter Bereitschafts-Handschlag,
+// ein zweiter Rueckfallweg und eine zweite Stelle, die stumm kaputtgehen kann.
+//
+// Warum nicht der Kiosk-Modus allein? Der deckt die Taskleiste nur ZU. Auf einem Touch-Geraet
+// holt eine Wischgeste vom unteren Rand sie darueber, und mit ihr Startmenue und Uhr -- mitten
+// im Dashboard. `AllowEdgeSwipe=0` in main.js nimmt der Geste die Wirkung, aber nur ihr: Die
+// Windows-Taste, ein Explorer-Neustart und die Anmeldung bringen die Leiste genauso zurueck.
+//
+// Deshalb wird nicht zugedeckt, sondern das Fenster der Leiste selbst versteckt
+// (`ShowWindow(SW_HIDE)` auf `Shell_TrayWnd`). Ein verstecktes Fenster kann keine Geste
+// hervorholen -- es ist nicht da. Weitere Bildschirme haben je eine eigene Leiste
+// (`Shell_SecondaryTrayWnd`); die werden mitgenommen, sonst bliebe auf einem angesteckten
+// Monitor bei der Wartung eine Leiste stehen.
+//
+// Das Verstecken ist NICHT dauerhaft gespeichert -- kein Registrierungswert, nichts, was ein
+// Geraet unbrauchbar zuruecklaesst. Ein Explorer-Neustart oder ein Neustart des Geraets legt
+// eine frische, sichtbare Leiste an. Genau darum schaltet der Waechter bei jedem Takt nach
+// (siehe control/controller.js), und genau darum ist ein Neustart der Rettungsanker, wenn die
+// App einmal abstuerzt, waehrend die Leiste versteckt ist.
+const SW_HIDE = 0;
+// SHOWNA statt SHOW: Die Leiste wird wieder sichtbar, reisst aber nicht den Fokus an sich.
+// Andernfalls verliert das Dashboard den Fokus in dem Moment, in dem jemand es bedienen will.
+const SW_SHOWNA = 8;
+// Die Leiste kommt von selbst zurueck (Explorer-Neustart, Anmeldung). Sichtbar-Lassen wird
+// deshalb regelmaessig bekraeftigt -- dieselbe Vorsicht wie beim Panel und beim Wachhalten.
+// Das Verstecken braucht keine Frist: Es wird bei JEDEM Takt nachgeschaltet.
+const TASKLEISTE_REASSERT_MS = 60 * 1000;
+
 // Bricht die Zustellung an ein Fenster ab, das seine Nachrichtenschleife nicht bedient.
 const SMTO_ABORTIFHUNG = 0x0002;
 // Reichlich fuer ein antwortendes Fenster (gemessen: der gesamte Rundruf braucht ~55 ms) und
@@ -88,7 +120,10 @@ const WACH_REASSERT_MS = 60 * 1000;
 const MEMBERS = [
   '[DllImport("user32.dll")] public static extern int SendMessageTimeout(int hWnd, int hMsg, int wParam, int lParam, int fuFlags, int uTimeout, out int lpdwResult);',
   '[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, System.IntPtr dwExtraInfo);',
-  '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);'
+  '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);',
+  '[DllImport("user32.dll", SetLastError = true)] public static extern System.IntPtr FindWindow(string lpClassName, string lpWindowName);',
+  '[DllImport("user32.dll", SetLastError = true)] public static extern System.IntPtr FindWindowEx(System.IntPtr hwndParent, System.IntPtr hwndChildAfter, string lpszClass, string lpszWindow);',
+  '[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);'
 ].join(' ');
 
 // Der Rundruf an HWND_BROADCAST stellt die Nachricht JEDEM Fenster einzeln zu. Mit dem
@@ -114,6 +149,21 @@ const ON_CALL = [
   `[Wall.PanelCtl]::mouse_event(${MOUSEEVENTF_MOVE}, -1, 0, 0, [System.IntPtr]::Zero)`
 ].join('; ');
 
+// Erst die Hauptleiste, dann alle Leisten weiterer Bildschirme. Die Schleife laeuft ueber
+// FindWindowEx mit dem jeweils zuletzt gefundenen Fenster als Startpunkt -- so kommen auch
+// mehrere Nebenleisten dran.
+//
+// EINZEILIG, wie alles hier: Ueber die Standardeingabe wuerde PowerShell aus einer mehrzeiligen
+// Deklaration nie eine Funktion machen (siehe der Warnhinweis im Kopf dieser Datei).
+const TASKLEISTE_CALL = "function Taskleiste-Setzen($z) { "
+  + "$h = [Wall.PanelCtl]::FindWindow('Shell_TrayWnd', $null); "
+  + "if ($h -ne [System.IntPtr]::Zero) { [Wall.PanelCtl]::ShowWindow($h, $z) | Out-Null }; "
+  + "$n = [System.IntPtr]::Zero; "
+  + "while ($true) { "
+  + "$n = [Wall.PanelCtl]::FindWindowEx([System.IntPtr]::Zero, $n, 'Shell_SecondaryTrayWnd', $null); "
+  + "if ($n -eq [System.IntPtr]::Zero) { break }; "
+  + "[Wall.PanelCtl]::ShowWindow($n, $z) | Out-Null } }";
+
 const ADD_TYPE = `Add-Type -Name PanelCtl -Namespace Wall -MemberDefinition '${MEMBERS}'`;
 
 const PRELUDE = [
@@ -123,12 +173,23 @@ const PRELUDE = [
   `function Panel-On { ${ON_CALL} }`,
   `function System-Wach { [Wall.PanelCtl]::SetThreadExecutionState([uint32]${ES_WACH}) | Out-Null }`,
   `function System-Frei { [Wall.PanelCtl]::SetThreadExecutionState([uint32]${ES_FREI}) | Out-Null }`,
+  TASKLEISTE_CALL,
+  `function Taskleiste-Aus { Taskleiste-Setzen ${SW_HIDE} }`,
+  `function Taskleiste-An { Taskleiste-Setzen ${SW_SHOWNA} }`,
   `"${READY_MARKER}"`
 ].join('\n');
 
 // Für den Rückfallweg: ein vollständiger Einzelbefehl, der ohne Standardeingabe auskommt.
 function oneShotCommand(on) {
   return `${ADD_TYPE}; ${on ? ON_CALL : OFF_CALL}`;
+}
+
+// Dasselbe fuer die Taskleiste. Gebraucht wird es an zwei Stellen: wenn der Dauerprozess
+// aufgegeben hat, und beim Wartungs-Ausstieg -- dort muss die Leiste zurueckkommen, WAEHREND
+// sich die App beendet, und ein Befehl in der Standardeingabe eines gleich beendeten Prozesses
+// kaeme dafuer zu spaet.
+function taskleisteOneShotCommand(sichtbar) {
+  return `${ADD_TYPE}; ${TASKLEISTE_CALL}; Taskleiste-Setzen ${sichtbar ? SW_SHOWNA : SW_HIDE}`;
 }
 
 class Panel {
@@ -141,6 +202,13 @@ class Panel {
     this.ready = false;      // hat der Prozess seine Bereitschaft gemeldet?
     this.systemWach = null;  // zuletzt gewuenschter Zustand, null = noch nie gesetzt
     this.wachZuletzt = 0;
+    this.taskleiste = null;  // zuletzt gewuenschter Zustand der Taskleiste, null = nie gesetzt
+    this.taskleisteZuletzt = 0;
+    // GEWUENSCHT (systemWach) und TATSAECHLICH GESTELLT sind zweierlei. Der Unterschied ist der
+    // ganze Punkt: Ohne Dauerprozess laesst sich die Anforderung nicht stellen, und wer nur den
+    // Wunsch meldet, behauptet auf der Einrichtungsseite etwas, das nicht stimmt.
+    this.systemWachGestellt = false;
+    this.wachFehlerGemeldet = false;
     this.fallback = false;   // Dauerprozess aufgegeben, Einzelaufrufe verwenden
     this.readyTimer = null;
   }
@@ -209,19 +277,28 @@ class Panel {
 
   // Rückfallweg: ein eigener Prozess je Schaltvorgang. Teurer, aber ohne Standardeingabe und
   // damit ohne die Fehlerquelle, die den Dauerprozess stumm machen kann.
-  _oneShot(on) {
+  //
+  // `eigenstaendig` loest den Prozess von unserem ab, damit er den Befehl noch ausfuehrt, wenn
+  // die App sich gerade beendet. Gebraucht wird das nur beim Wartungs-Ausstieg: Stirbt der
+  // Kindprozess mit uns, bleibt die Taskleiste versteckt und niemand kommt an Windows.
+  _einzelaufruf(befehl, was, eigenstaendig = false) {
     try {
       const proc = spawn(
         'powershell.exe',
-        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', oneShotCommand(on)],
-        { windowsHide: true, stdio: 'ignore' }
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', befehl],
+        { windowsHide: true, stdio: 'ignore', detached: eigenstaendig }
       );
-      proc.on('error', (err) => this.log('warn', `Panel-Einzelaufruf fehlgeschlagen: ${err.message}`));
+      proc.on('error', (err) => this.log('warn', `${was}-Einzelaufruf fehlgeschlagen: ${err.message}`));
+      if (eigenstaendig) proc.unref();
       return true;
     } catch (err) {
-      this.log('warn', `Panel-Einzelaufruf nicht möglich: ${err.message}`);
+      this.log('warn', `${was}-Einzelaufruf nicht möglich: ${err.message}`);
       return false;
     }
+  }
+
+  _oneShot(on) {
+    return this._einzelaufruf(oneShotCommand(on), 'Panel');
   }
 
   _send(command, on) {
@@ -285,14 +362,92 @@ class Panel {
     // Kein Rueckfall auf einen Einzelaufruf: Ein eigener Prozess waere sofort wieder weg, und
     // mit ihm die Anforderung. Ohne Dauerprozess gibt es dieses Merkmal schlicht nicht.
     const proc = this._ensureProcess();
-    if (!proc || !proc.stdin.writable) return false;
+    if (!proc || !proc.stdin.writable) return this._wachFehlgeschlagen(
+      'kein dauerhafter PowerShell-Prozess');
     try {
       proc.stdin.write((wach ? 'System-Wach' : 'System-Frei') + '\n');
+      this.systemWachGestellt = wach;
+      this.wachFehlerGemeldet = false;
       return true;
     } catch (err) {
       this._dropProcess();
-      return false;
+      return this._wachFehlgeschlagen(err.message);
     }
+  }
+
+  /**
+   * Das Wachhalten ist fehlgeschlagen -- und das darf nicht still passieren.
+   *
+   * Vorher gab diese Stelle nur `false` zurueck. Niemand hat den Rueckgabewert gelesen, im
+   * Protokoll stand weiterhin "System wird wachgehalten", und die Einrichtungsseite meldete
+   * denselben Satz -- ein Haken, der nichts tut, und nichts, was darauf hinweist. Das ist
+   * dieselbe Klasse Fehler wie der fehlende Aufruf in 1.0.4, nur eine Ebene tiefer.
+   *
+   * Gemeldet wird beim WECHSEL, nicht bei jedem Takt: Eine Zeile pro Minute waere Laerm, und
+   * ein zugemuelltes Protokoll ist genau dann wertlos, wenn man es braucht.
+   */
+  _wachFehlgeschlagen(grund) {
+    this.systemWachGestellt = false;
+    if (!this.wachFehlerGemeldet) {
+      this.wachFehlerGemeldet = true;
+      this.log('warn', `System kann NICHT wachgehalten werden (${grund}) -- das Geraet darf `
+        + 'nach dem Abschalten des Panels schlafen, und die Weboberflaeche ist dann nicht '
+        + 'erreichbar.');
+    }
+    return false;
+  }
+
+  /**
+   * Die Taskleiste sichtbar machen (true) oder verstecken (false).
+   *
+   * Die Rollen sind vertauscht gegenueber setPower(): Hier ist AUSBLENDEN der Dauerzustand, der
+   * bei jedem Takt nachgeschaltet wird, und SICHTBAR die Ausnahme, die nur bei Aenderung und
+   * danach im Minutentakt bekraeftigt wird. Der Grund steht im Kopf dieser Datei: Windows legt
+   * bei jedem Explorer-Neustart eine frische, sichtbare Leiste an, und ohne Nachschalten stuende
+   * sie ab diesem Moment ueber dem Dashboard, bis jemand davorsteht und es sieht.
+   */
+  setTaskleiste(sichtbar) {
+    if (!this.supported) return false;
+    const changed = this.taskleiste !== sichtbar;
+    this.taskleiste = sichtbar;
+    if (sichtbar) {
+      const faellig = Date.now() - this.taskleisteZuletzt >= TASKLEISTE_REASSERT_MS;
+      if (!changed && !faellig) return true;
+      this.taskleisteZuletzt = Date.now();
+      if (changed) this.log('info', 'Taskleiste wird eingeblendet');
+      return this._sendTaskleiste(true);
+    }
+    if (changed) this.log('info', 'Taskleiste wird ausgeblendet');
+    return this._sendTaskleiste(false);
+  }
+
+  _sendTaskleiste(sichtbar) {
+    const proc = this._ensureProcess();
+    if (!proc || !proc.stdin.writable) {
+      return this._einzelaufruf(taskleisteOneShotCommand(sichtbar), 'Taskleiste');
+    }
+    try {
+      proc.stdin.write((sichtbar ? 'Taskleiste-An' : 'Taskleiste-Aus') + '\n');
+      return true;
+    } catch (err) {
+      this.log('warn', `Taskleisten-Befehl fehlgeschlagen: ${err.message}`);
+      this._dropProcess();
+      return this._einzelaufruf(taskleisteOneShotCommand(sichtbar), 'Taskleiste');
+    }
+  }
+
+  /**
+   * Die Taskleiste zurueckgeben, bevor die App verschwindet.
+   *
+   * Ausdruecklich NICHT Teil von dispose(): Beim Update beendet sich die App ebenfalls, und
+   * dort ist der nackte Desktop gewollt (siehe hintergrundSetzen in main.js). Zurueckgegeben
+   * wird sie nur beim Wartungs-Ausstieg -- wer Strg+Alt+Q drueckt, will an Windows.
+   */
+  taskleisteFreigeben() {
+    if (!this.supported || this.taskleiste !== false) return false;
+    this.taskleiste = true;
+    this.log('info', 'Taskleiste wird freigegeben -- die App beendet sich');
+    return this._einzelaufruf(taskleisteOneShotCommand(true), 'Taskleiste', true);
   }
 
   dispose() {
@@ -304,4 +459,7 @@ class Panel {
   }
 }
 
-module.exports = { Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS };
+module.exports = {
+  Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS,
+  taskleisteOneShotCommand, TASKLEISTE_REASSERT_MS, SW_HIDE, SW_SHOWNA
+};

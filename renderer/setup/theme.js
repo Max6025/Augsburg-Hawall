@@ -131,9 +131,35 @@ async function refreshPanelStatus() {
   if (s.nightModeEnabled) lines.push(`Nachtsperre: ${s.nightStart} bis ${s.nightEnd}.`);
   else lines.push('Nachtsperre ist aus – das Panel läuft durch.');
   if (s.pausedUntil) lines.push(`Pause läuft bis ${fmt(new Date(s.pausedUntil).toISOString())}.`);
-  lines.push(s.systemWach
-    ? 'Das Gerät wird wachgehalten – diese Seite bleibt auch bei ausgeschaltetem Panel erreichbar.'
-    : 'Das Gerät darf schlafen – bei ausgeschaltetem Panel ist diese Seite nicht erreichbar.');
+  lines.push(s.taskleisteBis
+    ? `<strong>Wartung läuft:</strong> Taskleiste sichtbar bis ${fmt(new Date(s.taskleisteBis).toISOString())}, das Fenster ist aus dem Kiosk-Modus.`
+    : 'Taskleiste ist ausgeblendet – auch gegen Wischgesten vom Rand.');
+  // Gewünscht und tatsächlich gestellt auseinanderhalten: Ein Haken, der nichts tut, ist
+  // schlimmer als ein Haken, der aus ist -- man verlässt sich darauf.
+  if (!s.systemWachhalten) {
+    lines.push('Das Gerät darf schlafen – bei ausgeschaltetem Panel ist diese Seite nicht erreichbar.');
+  } else if (s.systemWachGestellt) {
+    lines.push('Das Gerät wird wachgehalten – diese Seite bleibt auch bei ausgeschaltetem Panel erreichbar.');
+  } else {
+    lines.push('<strong>Wachhalten ist eingeschaltet, greift aber NICHT.</strong> Die Anforderung '
+      + 'an Windows konnte nicht gestellt werden – Einzelheiten stehen im Protokoll. Bei '
+      + 'ausgeschaltetem Panel schläft das Gerät und diese Seite ist nicht erreichbar.');
+  }
+  // Modern Standby ist die Ursache hinter der Ursache: Solange es aktiv ist, geht das Gerät
+  // beim Abschalten des Panels in Connected Standby, und dann hilft kein Wachhalten.
+  if (s.modernStandbyAus === false) {
+    lines.push('<strong>Modern Standby ist am Gerät noch aktiv.</strong> Dann geht das Gerät beim '
+      + 'Abschalten des Panels in Connected Standby – diese Seite ist dort nicht erreichbar, und '
+      + 'auch Wachhalten kann das nicht verhindern. Abschalten lässt es sich vor Ort: fünfmal in '
+      + 'die obere linke Ecke tippen und die Rückfrage von Windows am Panel bestätigen.');
+  } else if (s.modernStandbyAus === true) {
+    lines.push('Modern Standby ist abgeschaltet – wirksam ab dem nächsten Neustart des Geräts.');
+  }
+  if (s.letzteSchlafluecke) {
+    const minuten = Math.round(s.letzteSchlafluecke.dauerMs / 60000);
+    lines.push(`<strong>Das Gerät hat geschlafen:</strong> ${minuten > 0 ? minuten + ' Min.' : Math.round(s.letzteSchlafluecke.dauerMs / 1000) + ' s'} `
+      + `bis ${fmt(new Date(s.letzteSchlafluecke.ende).toISOString())}. So lange war diese Seite nicht erreichbar.`);
+  }
   el.innerHTML = lines.join('<br>');
 }
 
@@ -205,6 +231,18 @@ $('panelPauseBtn').addEventListener('click', async () => {
 
 $('panelResumeBtn').addEventListener('click', async () => {
   await fetch('/api/panel/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  refreshPanelStatus();
+});
+
+// Der erste von drei Wegen zur Taskleiste -- der, den man vom Handy aus findet, waehrend man
+// davorsteht. Die anderen beiden liegen am Geraet selbst (Tipp-Geste, Strg+Alt+W).
+$('panelWartungBtn').addEventListener('click', async () => {
+  await fetch('/api/panel/wartung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  refreshPanelStatus();
+});
+
+$('panelTaskleisteAusBtn').addEventListener('click', async () => {
+  await fetch('/api/panel/taskleiste-aus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   refreshPanelStatus();
 });
 

@@ -6,6 +6,7 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const { startServer } = require('./server/setup-server');
 const { Controller } = require('./control/controller');
+const modernStandby = require('./control/modernstandby');
 const lautstaerke = require('./control/lautstaerke');
 const hintergrund = require('./control/hintergrund');
 
@@ -183,6 +184,71 @@ function zeigerAusblenden(win) {
   einspeisen();
 }
 
+// Das Fenster in den Kiosk-Modus und zurueck. Gerufen wird das vom Controller, wenn die
+// Taskleiste sichtbar werden soll -- ein Kiosk-Fenster liegt darueber, und eine Leiste, die man
+// sieht, aber nicht trifft, ist schlimmer als keine.
+//
+// Das Vollbild muss MIT weg. `setKiosk(false)` allein laesst das Fenster im Vollbild, und damit
+// bleibt die Leiste zugedeckt -- von aussen sieht das aus, als haette das Ausblenden nicht
+// funktioniert. Die Groesse kommt danach aus `workArea`: dem Bildschirm ohne den Streifen, den
+// die Taskleiste fuer sich beansprucht. Windows rechnet diesen Streifen weiter heraus, auch
+// waehrend das Fenster der Leiste versteckt ist -- deshalb passt beides zusammen.
+function kioskSetzen(kiosk) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  // Schon im Kiosk-Modus: nichts anfassen. Das Fenster kommt so auf die Welt (createWindow),
+  // und der erste Takt des Waechters wuerde es sonst unmittelbar nach dem Start noch einmal
+  // auf die Bildschirmgroesse ziehen -- eine Groessenaenderung an einem Vollbildfenster, die
+  // nichts verbessern kann und je nach Windows-Version einen sichtbaren Sprung erzeugt.
+  if (kiosk && mainWindow.isKiosk()) return;
+  const display = screen.getPrimaryDisplay();
+  if (!kiosk) {
+    mainWindow.setKiosk(false);
+    mainWindow.setFullScreen(false);
+    mainWindow.setBounds(display.workArea);
+    return;
+  }
+  mainWindow.setKiosk(true);
+  mainWindow.setFullScreen(true);
+  mainWindow.setBounds(display.bounds);
+  // Den Fokus zurueckholen: Wer die Taskleiste benutzt hat, hat ihn dort gelassen, und ohne das
+  // kommen Tastendruecke im Dashboard nicht mehr an.
+  mainWindow.focus();
+}
+
+// Was `control/modernstandby.js` beim letzten Nachsehen gemeldet hat: true = abgeschaltet,
+// false = aktiv, null = nicht zu ermitteln. Nur zur Anzeige.
+let modernStandbyZustand = null;
+
+function modernStandbyNachlesen() {
+  return modernStandby.lesen().then((aus) => { modernStandbyZustand = aus; return aus; });
+}
+
+/**
+ * Wartung VOR ORT: Pause, Taskleiste -- und einmalig die Rueckfrage, ob Modern Standby
+ * abgeschaltet werden darf.
+ *
+ * Nur dieser Weg loest die Rueckfrage aus, nicht der Knopf auf der Einstellungsseite. Der
+ * UAC-Dialog erscheint auf dem PANEL; wer die Wartung aus dem Netz anfordert, hat ihn nicht vor
+ * sich und wuerde ihn dort nur stehen lassen. Fuenfmal oben links getippt oder Strg+Alt+W
+ * gedrueckt heisst dagegen: Es steht jemand davor.
+ *
+ * Warum ueberhaupt hier und nicht im Installer: Der Wert liegt unter HKLM, der Installer ist
+ * eine Per-User-Installation und laeuft unelevert. `perMachine: true` waere der falsche Ausweg,
+ * dann braeuchte jedes stille Update erhoehte Rechte. Ausfuehrlich im Kopf von
+ * control/modernstandby.js.
+ */
+function wartungVorOrt(minuten) {
+  if (!controller) return { ok: false };
+  const r = controller.wartung(minuten);
+  if (modernStandbyZustand === false) {
+    modernStandby.abschalten({ store, log: (s, m) => controller.log(s, m) })
+      .then(() => modernStandbyNachlesen())
+      .then(() => controller.refresh())
+      .catch(() => {});
+  }
+  return r;
+}
+
 function createWindow() {
   // Kamera-Zugriff automatisch erlauben -- wird ausschliesslich lokal fuer die
   // Annaeherungserkennung genutzt (Frame-Differenz im Renderer), es wird nichts
@@ -225,18 +291,23 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', applyOrientationLock);
 
-  // Wartungs-Shortcut: Kiosk verlassen / App beenden fuer Vor-Ort-Wartung
+  // Wartungs-Shortcut: App beenden fuer Vor-Ort-Wartung.
+  //
+  // Die Taskleiste wird dabei ausdruecklich freigegeben. Ohne das stuende man nach dem Beenden
+  // vor einem Windows ohne Startmenue, ohne Uhr und ohne Fensterleiste -- und der einzige Weg
+  // zurueck waere ein Neustart des Geraets.
   globalShortcut.register('Control+Alt+Q', () => {
+    if (controller) controller.taskleisteFreigeben();
     app.quit();
   });
 
-  // Not-Ausstieg aus der Panelsteuerung: pausiert den Waechter, damit das Panel bedienbar
-  // bleibt. Einer von drei Wegen -- die anderen beiden sind die Tipp-Geste in der oberen linken
-  // Ecke des Dashboards und der Schalter in der Setup-Oberflaeche. Ein Geraet, das sich selbst
-  // abschalten kann, braucht mehr als einen Ausweg, und eine Tastenkombination hilft auf einem
-  // Touch-Panel ohne Tastatur nicht weiter.
+  // Der Wartungs-Ausstieg: pausiert den Waechter UND blendet die Taskleiste ein, damit das
+  // Panel bedienbar ist und man an Windows kommt. Einer von drei Wegen -- die anderen beiden
+  // sind die Tipp-Geste in der oberen linken Ecke des Dashboards und der Knopf in der
+  // Setup-Oberflaeche. Ein Geraet, das sich selbst abschalten kann, braucht mehr als einen
+  // Ausweg, und eine Tastenkombination hilft auf einem Touch-Panel ohne Tastatur nicht weiter.
   globalShortcut.register('Control+Alt+W', () => {
-    if (controller) controller.pause();
+    wartungVorOrt();
   });
 }
 
@@ -363,9 +434,19 @@ app.whenReady().then(() => {
     // control/panel.js. Im Zweifel Netzbetrieb annehmen.
     aufAkku: () => {
       try { return powerMonitor.isOnBatteryPower(); } catch (e) { return false; }
-    }
+    },
+    // Damit der Controller das Fenster aus dem Kiosk-Modus holen kann, wenn die Taskleiste
+    // sichtbar werden soll. Er selbst kennt kein Electron -- siehe den Kopf von
+    // control/controller.js.
+    setKiosk: kioskSetzen,
+    modernStandbyAus: () => modernStandbyZustand
   });
   controller.start();
+
+  // Einmal nachsehen, ob Modern Standby abgeschaltet ist. Das entscheidet nichts, es steht nur
+  // auf der Einrichtungsseite -- aber solange es AN ist, kann das Wachhalten nicht halten, und
+  // das gehoert dort hin, wo jemand nachsieht, warum das Geraet nachts nicht antwortet.
+  modernStandbyNachlesen().then(() => { if (controller) controller.refresh(); }).catch(() => {});
 
   keepSystemAwake('Start');
   // Nach einem Aufwachen die Anforderung neu setzen: Windows verwirft sie in manchen
@@ -424,7 +505,10 @@ app.whenReady().then(() => {
 
   screen.on('display-metrics-changed', (event, display, changedMetrics) => {
     if (changedMetrics.includes('rotation') || changedMetrics.includes('bounds')) {
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      // Nur im Kiosk-Modus auf den ganzen Bildschirm ziehen. Laeuft gerade eine Wartung, liegt
+      // das Fenster absichtlich nur auf der `workArea` -- es hier zurueckzuziehen wuerde die
+      // gerade eingeblendete Taskleiste wieder zudecken.
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isKiosk()) {
         mainWindow.setBounds(screen.getPrimaryDisplay().bounds);
       }
       applyOrientationLock();
@@ -454,10 +538,11 @@ app.on('will-quit', () => {
 
 ipcMain.handle('reload-view', () => loadCurrentView());
 
-// Die Tipp-Geste im Dashboard (fuenfmal in die obere linke Ecke) landet hier.
-ipcMain.handle('pause-panel-control', (event, minutes) => {
+// Die Tipp-Geste im Dashboard (fuenfmal in die obere linke Ecke) landet hier: Pause UND
+// sichtbare Taskleiste, siehe controller.wartung().
+ipcMain.handle('wartung-anfordern', (event, minutes) => {
   if (!controller) return { ok: false };
-  return { ok: true, pausedUntil: controller.pause(minutes) };
+  return { ok: true, ...wartungVorOrt(minutes) };
 });
 
 ipcMain.handle('get-control-state', () => (controller ? controller.getState() : null));

@@ -8,9 +8,12 @@ contextBridge.exposeInMainWorld('wallApi', {
   systemLautstaerkeAnheben: (prozent) => ipcRenderer.invoke('system-lautstaerke-anheben', prozent),
   // Windows-Hintergrund setzen -- sichtbar nur waehrend eines Updates, wenn die App weg ist.
   desktopHintergrundSetzen: (art) => ipcRenderer.invoke('desktop-hintergrund-setzen', art),
-  // Panelsteuerung: Zustand abfragen, Zustandswechsel abonnieren, Pause ausloesen.
+  // Panelsteuerung: Zustand abfragen, Zustandswechsel abonnieren, Wartung ausloesen.
   getControlState: () => ipcRenderer.invoke('get-control-state'),
-  pausePanelControl: (minutes) => ipcRenderer.invoke('pause-panel-control', minutes),
+  // Der Wartungs-Ausstieg: pausiert den Waechter UND blendet die Taskleiste ein. Beides
+  // zusammen, weil eine Taskleiste auf einem Panel, das sich in fuenf Sekunden abschaltet,
+  // nichts nuetzt -- siehe controller.wartung().
+  wartungAnfordern: (minutes) => ipcRenderer.invoke('wartung-anfordern', minutes),
   onControlState: (callback) => {
     const handler = (event, state) => callback(state);
     ipcRenderer.on('control-state', handler);

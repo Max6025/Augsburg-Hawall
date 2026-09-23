@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { Controller, isWithinNightLock, GRACE_MS } = require('../control/controller');
+const { Controller, isWithinNightLock, GRACE_MS, TASKLEISTE_MS } = require('../control/controller');
 
 // Ein Speicher, der sich wie electron-store verhaelt, ohne Electron zu brauchen.
 function fakeStore(values = {}) {
@@ -301,4 +301,217 @@ test('Ohne Einstellung wird wachgehalten', () => {
   c.tick();
   assert.deepStrictEqual(c.gesendet, [true]);
   assert.strictEqual(c.state.systemWachhalten, true);
+});
+
+// --- Die Taskleiste dauerhaft ausblenden ---------------------------------------------------
+//
+// Die Taskleiste ist die dritte Sache, die am Waechter-Takt haengt (nach dem Panel und dem
+// Wachhalten), und sie haengt dort aus einem Grund: Ausblenden HAELT NICHT. Windows legt bei
+// jedem Explorer-Neustart und jeder Anmeldung eine frische, sichtbare Leiste an. Ein Test, der
+// nur "wird einmal ausgeblendet" prueft, wuerde genau das durchlassen, was auf der Wand
+// auffaellt -- eine Taskleiste, die irgendwann einfach wieder da ist.
+//
+// Zweite Falle, die hier abgedeckt ist: Sichtbarmachen ohne Kiosk-Ausstieg. Die Leiste waere
+// dann sichtbar, laege aber unter dem Fenster -- man sieht sie und trifft sie nicht.
+
+function controllerMitLeiste(values = IMMER_NACHT) {
+  const kiosk = [];
+  const c = new Controller({
+    store: fakeStore(values), logDir: null, setKiosk: (k) => kiosk.push(k)
+  });
+  c.panel.supported = true;
+  c.panel.setPower = () => true;          // kein PowerShell im Test
+  c.panel.setSystemWach = () => true;
+  c.leiste = [];
+  c.panel.setTaskleiste = (s) => { c.leiste.push(s); return true; };
+  c.kiosk = kiosk;
+  c.startedAt = Date.now() - 2 * GRACE_MS;
+  return c;
+}
+
+test('Jeder Takt blendet die Taskleiste erneut aus', () => {
+  // Nachschalten, wie beim Panel in der Nachtsperre: Der Befehl ist bei versteckter Leiste
+  // wirkungslos und billig -- und ohne ihn stuende die Leiste ab dem naechsten
+  // Explorer-Neustart ueber dem Dashboard, bis jemand davorsteht und es sieht.
+  const c = controllerMitLeiste();
+  c.tick(); c.tick(); c.tick();
+  assert.deepStrictEqual(c.leiste, [false, false, false]);
+});
+
+test('Der Kiosk-Modus wird nur beim Wechsel angefasst, nicht bei jedem Takt', () => {
+  // Ein Fenster, das alle fuenf Sekunden neu in den Kiosk-Modus gesetzt wird, flackert und
+  // zieht den Fokus an sich. Anders als die Leiste bringt Windows es nicht von selbst
+  // durcheinander -- hier waere Nachschalten der Fehler.
+  const c = controllerMitLeiste();
+  c.tick(); c.tick(); c.tick();
+  assert.deepStrictEqual(c.kiosk, [true], 'einmal gesetzt genuegt');
+});
+
+test('taskleisteZeigen blendet die Leiste ein und verlaesst den Kiosk-Modus', () => {
+  const c = controllerMitLeiste();
+  c.tick();
+  c.leiste = []; c.kiosk.length = 0;
+  c.taskleisteZeigen();
+  assert.deepStrictEqual(c.leiste, [true]);
+  assert.deepStrictEqual(c.kiosk, [false], 'sonst liegt das Fenster ueber der Leiste');
+});
+
+test('Die Sichtbarkeit endet von selbst -- und der Kiosk-Modus kommt zurueck', () => {
+  // Ein Wandpanel, das seit drei Wochen mit sichtbarer Taskleiste haengt, weil jemand die
+  // Wartung nicht abgeschlossen hat, ist von einem kaputten nicht zu unterscheiden.
+  const c = controllerMitLeiste();
+  c.taskleisteZeigen();
+  c.leiste = []; c.kiosk.length = 0;
+
+  c.taskleisteBis = Date.now() - 1;       // Frist bewusst abgelaufen
+  c.tick();
+  assert.deepStrictEqual(c.leiste, [false]);
+  assert.deepStrictEqual(c.kiosk, [true]);
+  assert.strictEqual(c.state.taskleisteBis, 0, 'eine abgelaufene Frist gehoert nicht in den Zustand');
+});
+
+test('Die voreingestellte Sichtbarkeit sind fuenf Minuten', () => {
+  const c = controllerMitLeiste();
+  const bis = c.taskleisteZeigen();
+  assert.ok(Math.abs(bis - (Date.now() + TASKLEISTE_MS)) < 2000);
+  assert.strictEqual(c.state.taskleisteBis, bis, 'die Einrichtungsseite liest das aus dem Zustand');
+});
+
+test('taskleisteVerbergen blendet vorzeitig wieder aus', () => {
+  const c = controllerMitLeiste();
+  c.taskleisteZeigen();
+  c.leiste = []; c.kiosk.length = 0;
+  c.taskleisteVerbergen();
+  assert.deepStrictEqual(c.leiste, [false]);
+  assert.deepStrictEqual(c.kiosk, [true]);
+  assert.strictEqual(c.taskleisteSoll(), false);
+});
+
+test('Der Wartungs-Ausstieg pausiert UND blendet die Leiste ein', () => {
+  // Beides einzeln waere hier falsch: Eine Taskleiste auf einem Panel, das sich in fuenf
+  // Sekunden abschaltet, nuetzt nichts -- und eine Pause ohne Taskleiste laesst niemanden an
+  // Windows. Das ist der Punkt, an dem die drei Wege vor dem Geraet zusammenlaufen.
+  const c = controllerMitLeiste();
+  const r = c.wartung();
+  assert.ok(r.pausedUntil > Date.now(), 'ohne Pause schaltet der Waechter gleich wieder ab');
+  assert.ok(r.taskleisteBis > Date.now());
+  assert.strictEqual(c.decide().reason, 'pause');
+  assert.strictEqual(c.taskleisteSoll(), true);
+});
+
+test('Die Pause allein blendet die Taskleiste NICHT ein', () => {
+  // Der Weg vom Handy (/api/panel/pause) bleibt eine reine Pause: Wer aus dem Netz pausiert,
+  // steht nicht davor, und eine Taskleiste auf einem unbeaufsichtigten Wandpanel wartet nur
+  // darauf, dass jemand im Vorbeigehen das Startmenue oeffnet.
+  const c = controllerMitLeiste();
+  c.pause();
+  assert.strictEqual(c.taskleisteSoll(), false);
+  assert.deepStrictEqual(c.leiste, [false]);
+});
+
+test('Ein Fenster, das nicht mehr da ist, haelt die Steuerung nicht auf', () => {
+  // Beim Update und beim Beenden ist das Fenster weg, der Takt laeuft aber noch.
+  const zeilen = [];
+  const c = new Controller({
+    store: fakeStore(IMMER_NACHT), logDir: null,
+    setKiosk: () => { throw new Error('Fenster zerstoert'); }
+  });
+  c.panel.supported = true;
+  c.panel.setPower = () => true;
+  c.panel.setSystemWach = () => true;
+  c.panel.setTaskleiste = () => true;
+  c.log = (stufe, text) => zeilen.push(stufe + ': ' + text);
+  c.startedAt = Date.now() - 2 * GRACE_MS;
+  c.tick();
+  assert.strictEqual(c.state.panelOn, false, 'die Nachtsperre gilt weiterhin');
+  assert.ok(zeilen.some(z => z.includes('Kiosk-Modus konnte nicht')), 'und es steht im Protokoll');
+});
+
+test('main.js reicht den Kiosk-Schalter ueberhaupt herein', () => {
+  // Dieselbe Lehre wie bei aufAkku (1.0.4): Der Controller kann noch so richtig entscheiden --
+  // ohne diese Anbindung kaeme das Fenster nie aus dem Kiosk-Modus, und die eingeblendete
+  // Taskleiste laege darunter. Eine Funktion, die niemand aufruft, ist dasselbe wie eine, die
+  // es nicht gibt.
+  const main = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /setKiosk:/, 'main.js uebergibt kein setKiosk an den Controller');
+  assert.match(main, /function kioskSetzen/, 'main.js kann den Kiosk-Modus nicht umschalten');
+  assert.match(main, /setFullScreen\(false\)/,
+    'setKiosk(false) allein laesst das Fenster im Vollbild -- die Leiste bliebe zugedeckt');
+  assert.match(main, /controller\.wartung\(\)/, 'Strg+Alt+W loest keinen Wartungs-Ausstieg aus');
+  assert.match(main, /taskleisteFreigeben/,
+    'Strg+Alt+Q wuerde ein Windows ohne Startmenue zuruecklassen');
+});
+
+test('Die Tipp-Geste im Dashboard nimmt denselben Weg', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const lies = (...t) => fs.readFileSync(path.join(__dirname, '..', ...t), 'utf8');
+  assert.match(lies('preload.js'), /wartungAnfordern/, 'preload bietet den Weg nicht an');
+  assert.match(lies('main.js'), /'wartung-anfordern'/, 'main.js nimmt ihn nicht an');
+  assert.match(lies('renderer', 'dashboard.html'), /wartungAnfordern/,
+    'die Tipp-Geste pausiert nur und laesst niemanden an Windows');
+});
+
+test('Die Einstellungsseite hat ihren Knopf und ihre Route', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const lies = (...t) => fs.readFileSync(path.join(__dirname, '..', ...t), 'utf8');
+  assert.match(lies('renderer', 'setup', 'theme.html'), /id="panelWartungBtn"/);
+  assert.match(lies('renderer', 'setup', 'theme.js'), /\/api\/panel\/wartung/);
+  assert.match(lies('server', 'setup-server.js'), /\/api\/panel\/wartung/);
+  assert.match(lies('server', 'setup-server.js'), /\/api\/panel\/taskleiste-aus/);
+});
+
+// --- Hat das Geraet geschlafen? ---------------------------------------------------------------
+//
+// Anlass, gemeldet am 2026-09-23 um 00:41: Das Geraet hing am Strom, "Geraet wach halten" war
+// angehakt, Nachtsperre aktiv -- und die Einrichtungsseite antwortete nicht mehr. Von aussen
+// ist das nicht von einem Absturz und nicht von einem WLAN-Problem zu unterscheiden, und weil
+// hinterher alles wieder laeuft, findet man am Geraet keine Spur.
+//
+// Die Luecke im eigenen Takt ist der Beweis. `powercfg /requests` waere genauer, verlangt aber
+// erhoehte Rechte -- die App laeuft unelevert.
+
+test('Eine Taktluecke wird erkannt und protokolliert', () => {
+  const zeilen = [];
+  const c = controllerMitLeiste();
+  c.log = (stufe, text) => zeilen.push(stufe + ': ' + text);
+  c.tick();
+  c.letzterTakt = Date.now() - 3 * 60 * 1000;   // drei Minuten Stille
+  c.tick();
+  assert.ok(c.state.letzteSchlafluecke, 'die Luecke gehoert in den Zustand');
+  assert.ok(c.state.letzteSchlafluecke.dauerMs >= 3 * 60 * 1000);
+  assert.ok(zeilen.some(z => z.startsWith('warn') && z.includes('Taktluecke')),
+    'und ins Protokoll, sonst sucht beim naechsten Mal wieder niemand an der richtigen Stelle');
+});
+
+test('Ein normaler Takt ist keine Schlafluecke', () => {
+  // Windows verteilt Zeitgeber nicht auf die Millisekunde. Ein Fehlalarm pro Takt waere Laerm.
+  const c = controllerMitLeiste();
+  c.tick();
+  c.tick();
+  assert.strictEqual(c.state.letzteSchlafluecke, null);
+});
+
+test('Ein zusaetzlicher Takt erzeugt keine Luecke', () => {
+  // pause(), resume() und taskleisteZeigen() ticken von Hand. Mehr Takte machen Luecken nur
+  // kleiner -- aber das muss auch so bleiben.
+  const c = controllerMitLeiste();
+  c.tick();
+  c.pause();
+  c.taskleisteZeigen();
+  assert.strictEqual(c.state.letzteSchlafluecke, null);
+});
+
+test('Der Zustand trennt gewuenschtes von gestelltem Wachhalten', () => {
+  // Vorher meldete die Einrichtungsseite "wird wachgehalten", sobald es GEWUENSCHT war. Ohne
+  // dauerhaften PowerShell-Prozess laesst sich die Anforderung gar nicht stellen -- ein Haken,
+  // der nichts tut, und nichts, was darauf hinweist.
+  const c = controllerMitLeiste();
+  c.panel.setSystemWach = (w) => { c.panel.systemWach = w; c.panel.systemWachGestellt = false; return false; };
+  c.tick();
+  assert.strictEqual(c.state.systemWachhalten, true, 'gewuenscht ist es');
+  assert.strictEqual(c.state.systemWach, true);
+  assert.strictEqual(c.state.systemWachGestellt, false, 'gestellt wurde es nicht');
 });

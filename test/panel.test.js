@@ -14,7 +14,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('child_process');
-const { Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS } = require('../control/panel');
+const {
+  Panel, PRELUDE, READY_MARKER, oneShotCommand, ES_WACH, ES_FREI, WACH_REASSERT_MS,
+  taskleisteOneShotCommand, TASKLEISTE_REASSERT_MS, SW_HIDE, SW_SHOWNA
+} = require('../control/panel');
 
 const isWindows = process.platform === 'win32';
 
@@ -232,4 +235,138 @@ test('Ohne Dauerprozess gibt es kein Wachhalten -- und keinen Absturz', () => {
   p.supported = true;
   p._ensureProcess = () => null;
   assert.strictEqual(p.setSystemWach(true), false);
+});
+
+// --- Die Taskleiste ---------------------------------------------------------------------------
+//
+// Hier gilt derselbe Vorbehalt wie bei Panel-Off: `Taskleiste-Aus` wird NICHT aufgerufen, sonst
+// verschwindet die Taskleiste des Entwicklungsrechners mitten im Testlauf. Geprueft wird, dass
+// der Vorspann durchlaeuft und die Funktionen wirklich existieren -- das war in 1.0.0 der
+// Unterschied zwischen "sieht richtig aus" und "tut nichts".
+
+test('Der Vorspann bringt die Taskleisten-Funktionen mit', () => {
+  assert.ok(PRELUDE.includes('function Taskleiste-Aus'), 'Taskleiste-Aus fehlt im Vorspann');
+  assert.ok(PRELUDE.includes('function Taskleiste-An'), 'Taskleiste-An fehlt im Vorspann');
+  assert.ok(PRELUDE.includes('Shell_TrayWnd'), 'ohne die Fensterklasse findet niemand die Leiste');
+  assert.ok(PRELUDE.includes('Shell_SecondaryTrayWnd'),
+    'auf einem angesteckten Monitor bliebe sonst eine Leiste stehen');
+  for (const line of PRELUDE.split('\n').filter(l => l.trim())) {
+    assert.ok(!/^\s*(function|if|while)\b.*[^}]\s*$/.test(line) || line.trim().endsWith('}'),
+      `Unvollstaendige Zeile im Vorspann: ${line.slice(0, 60)}…`);
+  }
+});
+
+test('Der Rueckfallweg der Taskleiste kommt ohne Standardeingabe aus', () => {
+  const cmd = taskleisteOneShotCommand(true);
+  assert.ok(cmd.includes('Add-Type'), 'der Einzelaufruf muss den Typ selbst anlegen');
+  assert.ok(!cmd.includes('\n'), 'der Einzelaufruf muss eine einzige Zeile sein');
+  assert.ok(cmd.trim().endsWith(`Taskleiste-Setzen ${SW_SHOWNA}`), 'zeigen heisst SW_SHOWNA');
+  assert.ok(taskleisteOneShotCommand(false).trim().endsWith(`Taskleiste-Setzen ${SW_HIDE}`));
+});
+
+test('Ausblenden wird bei jedem Aufruf gesendet, Einblenden nur beim Wechsel', () => {
+  // Die Rollen sind gegenueber setPower() vertauscht: Hier ist AUSBLENDEN der Dauerzustand.
+  // Windows legt bei jedem Explorer-Neustart eine frische, sichtbare Leiste an -- ohne
+  // Nachschalten stuende sie ab diesem Moment ueber dem Dashboard.
+  const gesendet = [];
+  const p = new Panel(() => {});
+  p.supported = true;
+  p._ensureProcess = () => ({ stdin: { writable: true, write: (c) => gesendet.push(c.trim()) } });
+
+  p.setTaskleiste(false);
+  p.setTaskleiste(false);
+  p.setTaskleiste(false);
+  assert.deepStrictEqual(gesendet, ['Taskleiste-Aus', 'Taskleiste-Aus', 'Taskleiste-Aus']);
+
+  gesendet.length = 0;
+  p.setTaskleiste(true);
+  p.setTaskleiste(true);
+  assert.deepStrictEqual(gesendet, ['Taskleiste-An'], 'unveraendert und nicht faellig: nichts senden');
+
+  p.taskleisteZuletzt = Date.now() - TASKLEISTE_REASSERT_MS - 1;
+  p.setTaskleiste(true);
+  assert.deepStrictEqual(gesendet, ['Taskleiste-An', 'Taskleiste-An'], 'faellig: erneut bekraeftigen');
+});
+
+test('Ohne Dauerprozess blendet ein Einzelaufruf aus', () => {
+  // Anders als beim Wachhalten gibt es hier einen Rueckfallweg: ShowWindow haengt nicht am
+  // Thread des Prozesses, ein Einzelaufruf wirkt also auch, wenn er danach sofort endet.
+  const aufrufe = [];
+  const p = new Panel(() => {});
+  p.supported = true;
+  p._ensureProcess = () => null;
+  p._einzelaufruf = (befehl) => { aufrufe.push(befehl); return true; };
+  assert.strictEqual(p.setTaskleiste(false), true);
+  assert.strictEqual(aufrufe.length, 1);
+  assert.ok(aufrufe[0].includes(`Taskleiste-Setzen ${SW_HIDE}`));
+});
+
+test('Freigeben laeuft eigenstaendig und nur, wenn die Leiste versteckt ist', () => {
+  // Der Prozess muss unseren eigenen ueberleben: Freigegeben wird, WAEHREND sich die App
+  // beendet. Und freigegeben wird nur, was vorher versteckt war -- beim Update ist der nackte
+  // Desktop gewollt.
+  const aufrufe = [];
+  const p = new Panel(() => {});
+  p.supported = true;
+  p._einzelaufruf = (befehl, was, eigenstaendig) => { aufrufe.push({ befehl, eigenstaendig }); return true; };
+
+  assert.strictEqual(p.taskleisteFreigeben(), false, 'nie versteckt: nichts zu tun');
+  assert.strictEqual(aufrufe.length, 0);
+
+  p.taskleiste = false;
+  assert.strictEqual(p.taskleisteFreigeben(), true);
+  assert.strictEqual(aufrufe.length, 1);
+  assert.strictEqual(aufrufe[0].eigenstaendig, true, 'sonst stirbt der Prozess mit der App');
+  assert.ok(aufrufe[0].befehl.includes(`Taskleiste-Setzen ${SW_SHOWNA}`));
+});
+
+test('Taskleiste-Aus und Taskleiste-An sind nach dem Vorspann definiert', { skip: !isWindows && 'nur unter Windows' }, async () => {
+  const probe = PRELUDE + '\n'
+    + '"AUS:" + [bool](Get-Command Taskleiste-Aus -EA SilentlyContinue)\n'
+    + '"AN:" + [bool](Get-Command Taskleiste-An -EA SilentlyContinue)\n';
+  const { out } = await runPowerShell(probe);
+  assert.match(out, /AUS:True/, 'Taskleiste-Aus wurde nicht definiert -- das Ausblenden liefe ins Leere');
+  assert.match(out, /AN:True/, 'Taskleiste-An wurde nicht definiert -- die Leiste kaeme nie zurueck');
+});
+
+// Gefahrlos: FindWindow sucht eine Fensterklasse, die es nicht gibt, ShowWindow wird also nie
+// aufgerufen. Damit ist der Weg bis in user32.dll einmal durchlaufen, ohne dass beim Testen
+// eine Taskleiste verschwindet.
+test('Die Taskleisten-Aufrufe erreichen user32.dll', { skip: !isWindows && 'nur unter Windows' }, async () => {
+  const probe = PRELUDE + '\n'
+    + "$h = [Wall.PanelCtl]::FindWindow('Wall_GibtEsNicht', $null)\n"
+    + '"TREFFER:" + ($h -eq [System.IntPtr]::Zero)\n';
+  const { out, err } = await runPowerShell(probe);
+  assert.match(out, /TREFFER:True/, `Der Aufruf brach ab. Fehler: ${JSON.stringify(err)}`);
+  assert.ok(!/Exception|nicht gefunden|not recognized/i.test(err),
+    `PowerShell meldete einen Fehler: ${err}`);
+});
+
+test('Ein fehlgeschlagenes Wachhalten wird gemeldet -- einmal, nicht jede Minute', () => {
+  // Vorher gab diese Stelle nur `false` zurueck. Niemand las den Rueckgabewert, im Protokoll
+  // stand weiterhin "System wird wachgehalten" -- dieselbe Klasse Fehler wie 1.0.4, nur eine
+  // Ebene tiefer.
+  const zeilen = [];
+  const p = new Panel((stufe, text) => zeilen.push(stufe + ': ' + text));
+  p.supported = true;
+  p._ensureProcess = () => null;
+
+  assert.strictEqual(p.setSystemWach(true), false);
+  assert.strictEqual(p.systemWachGestellt, false, 'gestellt wurde nichts');
+  const warnungen = () => zeilen.filter(z => z.startsWith('warn') && z.includes('NICHT wachgehalten'));
+  assert.strictEqual(warnungen().length, 1, 'die Meldung muss ueberhaupt kommen');
+
+  p.wachZuletzt = Date.now() - WACH_REASSERT_MS - 1;
+  p.setSystemWach(true);
+  assert.strictEqual(warnungen().length, 1, 'aber nur beim Wechsel -- sonst waere es Laerm');
+});
+
+test('Nach einem gelungenen Wachhalten gilt es als gestellt', () => {
+  const p = new Panel(() => {});
+  p.supported = true;
+  p._ensureProcess = () => ({ stdin: { writable: true, write: () => {} } });
+  assert.strictEqual(p.setSystemWach(true), true);
+  assert.strictEqual(p.systemWachGestellt, true);
+  p.setSystemWach(false);
+  assert.strictEqual(p.systemWachGestellt, false, 'freigeben heisst: keine Anforderung mehr');
 });

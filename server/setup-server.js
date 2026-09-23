@@ -509,6 +509,27 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     res.json({ ok: true, state: controller.getState() });
   });
 
+  // --- Wartung: Taskleiste einblenden ---------------------------------------------------------
+  //
+  // Der erste von drei Wegen zur Taskleiste; die anderen beiden liegen am Geraet (fuenfmal oben
+  // links tippen, Strg+Alt+W). Bewusst eine EIGENE Route und nicht an /api/panel/pause
+  // angehaengt: Wer vom Handy aus nur pausiert, steht nicht zwangslaeufig davor, und eine
+  // Taskleiste auf einem unbeaufsichtigten Wandpanel wartet nur darauf, dass jemand im
+  // Vorbeigehen das Startmenue oeffnet.
+  //
+  // Die Leiste blendet sich nach fuenf Minuten von selbst wieder aus -- wie die Pause.
+  app.post('/api/panel/wartung', (req, res) => {
+    if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
+    const r = controller.wartung(req.body && req.body.minutes);
+    res.json({ ok: true, ...r, state: controller.getState() });
+  });
+
+  app.post('/api/panel/taskleiste-aus', (req, res) => {
+    if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
+    controller.taskleisteVerbergen();
+    res.json({ ok: true, state: controller.getState() });
+  });
+
   // Proxy fuer das Dashboard: aktuelle Zustaende ausgewaehlter Entitaeten
   app.get('/api/ha/states', async (req, res) => {
     const haUrl = store.get('haUrl');
