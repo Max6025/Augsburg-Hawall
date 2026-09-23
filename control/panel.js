@@ -90,13 +90,19 @@ const SMTO_TIMEOUT_MS = 1500;
 // zurueck kam das Geraet erst durch eine Beruehrung -- zwei Minuten spaeter (507).
 //
 // `keepSystemAwake()` in main.js sollte genau das verhindern, tut es aber nicht.
-// `powercfg /requests` auf dem Geraet zeigte:
+// `powercfg /requests` zeigte am 2026-09-22:
 //
 //     SYSTEM:    Keine.
-//     AWAYMODE:  Augsburg Wall Display.exe
+//     AWAYMODE:  <die App>
 //
-// Electrons `prevent-app-suspension` landet als **Away-Mode**-Anforderung. Away Mode stammt
-// aus der Zeit des klassischen S3-Schlafs und wirkt auf einem Modern-Standby-Geraet nicht.
+// NACHTRAG 2026-09-23, am Geraet nachgemessen: Auf Windows 11 25H2 steht die App unter
+// **AUSFUEHRUNG** (`PowerRequestExecutionRequired`), nicht unter AWAYMODE -- die Deutung von
+// gestern war fuer diesen Build falsch. Und die SYSTEM-Anforderung, die unten gesetzt wird,
+// steht dort inzwischen auch. Sie hilft trotzdem nicht gegen den Uebergang, den das
+// Abschalten des Bildschirms ausloest; das tut nur `powercfg /change standby-timeout-* 0`
+// (siehe control/energie.js). Der Aufruf hier bleibt, weil er den Leerlauf-Fall deckt und
+// nichts kostet -- aber er ist NICHT die Erklaerung dafuer, dass das Geraet erreichbar bleibt.
+//
 // Gebraucht wird eine SYSTEM-Anforderung, und Electron bietet dafuer keinen Weg: Sein
 // `prevent-display-sleep` wuerde zusaetzlich den BILDSCHIRM wach halten -- das Gegenteil
 // dessen, was dieses Projekt will.

@@ -21,7 +21,7 @@
 // die Rastergroesse und ein Beispiel. Ohne das raet ein Modell die Kartennamen -- und liegt
 // daneben.
 
-const FORMAT = 'augsburg-wall-display/dashboard';
+const FORMAT = 'hawall-eurasburg/dashboard';
 
 // Das Format der Vorlage wird beim Import MITGELESEN, aber nie geschrieben.
 //
@@ -34,7 +34,13 @@ const FORMAT = 'augsburg-wall-display/dashboard';
 // dem Italien-Geraet einzuspielen kann schiefgehen -- dort gibt es Kartenarten, die es hier
 // nicht mehr gibt, und umgekehrt.
 const FORMAT_VORLAGE = 'italien-wall-display/dashboard';
-const FORMATE_LESBAR = [FORMAT, FORMAT_VORLAGE];
+// Der NAME des Projekts hat sich am 2026-09-23 geaendert, das FORMAT der Dateien nicht. Jede
+// Datei, die bis dahin exportiert wurde, traegt die alte Kennung -- und liegt jetzt in einem
+// Chatfenster, einer Mail oder auf einem Stick. Wer sie beim Umbenennen aus dieser Liste
+// nimmt, macht sie unlesbar, und zwar mit der Meldung "Unbekanntes Format": Es sieht dann aus,
+// als waere die Datei kaputt, und nicht, als haetten wir den Namen gewechselt.
+const FORMAT_AUGSBURG = 'augsburg-wall-display/dashboard';
+const FORMATE_LESBAR = [FORMAT, FORMAT_AUGSBURG, FORMAT_VORLAGE];
 const VERSION = 1;
 
 // Muss zum Editor passen (MAX_ROWS dort) und zum Raster in dashboard.css.
@@ -131,7 +137,7 @@ function exportieren(dashboard, kartenArten) {
 function anleitung(kartenArten) {
   const arten = kartenArten || {};
   return {
-    wozu: 'Ein Dashboard für Augsburg Wall Display. Diese Datei lässt sich unter '
+    wozu: 'Ein Dashboard für Hawall Eurasburg. Diese Datei lässt sich unter '
       + '"Unterdashboards" wieder einspielen.',
     raster: `${SPALTEN} Spalten mal ${ZEILEN} Zeilen. x zählt von links ab 0, y von oben ab 0. `
       + 'Karten dürfen sich nicht überlappen und nicht über den Rand hinausragen.',
@@ -296,4 +302,7 @@ function freierPlatz(belegt, x, y, cols, rows) {
   return null;
 }
 
-module.exports = { exportieren, importieren, anleitung, FORMAT, FORMAT_VORLAGE, FORMATE_LESBAR, VERSION, SPALTEN, ZEILEN };
+module.exports = {
+  exportieren, importieren, anleitung,
+  FORMAT, FORMAT_AUGSBURG, FORMAT_VORLAGE, FORMATE_LESBAR, VERSION, SPALTEN, ZEILEN
+};

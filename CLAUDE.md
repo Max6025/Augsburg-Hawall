@@ -1,4 +1,4 @@
-# Augsburg Wall Display
+# HA Wall Eurasburg
 
 Wandpanel für Home Assistant unter Windows im **Dauerbetrieb**. Electron 31, Vanilla JS, kein
 Bundler, kein TypeScript.
@@ -92,7 +92,7 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
 
   ```
   SYSTEM:    Keine.
-  AWAYMODE:  Augsburg Wall Display.exe
+  AWAYMODE:  <die App>
   ```
 
   Away Mode stammt aus der Zeit des klassischen S3-Schlafs und wirkt auf einem
@@ -202,6 +202,18 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
      ist der Rettungsanker, wenn die App abstürzt, während die Leiste versteckt ist —
      `Strg+Alt+Q` gibt sie ausdrücklich zurück, `dispose()` bewusst **nicht** (beim Update ist
      der nackte Desktop gewollt).
+- **Die `appId` bleibt `de.max.augsburgwalldisplay` — sie ist kein Name, sie ist eine
+  Identität.** Beim Umbenennen des Projekts am 2026-09-23 (aus „Augsburg Wall Display" wurde
+  „HA Wall Eurasburg") wurde alles Sichtbare geändert: `name`, `productName`, Repo, Titel,
+  Markenfläche, Dateiname des Installers. Die `appId` **nicht**, und das ist Absicht:
+  electron-builder führt daran den Deinstallations-Eintrag und den Update-Pfad. Wer sie ändert,
+  bekommt beim nächsten Update **keinen** Fehler, sondern eine **zweite** Installation neben der
+  alten — und die alte startet weiter mit, streitet um Port 8788 und schaltet am Panel mit.
+  Dasselbe gilt für `productName` mit einer zweiten Falle: Daraus leitet Electron
+  `app.getPath('userData')` ab, also `%APPDATA%\<productName>`. Dort liegen Zugangsdaten,
+  Dashboards und Bilder. Eine Umbenennung ohne **Mitnehmen dieses Ordners** startet die App wie
+  frisch installiert: keine Home-Assistant-Verbindung, keine Dashboards, und am Panel sieht es
+  aus wie ein Totalverlust.
 - **Auf dem Sperrbildschirm greift kein einziger Fluchtweg.** Die Tipp-Geste erreicht das
   Dashboard nicht (der Sperrbildschirm liegt davor), globale Tastenkuerzel laesst Windows dort
   nicht durch, und der Schalter in der Weboberflaeche braucht einen Server, der beim Aufwachen

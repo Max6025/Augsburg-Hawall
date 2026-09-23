@@ -94,8 +94,8 @@ jobs:
       - name: Quellcode-Archiv anhaengen
         shell: bash
         run: |
-          git archive --format=zip --prefix=augsburg-wall-exe/ HEAD -o augsburg-wall-exe.zip
-          gh release upload "$TAG" augsburg-wall-exe.zip --clobber
+          git archive --format=zip --prefix=hawall-eurasburg-exe/ HEAD -o hawall-eurasburg-exe.zip
+          gh release upload "$TAG" hawall-eurasburg-exe.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -107,7 +107,7 @@ jobs:
         run: |
           DATEIEN=$(gh release view "$TAG" --json assets --jq '.assets[].name')
           echo "$DATEIEN"
-          for pflicht in latest.yml "Augsburg-Wall-Display-Setup-$TAG.exe"; do
+          for pflicht in latest.yml "Hawall-Eurasburg-Setup-$TAG.exe"; do
             echo "$DATEIEN" | grep -qx "$pflicht" || { echo "FEHLT: $pflicht"; exit 1; }
           done
           gh release edit "$TAG" --draft=false --latest

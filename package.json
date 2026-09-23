@@ -1,6 +1,6 @@
 {
-  "name": "augsburg-wall-display",
-  "productName": "Augsburg Wall Display",
+  "name": "hawall-eurasburg",
+  "productName": "Hawall Eurasburg",
   "version": "1.0.10",
   "description": "Wall Display fuer Home Assistant im Dauerbetrieb: im Ruhezustand liegt der Bildschirmschoner, ein Tipp holt das Dashboard, nachts ist das Panel wirklich aus",
   "main": "main.js",
@@ -25,7 +25,7 @@
   },
   "build": {
     "appId": "de.max.augsburgwalldisplay",
-    "productName": "Augsburg Wall Display",
+    "productName": "Hawall Eurasburg",
     "asar": true,
     "files": [
       "main.js",
@@ -36,6 +36,7 @@
       "package.json"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -52,13 +53,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "differentialPackage": true,
-      "artifactName": "Augsburg-Wall-Display-Setup-${version}.${ext}"
+      "artifactName": "Hawall-Eurasburg-Setup-${version}.${ext}"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "Max6025",
-        "repo": "Augsburg-Hawall",
+        "repo": "Hawall-Eurasburg",
         "vPrefixedTagName": false,
         "releaseType": "release"
       }

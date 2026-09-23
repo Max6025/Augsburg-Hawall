@@ -284,3 +284,39 @@ test('Die Anleitung erwaehnt die untere Leiste', () => {
   assert.ok(datei._anleitung.untereLeiste, 'kein Hinweis auf die untere Leiste');
   assert.ok(datei._anleitung.untereLeiste.includes('unten'), datei._anleitung.untereLeiste);
 });
+
+// --- Der Name hat sich geaendert, das Format nicht ------------------------------------------
+//
+// Am 2026-09-23 wurde das Projekt von "Augsburg Wall Display" in "Hawall Eurasburg"
+// umbenannt. Jede Datei, die bis dahin exportiert wurde, traegt die alte Kennung -- und liegt
+// jetzt in einem Chatfenster, einer Mail oder auf einem Stick. Waere sie beim Umbenennen aus
+// FORMATE_LESBAR gefallen, haette der Import "Unbekanntes Format" gemeldet: Es saehe aus, als
+// waere die Datei kaputt, und nicht, als haetten wir den Namen gewechselt.
+
+const EINE_KARTE = [{ entitaet: 'light.kueche', art: 'light', x: 0, y: 0, spalten: 1, zeilen: 1 }];
+
+test('Eine Datei mit der alten Kennung wird weiter gelesen', () => {
+  const r = a.importieren(rein(EINE_KARTE, { format: a.FORMAT_AUGSBURG }), CARD_TYPES);
+  assert.strictEqual(r.ok, true, JSON.stringify(r.fehler));
+});
+
+test('Die Kennung der Vorlage bleibt lesbar', () => {
+  const r = a.importieren(rein(EINE_KARTE, { format: a.FORMAT_VORLAGE }), CARD_TYPES);
+  assert.strictEqual(r.ok, true, JSON.stringify(r.fehler));
+});
+
+test('Eine fremde Kennung wird weiterhin abgelehnt', () => {
+  // Die Liste darf nicht zur Sammelstelle werden: Was nicht aus dieser Familie kommt, kommt
+  // nicht durch.
+  const r = a.importieren(rein(EINE_KARTE, { format: 'irgendwas/anderes' }), CARD_TYPES);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.fehler.join(' ').includes('hawall-eurasburg/dashboard'),
+    'die Meldung muss die ERWARTETE Kennung nennen: ' + r.fehler.join(' '));
+});
+
+test('Exportiert wird mit der NEUEN Kennung', () => {
+  assert.strictEqual(a.FORMAT, 'hawall-eurasburg/dashboard');
+  assert.ok(a.FORMATE_LESBAR.includes(a.FORMAT_AUGSBURG), 'die alte Kennung fehlt in der Liste');
+  assert.strictEqual(a.FORMATE_LESBAR[0], a.FORMAT,
+    'die Fehlermeldung nennt die erste -- das muss die neue sein');
+});

@@ -7,10 +7,12 @@
 }
 .hawall-nav-brand { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.3px;
   display: flex; align-items: center; gap: 0.5rem; color: #fff; white-space: nowrap; }
+/* Die Marke ist jetzt ein Bild (renderer/shared/marke.png), kein Buchstabe im Farbverlauf.
+   `object-fit: cover` statt `contain`: Das Logo bringt seinen eigenen Hintergrund mit, ein
+   Buchstabenkasten darunter waere eine zweite Flaeche hinter der ersten. */
 .hawall-nav-brand .hawall-logo {
   width: 1.6rem; height: 1.6rem; border-radius: 8px;
-  background: linear-gradient(155deg, #4f7cff, #274a9e);
-  display: flex; align-items: center; justify-content: center; font-size: 0.95rem; flex-shrink: 0;
+  object-fit: cover; flex-shrink: 0; display: block;
 }
 .hawall-nav-links { display: flex; gap: 0.3rem; flex-wrap: wrap; }
 .hawall-nav-links a {

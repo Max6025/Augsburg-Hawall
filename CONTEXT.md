@@ -1,4 +1,4 @@
-# Augsburg Wall Display
+# HA Wall Eurasburg
 
 Ein eigenständiges Windows-Wandpanel für Home Assistant im **Dauerbetrieb**: Das Gerät hängt in
 einem bewohnten Haus und läuft durch. Im Ruhezustand liegt der Bildschirmschoner; ein Tipp holt

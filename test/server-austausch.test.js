@@ -118,7 +118,7 @@ test('Der Import-Pfad kollidiert nicht mit der Dashboard-Kennung', async () => {
   // die Route wieder von /api/dashboards/:id verschluckt worden.
   const r = await fetch(U('/api/dashboard-import'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ datei: { format: 'augsburg-wall-display/dashboard', version: 1, name: 'X', karten: [] } })
+    body: JSON.stringify({ datei: { format: 'hawall-eurasburg/dashboard', version: 1, name: 'X', karten: [] } })
   });
   const text = await r.text();
   assert.ok(!text.includes('Dashboard nicht gefunden'),
@@ -128,7 +128,7 @@ test('Der Import-Pfad kollidiert nicht mit der Dashboard-Kennung', async () => {
 test('Eine kaputte Datei wird mit Begruendung abgelehnt', async () => {
   const r = await fetch(U('/api/dashboard-import'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ datei: { format: 'augsburg-wall-display/dashboard', version: 1, karten: [
+    body: JSON.stringify({ datei: { format: 'hawall-eurasburg/dashboard', version: 1, karten: [
       { entitaet: 'climate.bad', art: 'thermostat' }
     ] } })
   });

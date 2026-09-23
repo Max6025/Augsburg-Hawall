@@ -1,4 +1,8 @@
-# Augsburg Wall Display
+<p align="center">
+  <img src="renderer/shared/logo.png" alt="HA Wall Eurasburg" width="520">
+</p>
+
+# HA Wall Eurasburg
 
 Ein Wandpanel für Home Assistant unter Windows, für ein Gerät, das **durchläuft**.
 
@@ -36,7 +40,7 @@ dreht fast jede Regel um — siehe [docs/adr/](docs/adr/).
 
 ## Installation
 
-Den Installer aus den [Releases](https://github.com/Max6025/Augsburg-Hawall/releases)
+Den Installer aus den [Releases](https://github.com/Max6025/Hawall-Eurasburg/releases)
 herunterladen und ausführen. Gebaut wird für **64-Bit-Windows (x64)**.
 
 Nach der Installation startet die Anwendung bei jeder Windows-Anmeldung automatisch im

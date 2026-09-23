@@ -1,6 +1,6 @@
 # Eigenes Projekt statt eines Schalters in Italien Wall Display
 
-Das Panel in Augsburg hätte auch ein Schalter in [Italien Wall
+Das Panel in Eurasburg hätte auch ein Schalter in [Italien Wall
 Display](https://github.com/Max6025/Italien-Hawall) sein können: „Kalendersteuerung aus,
 Bildschirmschoner an". Dagegen sprechen drei Dinge, und das dritte ist das entscheidende.
 
