@@ -3,27 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <title>Energiekarte ansehen</title>
-<link rel="stylesheet" href="diagramm.css">
+<!--
+  Das Energiefluss-Diagramm in allen Lagen, die es gibt. Ohne Home Assistant, ohne Electron.
+
+  WICHTIG: Diese Probe laedt das ECHTE Modul und das ECHTE CSS. Bis 1.0.21 lagen hier Kopien
+  (diagramm.js, diagramm.css, symbole.js) -- und eine Probe, die eine Kopie ansieht, beweist
+  nichts ueber das, was ausgeliefert wird. Genau so waere die Wallbox hier schoen gewesen und
+  auf der Wand kaputt. Die Kopien sind geloescht.
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
 <style>
-  :root { --text:#f2f2f0; --muted:#8a8b91; }
-  body { margin:0; background:#0b0a12; color:var(--text);
+  body { margin:0; background:var(--bg,#0b0a12); color:var(--text,#f2f2f0);
     font-family:'Segoe UI',system-ui,sans-serif; padding:16px; }
   h1 { font-size:1rem; font-weight:600; color:var(--muted); margin:0 0 12px; }
   .reihe { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
   .karte { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.08);
-    border-radius:20px; padding:10px; aspect-ratio:1/1; display:flex; flex-direction:column; }
+    border-radius:20px; padding:10px; aspect-ratio:1/1; display:flex; flex-direction:column;
+    container-type:size; overflow:hidden; }
   .karte h2 { font-size:.72rem; font-weight:600; color:var(--muted); margin:2px 0 0 8px;
     text-transform:uppercase; letter-spacing:.07em; }
   .feld { flex:1; min-height:0; }
+  .feld .ed { width:100%; height:100%; }
   .breit { grid-column: span 2; aspect-ratio: 2/1; }
 </style>
 </head>
 <body>
-  <h1>Vier Lagen, und einmal auf einer 2×1-Karte — links oben sind deine echten Werte von gerade</h1>
+  <h1>Alle Lagen des Diagramms — links oben die echten Werte vom Gerät</h1>
   <div class="reihe" id="reihe"></div>
-<script src="symbole.js"></script>
-<script src="diagramm.js"></script>
+<script src="../../renderer/shared/dashboard-render.js"></script>
 <script>
+  const I = DashboardRender.ICONS || {};
+  // Dieselben Symbole, die buildCard der Karte mitgibt -- nicht eine eigene Auswahl.
+  const SYMBOLE = { solar: I.sun2, netz: I.grid, haus: I.home2, batterie: I.battery2,
+    wallbox: I.wallbox };
+
   const faelle = [
     ['Eurasburg jetzt', { solarW:5198, netzBezugW:12, netzEinspeisungW:0, hausW:5210 }],
     ['Einspeisung', { solarW:4200, netzBezugW:0, netzEinspeisungW:2600, hausW:1600 }],
@@ -32,16 +45,34 @@
     ['mit Batterie, lädt', { solarW:3900, netzBezugW:0, netzEinspeisungW:300, hausW:2100,
       batterieW:1500, batterieLaedt:true, batterieSoc:64 }],
     ['mit Batterie, entlädt', { solarW:0, netzBezugW:120, netzEinspeisungW:0, hausW:760,
-      batterieW:640, batterieLaedt:false, batterieSoc:38 }]
+      batterieW:640, batterieLaedt:false, batterieSoc:38 }],
+    // --- Die Wallbox, in den Lagen, die wirklich vorkommen -------------------------------
+    ['Wallbox lädt, Sonne', { solarW:8200, netzBezugW:0, netzEinspeisungW:400, hausW:7800,
+      wallboxW:7400 }],
+    ['Wallbox lädt, Netz', { solarW:0, netzBezugW:11200, netzEinspeisungW:0, hausW:11200,
+      wallboxW:11000 }],
+    ['Wallbox steht (0 W)', { solarW:1200, netzBezugW:0, netzEinspeisungW:500, hausW:700,
+      wallboxW:0 }],
+    ['Wallbox UND Batterie', { solarW:9100, netzBezugW:0, netzEinspeisungW:0, hausW:7600,
+      wallboxW:7400, batterieW:1500, batterieLaedt:true, batterieSoc:78 }],
+    ['alles gleichzeitig, 2×1', { solarW:9100, netzBezugW:300, netzEinspeisungW:0, hausW:11000,
+      wallboxW:10800, batterieW:1600, batterieLaedt:false, batterieSoc:22 }, 'breit'],
+    ['Wallbox, langsam (1,4 kW)', { solarW:1500, netzBezugW:0, netzEinspeisungW:0, hausW:1500,
+      wallboxW:1400 }]
   ];
-  const r = document.getElementById('reihe');
-  faelle.forEach(([titel, d], i) => {
+
+  const reihe = document.getElementById('reihe');
+  for (const [titel, werte, klasse] of faelle) {
     const k = document.createElement('div');
-    k.className = 'karte' + (i === 4 ? ' breit' : '');
-    k.innerHTML = '<h2>' + titel + '</h2><div class="feld">' +
-      EnergieDiagramm.diagramm(Object.assign({ schwelleW:5, symbole: window.PROBE_SYMBOLE }, d)) + '</div>';
-    r.appendChild(k);
-  });
+    k.className = 'karte' + (klasse ? ' ' + klasse : '');
+    const f = document.createElement('div');
+    f.className = 'feld';
+    f.innerHTML = DashboardRender.energieDiagramm(
+      Object.assign({ schwelleW: 5, symbole: SYMBOLE }, werte));
+    k.innerHTML = '<h2>' + titel + '</h2>';
+    k.appendChild(f);
+    reihe.appendChild(k);
+  }
 </script>
 </body>
 </html>

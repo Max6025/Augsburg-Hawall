@@ -36,7 +36,12 @@
     solar:    { x: ED_MITTE.x,        y: ED_MITTE.y - ED_BAHN },
     netz:     { x: ED_MITTE.x - ED_BAHN, y: ED_MITTE.y },
     haus:     { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y },
-    batterie: { x: ED_MITTE.x,        y: ED_MITTE.y + ED_BAHN }
+    batterie: { x: ED_MITTE.x,        y: ED_MITTE.y + ED_BAHN },
+    // Die Wallbox haengt UNTER dem Haus, nicht am Kreuz. Das ist keine Platzfrage, sondern die
+    // Wahrheit der Anlage: Das Auto zieht seinen Strom nicht aus einer fuenften Richtung, es
+    // ist ein Teil des Hausverbrauchs. Deshalb geht ihre Leitung auch direkt vom Haus nach
+    // unten und nicht durch die Mitte wie die vier anderen.
+    wallbox:  { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y + ED_BAHN }
   };
 
   const ED_FARBE = {
@@ -44,6 +49,9 @@
     netz: '#6f7784',
     haus: '#4f7cff',
     batterie: '#57c98a',
+    // Violett: Es muss sich von Haus-Blau UND Batterie-Gruen unterscheiden, sonst haelt man
+    // die Wallbox-Leitung aus fuenf Metern fuer die des Hauses.
+    wallbox: '#a78bfa',
     ruhe: 'rgba(255,255,255,0.13)'
   };
 
@@ -81,6 +89,22 @@
       luecke: (19 - 5 * rel).toFixed(1),
       dauer: (2.3 - 1.6 * rel).toFixed(2)
     };
+  }
+
+  /**
+   * Eine DIREKTE Verbindung zwischen zwei Knoten, ohne den Umweg ueber die Mitte.
+   *
+   * Fuer die Wallbox: Sie haengt am Haus, nicht am Verteilpunkt. Eine Leitung, die erst zur
+   * Mitte laeuft, wuerde behaupten, das Auto bekaeme seinen Strom direkt von Netz und Solar --
+   * und der Unterschied ist nicht Kosmetik, sondern das, was die Grafik erklaeren soll.
+   */
+  function edStrecke(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const laenge = Math.hypot(dx, dy) || 1;
+    const ax = a.x + dx * (ED_R / laenge), ay = a.y + dy * (ED_R / laenge);
+    const bx = b.x - dx * (ED_R / laenge), by = b.y - dy * (ED_R / laenge);
+    // Das fuehrende `M` ist SVG-Kommando, keine Variable -- siehe edBahn().
+    return `M${ax.toFixed(1)},${ay.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`;
   }
 
   function edBahn(a, b) {
@@ -129,6 +153,15 @@
   // Deshalb: Text auf der Seite, an der KEINE Leitung abgeht. Oben der Solarknoten, unten die
   // Batterie, seitlich Netz und Haus (dort laufen die Leitungen waagerecht und kreuzen den
   // Text nicht).
+  /**
+   * Ein Knoten mit Scheibe, Symbol, Wert und Namen.
+   *
+   * `textOben` schreibt die zwei Zeilen UEBER die Scheibe statt darunter. Beim Solarknoten war
+   * das von Anfang an so (unter ihm laufen die Leitungen weg). Beim HAUS wird es noetig, sobald
+   * eine Wallbox darunter haengt: Der Hauswert stand bei y+76 und die Wallbox-Scheibe beginnt
+   * bei y+92 -- Text und Scheibe waeren ineinander gelaufen, und zwar erst bei dem, der eine
+   * Wallbox eingetragen hat.
+   */
   function edKnoten(art, ort, wert, beschriftung, aktiv, zusatz, symbole, textOben) {
     const farbe = ED_FARBE[art];
     const name = zusatz ? beschriftung + ' \u00b7 ' + zusatz : beschriftung;
@@ -147,15 +180,18 @@
 
   /**
    * daten: { solarW, netzBezugW, netzEinspeisungW, batterieW, batterieLaedt, batterieSoc,
-   *          hausW, schwelleW, namen: {solar, netz, haus, batterie} }
+   *          hausW, wallboxW, schwelleW, namen: {solar, netz, haus, batterie, wallbox} }
    * Fehlende Zweige werden weggelassen, nicht mit Null gezeichnet.
    */
   function edDiagramm(d) {
     const symbole = d.symbole || {};
     const s = d.schwelleW === undefined ? 5 : Math.abs(d.schwelleW);
-    const n = Object.assign({ solar: 'Solar', netz: 'Netz', haus: 'Haus', batterie: 'Batterie' }, d.namen || {});
+    const n = Object.assign({ solar: 'Solar', netz: 'Netz', haus: 'Haus', batterie: 'Batterie',
+      wallbox: 'Wallbox' }, d.namen || {});
     const hatSolar = d.solarW !== null && d.solarW !== undefined;
     const hatBatterie = d.batterieW !== null && d.batterieW !== undefined;
+    const hatWallbox = d.wallboxW !== null && d.wallboxW !== undefined;
+    const wallboxAktiv = hatWallbox && Math.abs(d.wallboxW) > s;
 
     const bezug = d.netzBezugW || 0;
     const einspeisung = d.netzEinspeisungW || 0;
@@ -186,14 +222,29 @@
         farbe: ED_FARBE.batterie, aktiv: battAktiv, w: d.batterieW
       });
     }
+    // Direkt vom Haus nach unten, nicht durch die Mitte -- siehe ED_ORT.wallbox und edStrecke().
+    if (hatWallbox) {
+      leitungen.push({ d: edStrecke(ED_ORT.haus, ED_ORT.wallbox), farbe: ED_FARBE.wallbox,
+        aktiv: wallboxAktiv, w: d.wallboxW });
+    }
 
     // LUFT OBEN. Der Name des Solarknotens steht ueber seiner Scheibe und lag ohne diesen Rand
     // auf der Kante des Ausschnitts -- in einer Karte mit `overflow: hidden` ist er dann halb
     // abgeschnitten, und zwar nur oben, was wie ein Zufall aussieht und keiner ist.
     const LUFT = 14;
-    const hoehe = (hatBatterie ? ED_H_MIT : ED_H_OHNE) + LUFT;
+    // LUFT AUCH LINKS UND RECHTS. Die Beschriftungen stehen mittig unter ihrem Knoten, und die
+    // aeusseren Knoten sitzen nur ED_R vom Rand entfernt -- ein langer Name ragt damit ueber
+    // den Ausschnitt hinaus und wird abgeschnitten. In der Probe nachgemessen:
+    // "Netz · Einspeisung" lief von x=-16 bis 144 (16 px fehlten links, und zwar schon vor der
+    // Wallbox), "Wallbox · lädt" von 269 bis 404.
+    //
+    // Der Ausschnitt wird deshalb breiter gemacht, nicht der Text kuerzer: `xMidYMid meet`
+    // passt die ganze Zeichnung ein, sie wird also nur etwas kleiner -- und zwar gleichmaessig.
+    // Die Alternative waere, die Textbreite vorherzusagen, und die kennt erst der Browser.
+    const RAND = 30;
+    const hoehe = ((hatBatterie || hatWallbox) ? ED_H_MIT : ED_H_OHNE) + LUFT;
     return `
-      <svg class="ed" viewBox="0 ${-LUFT} ${ED_B} ${hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
+      <svg class="ed" viewBox="${-RAND} ${-LUFT} ${ED_B + 2 * RAND} ${hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
         <g>
           ${leitungen.map(l => {
             const f = edFluss(l.w);
@@ -209,10 +260,12 @@
         ${hatSolar ? edKnoten('solar', ED_ORT.solar, d.solarW, n.solar, solarAktiv, '', symbole, true) : ''}
         ${edKnoten('netz', ED_ORT.netz, netzWert, n.netz, netzAktiv,
           einspeisung > s ? 'Einspeisung' : (bezug > s ? 'Bezug' : ''), symbole)}
-        ${edKnoten('haus', ED_ORT.haus, d.hausW, n.haus, (d.hausW || 0) > s, '', symbole)}
+        ${edKnoten('haus', ED_ORT.haus, d.hausW, n.haus, (d.hausW || 0) > s, '', symbole, hatWallbox)}
         ${hatBatterie ? edKnoten('batterie', ED_ORT.batterie, d.batterieW, n.batterie, battAktiv,
           d.batterieSoc !== null && d.batterieSoc !== undefined
             ? Math.round(d.batterieSoc) + ' %' + (d.batterieLaedt ? ' ↑' : ' ↓') : '', symbole) : ''}
+        ${hatWallbox ? edKnoten('wallbox', ED_ORT.wallbox, d.wallboxW, n.wallbox, wallboxAktiv,
+          wallboxAktiv ? 'lädt' : '', symbole) : ''}
       </svg>`;
   }
 
@@ -263,6 +316,9 @@
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M6 6l6 4 6-4M6 12l6 4 6-4M4 20h16"/></svg>',
     home2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></svg>',
     battery2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="16" height="10" rx="1.5"/><path d="M21 11v4"/><path d="M8 13h3l-1 2h3l-4 4v-3H7z" fill="currentColor" stroke="none"/></svg>',
+    // Ladesaeule mit Blitz und Stecker. Ein Auto allein waere zu fein fuer 34 Pixel -- ein
+    // Kasten mit Blitz liest sich auch klein noch als "hier wird geladen".
+    wallbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="11" height="16" rx="2"/><path d="M4 21.5h11"/><path d="M10.6 6.5 8 11h2.4l-1 4 3.2-4.8h-2.3z" fill="currentColor" stroke="none"/><path d="M18 8v4a2.5 2.5 0 0 0 2.5 2.5h0V18"/><path d="M18 6.5v3M21 6.5v3"/></svg>',
     mediaPlayer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M9 8.5v5l4.5-2.5z" fill="currentColor" stroke="none"/><path d="M4 20h16"/></svg>',
     lockClosed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
     lockOpen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.4-2"/></svg>',
@@ -2136,7 +2192,8 @@
       // Jetzt sagt die Karte es. Lieber ein Satz, der erklaert, als eine Zahl, die luegt.
       const falsch = [];
       for (const [feld, zustand] of [['Netzbezug', en.grid], ['Einspeisung', en.gridReturn],
-        ['Solar', en.solar], ['Batterie', en.battery], ['Hausverbrauch', en.home]]) {
+        ['Solar', en.solar], ['Batterie', en.battery], ['Hausverbrauch', en.home],
+        ['Wallbox', en.wallbox]]) {
         if (!zustand) continue;
         const e = einheit(zustand);
         if (e === 'W' || e === 'kW' || klasse(zustand) === 'power') continue;
@@ -2179,6 +2236,10 @@
       // Die Rechnung kennt nur die Zaehler, die eingetragen sind. Ein Strang, der an keinem
       // davon haengt, fehlt ihr -- dem Sensor nicht. Deshalb gewinnt eine ausdrueckliche
       // Angabe, und der Unterschied ist dann sichtbar statt versteckt.
+      // Die Wallbox ist TEIL des Hausverbrauchs, kein fuenfter Zweig: Ihre Leitung geht vom
+      // Haus nach unten weg, und der Hauswert bleibt die Summe. So gelesen stimmt die Grafik --
+      // "von den 7,9 kW, die das Haus zieht, gehen 7,4 ins Auto".
+      const wallboxW = nachW(zahl(en.wallbox), einheit(en.wallbox));
       const hausGemessen = nachW(zahl(en.home), einheit(en.home));
       const hausW = hausGemessen !== null ? Math.abs(hausGemessen)
         : (solarW || 0) + (netzBezugW || 0) - (netzEinspeisungW || 0)
@@ -2196,14 +2257,16 @@
         netzBezugW, netzEinspeisungW,
         batterieW: en.battery !== undefined ? battW : null,
         batterieLaedt: battLaedt, batterieSoc: battSoc,
-        hausW, schwelleW,
+        hausW, wallboxW, schwelleW,
         namen: {
           solar: settings.energyLabelSolar || 'Solar',
           netz: settings.energyLabelGrid || 'Netz',
           haus: settings.energyLabelHome || settings.name || 'Haus',
-          batterie: settings.energyLabelBattery || 'Batterie'
+          batterie: settings.energyLabelBattery || 'Batterie',
+          wallbox: settings.energyLabelWallbox || 'Wallbox'
         },
-        symbole: { solar: ICONS.sun2, netz: ICONS.grid, haus: ICONS.home2, batterie: ICONS.battery2 }
+        symbole: { solar: ICONS.sun2, netz: ICONS.grid, haus: ICONS.home2,
+          batterie: ICONS.battery2, wallbox: ICONS.wallbox }
       });
     } else if (type === 'media_player') {
       const st = state ? state.state : 'off';

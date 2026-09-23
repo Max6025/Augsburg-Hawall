@@ -34,7 +34,11 @@ test('Jeder Leitungspfad beginnt mit dem SVG-Kommando M', () => {
 test('Ohne Batterie ist die Zeichnung niedriger', () => {
   // Sonst bleibt bei drei Knoten unten ein Feld leer, und die Karte sieht aus wie zu einem
   // Drittel ungenutzt -- die Zeichnung wird ja auf die Hoehe eingepasst.
-  const hoehe = (svg) => Number(/viewBox="0 -?\d+ \d+ (\d+)"/.exec(svg)[1]);
+  // AN class="ed" VERANKERT. Vorher stand hier `viewBox="0 ...` -- und als der Ausschnitt
+  // seitlich Luft bekam (-30 statt 0), traf das Muster nicht mehr die Zeichnung, sondern das
+  // erste `viewBox="0 0 24 24"` eines Knotensymbols. Ergebnis: 24 fuer beide Faelle, und der
+  // Test meldete einen Fehler, der keiner war -- an einer Stelle, die niemand vermutet haette.
+  const hoehe = (svg) => Number(/class="ed" viewBox="-?\d+ -?\d+ \d+ (\d+)"/.exec(svg)[1]);
   const ohne = hoehe(mach({ solarW: 1000, netzBezugW: 10, hausW: 1010 }));
   const mit = hoehe(mach({ solarW: 1000, netzBezugW: 10, hausW: 1010, batterieW: 100 }));
   assert.ok(mit > ohne + 80, `mit ${mit} / ohne ${ohne}`);
@@ -191,4 +195,86 @@ test('ohne eigenen Sensor wird der Hausverbrauch gerechnet, mit Sensor nicht', (
     'ein eingetragener Sensor muss gewinnen');
   assert.match(block, /solarW \|\| 0\) \+ \(netzBezugW/,
     'und ohne Angabe muss weiter gerechnet werden');
+});
+
+// --- Die Wallbox ---------------------------------------------------------------------------
+
+const MIT_WALLBOX = { solarW: 8200, netzBezugW: 0, netzEinspeisungW: 400, hausW: 7800,
+  wallboxW: 7400, schwelleW: 5, symbole: {} };
+
+test('ohne wallboxW gibt es keinen fuenften Knoten', () => {
+  const ohne = R.energieDiagramm({ solarW: 1200, netzBezugW: 0, hausW: 1200, symbole: {} });
+  assert.ok(!/ed-knoten[^]*?wallbox/.test(ohne));
+  assert.strictEqual((ohne.match(/ed-knoten/g) || []).length, 3, 'Solar, Netz, Haus');
+});
+
+test('mit wallboxW kommt ein Knoten und eine Leitung dazu', () => {
+  const svg = R.energieDiagramm(MIT_WALLBOX);
+  assert.strictEqual((svg.match(/ed-knoten/g) || []).length, 4);
+  // Solar->Haus, Solar->Netz (Einspeisung), Netz->Haus, Haus->Wallbox
+  assert.strictEqual((svg.match(/ed-leitung/g) || []).length, 4);
+});
+
+test('die Wallbox-Leitung geht DIREKT vom Haus, nicht durch die Mitte', () => {
+  // Das ist die Aussage der Grafik: Das Auto zieht seinen Strom nicht aus einer fuenften
+  // Richtung, es haengt am Haus. Eine Bahn durch die Mitte wuerde das Gegenteil behaupten.
+  const svg = R.energieDiagramm(MIT_WALLBOX);
+  const pfade = [...svg.matchAll(/<path d="([^"]+)"/g)].map(m => m[1]);
+  const gerade = pfade.filter(p => p.includes(' L'));
+  assert.strictEqual(gerade.length, 1, 'genau eine gerade Strecke -- die zur Wallbox');
+  assert.ok(!gerade[0].includes('Q'), 'und die holt nicht aus');
+});
+
+test('jeder Pfad faengt mit dem SVG-Kommando M an', () => {
+  // Dieselbe Falle wie bei ED_M: Ein Pfad, der nicht mit M beginnt, wird vom Browser
+  // STILLSCHWEIGEND verworfen -- Knoten ohne Leitungen, keine Fehlermeldung.
+  const svg = R.energieDiagramm({ ...MIT_WALLBOX, batterieW: 1500, batterieLaedt: true, batterieSoc: 70 });
+  for (const p of [...svg.matchAll(/<path d="([^"]+)"/g)].map(m => m[1])) {
+    assert.match(p, /^M/, p.slice(0, 40));
+  }
+});
+
+test('der Hauswert wandert nach OBEN, wenn eine Wallbox darunter haengt', () => {
+  // Sonst laufen Text und Wallbox-Scheibe ineinander: Der Hauswert stand bei y+76, die
+  // Scheibe beginnt bei y+92.
+  const ohne = R.energieDiagramm({ solarW: 1200, netzBezugW: 0, hausW: 1200, symbole: {} });
+  const mit = R.energieDiagramm(MIT_WALLBOX);
+  const hausY = (svg) => {
+    // Der Hausknoten sitzt rechts: cx = 200 + 136 = 336.
+    const g = svg.split('<g class="ed-knoten').find(s => s.includes('cx="336"'));
+    return Number(/class="ed-wert">/.test(g) ? /y="(-?\d+)" class="ed-wert"/.exec(g)[1] : NaN);
+  };
+  assert.ok(hausY(mit) < 240, `mit Wallbox muss der Wert ueber der Mitte stehen, war ${hausY(mit)}`);
+  assert.ok(hausY(ohne) > 240, `ohne Wallbox darunter, war ${hausY(ohne)}`);
+});
+
+test('die Zeichnung wird hoeher, sobald unten ein Knoten steht', () => {
+  const h = (d) => Number(/class="ed" viewBox="-?\d+ -?\d+ \d+ (\d+)"/.exec(R.energieDiagramm(d))[1]);
+  const flach = { solarW: 1200, netzBezugW: 0, hausW: 1200, symbole: {} };
+  assert.ok(h({ ...flach, wallboxW: 100 }) > h(flach), 'Wallbox braucht Platz unten');
+  assert.strictEqual(h({ ...flach, wallboxW: 100 }), h({ ...flach, batterieW: 100 }),
+    'Wallbox und Batterie stehen in derselben Zeile, also dieselbe Hoehe');
+});
+
+test('der Ausschnitt hat seitlich Luft -- sonst werden Namen abgeschnitten', () => {
+  // In der Probe nachgemessen: "Netz · Einspeisung" lief von x=-16 bis 144, "Wallbox · lädt"
+  // von 269 bis 404 -- bei einem Ausschnitt von 0 bis 400.
+  const vb = /class="ed" viewBox="(-?\d+) (-?\d+) (\d+) (\d+)"/.exec(R.energieDiagramm(MIT_WALLBOX));
+  assert.ok(Number(vb[1]) < 0, `der Ausschnitt muss links vor 0 beginnen, war ${vb[1]}`);
+  assert.ok(Number(vb[1]) + Number(vb[3]) > 400, 'und rechts hinter 400 enden');
+});
+
+test('"laedt" steht nur dran, wenn wirklich Leistung fliesst', () => {
+  assert.match(R.energieDiagramm(MIT_WALLBOX), /lädt/);
+  assert.ok(!/lädt/.test(R.energieDiagramm({ ...MIT_WALLBOX, wallboxW: 0 })),
+    'eine stehende Wallbox laedt nicht');
+  assert.ok(!/lädt/.test(R.energieDiagramm({ ...MIT_WALLBOX, wallboxW: 3 })),
+    'und 3 W sind Eigenverbrauch, kein Laden');
+});
+
+test('0 W ist ein Wert, kein fehlender Knoten', () => {
+  // Number(null) ist 0 -- dieselbe Falle wie in akkuStufe(). Eine Wallbox, die gerade nicht
+  // laedt, muss trotzdem zu sehen sein: Sonst verschwindet sie jedes Mal, wenn das Auto weg ist.
+  const svg = R.energieDiagramm({ ...MIT_WALLBOX, wallboxW: 0 });
+  assert.strictEqual((svg.match(/ed-knoten/g) || []).length, 4);
 });

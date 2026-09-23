@@ -44,6 +44,11 @@ const KARTEN = [
   ['energy.wenig',     'energy', null, 2, 2],
   ['energy.mittel',    'energy', null, 2, 2],
   ['energy.viel',      'energy', null, 2, 2],
+  // Die Wallbox haengt UNTER dem Haus, und dort standen vorher die Hausbeschriftungen. Ohne
+  // diese zwei Faelle waere das erst auf der Wand aufgefallen -- und nur bei dem, der eine
+  // Wallbox eingetragen hat.
+  ['energy.wallbox',   'energy', null, 2, 2],
+  ['energy.wallboxAlles', 'energy', null, 4, 2],
   ['light.wohnzimmer',    'light',       Z('on',  { friendly_name: 'Wohnzimmer', brightness: 180, supported_color_modes: ['color_temp'], min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500, color_temp_kelvin: 2900 }), 1, 1],
   ['light.flur',          'light',       Z('off', { friendly_name: 'Flur' }), 1, 1],
   ['switch.kaffee',       'switch',      Z('on',  { friendly_name: 'Kaffeemaschine' }), 1, 1],
@@ -133,7 +138,12 @@ const ENERGIE = {
   'energy.kaputt': { grid: KWH(1234.5, 'Netzeinspeisung kWh', 'sensor.netzeinspeisung_kwh'), solar: KWH(5239.1, 'Wechselrichter kWh', 'sensor.kwh_kostal_wechselrichter_kwh') },
   'energy.wenig':  { grid: W(12, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(35, 'Kostal', 'sensor.kostal_wechselrichter') },
   'energy.mittel': { grid: W(420, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(680, 'Kostal', 'sensor.kostal_wechselrichter') },
-  'energy.viel':   { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(3100, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(8200, 'Kostal', 'sensor.kostal_wechselrichter') }
+  'energy.viel':   { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(3100, 'Einspeisung', 'sensor.netzeinspeisung'), solar: W(8200, 'Kostal', 'sensor.kostal_wechselrichter') },
+  'energy.wallbox': { grid: W(0, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(400, 'Einspeisung', 'sensor.netzeinspeisung'),
+    solar: W(8200, 'Kostal', 'sensor.kostal_wechselrichter'), wallbox: W(7400, 'Wallbox', 'sensor.wallbox_leistung') },
+  'energy.wallboxAlles': { grid: W(300, 'Netzbezug', 'sensor.netzbezug'), gridReturn: W(0, 'Einspeisung', 'sensor.netzeinspeisung'),
+    solar: W(9100, 'Kostal', 'sensor.kostal_wechselrichter'), wallbox: W(10800, 'Wallbox', 'sensor.wallbox_leistung'),
+    battery: W(1600, 'Akku', 'sensor.akkuleistung'), batterySoc: Z('22', { unit_of_measurement: '%' }) }
 };
 
 const nur = new URLSearchParams(location.search).get('nur');

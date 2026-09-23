@@ -433,6 +433,29 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   **15 Sekunden keine einzige** Änderung (143 Live-Meldungen von anderen Entitäten kamen durch),
   und `sensor.netzbezug` wechselte im Abstand von **120 Sekunden**. Wer hier „die Karte ist
   langsam" hört, misst zuerst, wie oft die Quelle überhaupt etwas sagt.
+- **Die Wallbox hängt UNTER dem Haus, nicht am Kreuz — und das ist die Aussage der Grafik.**
+  Das Auto zieht seinen Strom nicht aus einer fünften Richtung; es ist ein Teil des
+  Hausverbrauchs. Deshalb geht ihre Leitung mit `edStrecke()` **direkt** vom Haus nach unten und
+  nicht mit `edBahn()` durch die Mitte: Eine Bahn durch den Verteilpunkt würde behaupten, die
+  Wallbox bekäme ihren Strom direkt von Netz und Solar. Der **Hauswert bleibt die Summe** —
+  so gelesen stimmt es: „Von den 7,9 kW, die das Haus zieht, gehen 7,4 ins Auto."
+  Drei Dinge hängen daran:
+  1. **Der Hauswert wandert nach oben**, sobald eine Wallbox darunter hängt (`textOben`). Er
+     stand bei y+76, die Wallbox-Scheibe beginnt bei y+92 — Text und Scheibe wären ineinander
+     gelaufen, und zwar nur bei dem, der eine Wallbox eingetragen hat.
+  2. **Violett**, nicht blau oder grün: Die Farbe muss sich von Haus *und* Batterie
+     unterscheiden, sonst hält man die Wallbox-Leitung aus fünf Metern für die des Hauses.
+  3. **0 W ist ein Wert, kein fehlender Knoten.** Eine Wallbox, die gerade nicht lädt, bleibt
+     zu sehen — sonst verschwindet sie jedes Mal, wenn das Auto weg ist. `Number(null)` ist 0,
+     also entscheidet `!== undefined`, nicht die Zahl (dieselbe Falle wie in `akkuStufe()`).
+
+  Dabei zwei Dinge gefunden, die schon vorher falsch waren: Der Ausschnitt hatte **seitlich
+  keine Luft** — „Netz · Einspeisung" lief von x=−16 bis 144 bei einem viewBox von 0 bis 400 und
+  wurde also links abgeschnitten, lange bevor es eine Wallbox gab. Jetzt `-RAND … ED_B+RAND`;
+  `xMidYMid meet` macht die Zeichnung dadurch nur etwas kleiner. Und `.scratch/energiekarte/`
+  enthielt **Kopien** von Modul und CSS (`diagramm.js`, `diagramm.css`, `symbole.js`) — eine
+  Probe, die eine Kopie ansieht, beweist nichts über das, was ausgeliefert wird. Die Kopien sind
+  gelöscht, die Probe lädt jetzt `renderer/shared/dashboard-render.js` und `dashboard.css`.
 - **Der Hausverbrauch wird gerechnet — außer man trägt einen Sensor ein.** Die Vorgabe bleibt die
   Rechnung (Solar + Netzbezug − Einspeisung ± Batterie): Nur so summieren sich die Leitungen auf
   den Knoten in der Mitte, und zwei Wahrheiten nebeneinander sind sich nie einig. Wer aber einen
@@ -1055,7 +1078,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-483 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+492 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

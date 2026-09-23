@@ -339,7 +339,8 @@ async function render() {
       energy = {
         grid: statesById[es.gridEntity], gridReturn: statesById[es.gridReturnEntity],
         solar: statesById[es.solarEntity], battery: statesById[es.batteryEntity],
-        batterySoc: statesById[es.batterySocEntity], home: statesById[es.energyHomeEntity]
+        batterySoc: statesById[es.batterySocEntity], home: statesById[es.energyHomeEntity],
+        wallbox: statesById[es.wallboxEntity]
       };
     }
     const card = buildCard(entry.entity_id, state, type, span, {
@@ -853,6 +854,13 @@ function openSettings(entityId) {
       <input type="text" id="setBattery" list="entityList" value="${settings.batteryEntity || ''}" placeholder="sensor.batterie_leistung">
       <label>Batterie-Ladezustand % (optional)</label>
       <input type="text" id="setBatterySoc" list="entityList" value="${settings.batterySocEntity || ''}" placeholder="sensor.batterie_soc">
+      <label>Wallbox / Ladeleistung (optional)</label>
+      <input type="text" id="setWallbox" list="entityList" value="${settings.wallboxEntity || ''}" placeholder="sensor.wallbox_leistung">
+      <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
+        Die Wallbox hängt in der Grafik <strong>unter dem Haus</strong>, nicht am Kreuz – denn
+        das Auto zieht seinen Strom nicht aus einer fünften Richtung, es ist ein Teil des
+        Hausverbrauchs. Der Hauswert bleibt deshalb die Summe: „Von den 7,9 kW, die das Haus
+        zieht, gehen 7,4 ins Auto."</p>
       <label>Hausverbrauch (optional, eigener Sensor)</label>
       <input type="text" id="setEnergyHome" list="entityList" value="${settings.energyHomeEntity || ''}" placeholder="leer = wird gerechnet">
       <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
@@ -890,6 +898,8 @@ function openSettings(entityId) {
           <input type="text" id="setEnergyLabelHome" placeholder="Haus" value="${(settings.energyLabelHome || '').replace(/"/g, '&quot;')}"></div>
         <div><label style="font-size:1.1vh;">Batterie</label>
           <input type="text" id="setEnergyLabelBattery" placeholder="Batterie" value="${(settings.energyLabelBattery || '').replace(/"/g, '&quot;')}"></div>
+        <div><label>Wallbox</label>
+          <input type="text" id="setEnergyLabelWallbox" placeholder="Wallbox" value="${(settings.energyLabelWallbox || '').replace(/"/g, '&quot;')}"></div>
       </div>
       <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
         Bisher diente der Anzeigename oben doppelt als Haus-Beschriftung – wer die Karte
@@ -1557,12 +1567,15 @@ $('settingsSave').addEventListener('click', () => {
     if (battSoc) settings.batterySocEntity = battSoc; else delete settings.batterySocEntity;
     const haus = grab('setEnergyHome');
     if (haus) settings.energyHomeEntity = haus; else delete settings.energyHomeEntity;
+    const wallbox = grab('setWallbox');
+    if (wallbox) settings.wallboxEntity = wallbox; else delete settings.wallboxEntity;
     const schwelle = grab('setEnergyThreshold');
     if (schwelle !== '' && !isNaN(parseFloat(schwelle))) settings.energyThreshold = Math.abs(parseFloat(schwelle));
     else delete settings.energyThreshold;
     settings.energyBatteryInvert = !!($('setEnergyBatteryInvert') && $('setEnergyBatteryInvert').checked);
     [['setEnergyLabelSolar', 'energyLabelSolar'], ['setEnergyLabelGrid', 'energyLabelGrid'],
-     ['setEnergyLabelHome', 'energyLabelHome'], ['setEnergyLabelBattery', 'energyLabelBattery']]
+     ['setEnergyLabelHome', 'energyLabelHome'], ['setEnergyLabelBattery', 'energyLabelBattery'],
+     ['setEnergyLabelWallbox', 'energyLabelWallbox']]
       .forEach(([id, feld]) => { const v = grab(id); if (v) settings[feld] = v; else delete settings[feld]; });
   }
   if (settingsFields.photoUpload) {

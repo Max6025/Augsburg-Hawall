@@ -478,7 +478,8 @@ async function kartenZusatz(entry, type) {
       batterySoc: statesById[einst.batterySocEntity],
       // Optional: Wer einen eigenen Hausverbrauchs-Sensor hat, bekommt dessen Wert statt der
       // Summe. Ohne Angabe bleibt es bei der Rechnung -- siehe dashboard-render.js.
-      home: statesById[einst.energyHomeEntity]
+      home: statesById[einst.energyHomeEntity],
+      wallbox: statesById[einst.wallboxEntity]
     };
   }
   return zusatz;
@@ -711,7 +712,7 @@ function kartenEntitaeten(layout) {
     if (e.entity_id) alle.add(e.entity_id);
     const st = e.settings || {};
     for (const f of ['gridEntity', 'gridReturnEntity', 'solarEntity', 'batteryEntity',
-      'batterySocEntity', 'energyHomeEntity', 'torDaueraufEntity']) {
+      'batterySocEntity', 'energyHomeEntity', 'wallboxEntity', 'torDaueraufEntity']) {
       if (st[f]) alle.add(st[f]);
     }
     (st.gateButtons || []).forEach(b => { if (b.entity) alle.add(b.entity); });
