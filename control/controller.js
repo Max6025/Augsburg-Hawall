@@ -94,17 +94,22 @@ class Controller {
    * Wird aus dem Hauptprozess hereingereicht (powerMonitor.getSystemIdleTime), damit dieses
    * Modul ohne Electron testbar bleibt. Ohne Angabe verhaelt es sich, als sei nie jemand da.
    */
-  constructor({ store, logDir, onStateChange, idleSeconds, aufAkku, setKiosk, modernStandbyAus }) {
+  constructor({ store, logDir, onStateChange, idleSeconds, aufAkku, setKiosk,
+    schlafZeitgeber, energieNachziehen }) {
     this.store = store;
     this.idleSeconds = idleSeconds || (() => Infinity);
     // Ohne Angabe wird Netzbetrieb angenommen: Das ist der Normalfall fuer ein Wandpanel, und
     // faelschlich wach zu bleiben ist harmloser als ein Geraet, das nachts unerreichbar ist.
     this.aufAkku = aufAkku || (() => false);
     this.zuletztAufAkku = null;   // nur fuer die Warnung, nicht fuer die Entscheidung
-    // Ist Modern Standby am Geraet abgeschaltet? Nur zur Anzeige -- entschieden wird damit
-    // nichts. Siehe control/modernstandby.js: Solange es AN ist, kann das Wachhalten nicht
-    // halten, und die Einrichtungsseite soll das sagen koennen statt es zu verschweigen.
-    this.modernStandbyAus = modernStandbyAus || (() => null);
+    // Stehen die Schlaf-Zeitgeber auf "nie"? Nur zur Anzeige -- entschieden wird damit nichts.
+    // Siehe control/energie.js: Stehen sie nicht, schlaeft das Geraet ein, sobald die
+    // Nachtsperre das Panel abschaltet, und die Einrichtungsseite soll das sagen koennen.
+    this.schlafZeitgeber = schlafZeitgeber || (() => null);
+    // Wird gerufen, wenn eine Taktluecke auftritt: Dann stimmt etwas an den Zeitgebern nicht,
+    // und der naechste Versuch kostet sechs billige Aufrufe. Selbstheilung statt einer Meldung,
+    // die niemand liest.
+    this.energieNachziehen = energieNachziehen || (() => {});
     // Schaltet das Fenster in den Kiosk-Modus (true) oder heraus (false). Wird aus dem
     // Hauptprozess hereingereicht, damit dieses Modul ohne Electron testbar bleibt.
     this.setKiosk = setKiosk || (() => {});
@@ -190,9 +195,9 @@ class Controller {
       systemWachhalten: cfg.systemWachhalten,
       // Der Beweis, dass das Geraet trotzdem geschlafen hat. Siehe schlaflueckeMessen().
       letzteSchlafluecke: this.letzteSchlafluecke,
-      // null heisst "nicht zu ermitteln", nicht "aktiv" -- der Unterschied gehoert auf die
+      // null heisst "nicht zu ermitteln", nicht "in Ordnung" -- der Unterschied gehoert auf die
       // Seite, sonst behauptet sie Gewissheit, die sie nicht hat.
-      modernStandbyAus: this.modernStandbyLesen()
+      schlafZeitgeber: this.schlafZeitgeberLesen()
     };
   }
 
@@ -243,8 +248,8 @@ class Controller {
     if (changed) this.onStateChange(next);
   }
 
-  modernStandbyLesen() {
-    try { return this.modernStandbyAus(); } catch (e) { return null; }
+  schlafZeitgeberLesen() {
+    try { return this.schlafZeitgeber(); } catch (e) { return null; }
   }
 
   /**
@@ -269,6 +274,9 @@ class Controller {
     this.letzteSchlafluecke = { ende: now.getTime(), dauerMs: luecke };
     this.log('warn', `Taktluecke von ${Math.round(luecke / 1000)} s -- das Geraet hat geschlafen. `
       + 'In dieser Zeit war die Weboberflaeche nicht erreichbar und der Waechter stand.');
+    // Geschlafen heisst: An den Zeitgebern stimmt etwas nicht. Sie noch einmal setzen ist
+    // billiger als eine Protokollzeile, die niemand liest.
+    try { this.energieNachziehen(); } catch (e) { /* darf die Steuerung nie aufhalten */ }
     return luecke;
   }
 

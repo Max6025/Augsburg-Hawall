@@ -145,16 +145,18 @@ async function refreshPanelStatus() {
       + 'an Windows konnte nicht gestellt werden – Einzelheiten stehen im Protokoll. Bei '
       + 'ausgeschaltetem Panel schläft das Gerät und diese Seite ist nicht erreichbar.');
   }
-  // Modern Standby ist die Ursache hinter der Ursache: Solange es aktiv ist, geht das Gerät
-  // beim Abschalten des Panels in Connected Standby, und dann hilft kein Wachhalten.
-  if (s.modernStandbyAus === false) {
-    lines.push('<strong>Modern Standby ist am Gerät noch aktiv.</strong> Dann geht das Gerät beim '
-      + 'Abschalten des Panels in Connected Standby – diese Seite ist dort nicht erreichbar, und '
-      + 'auch Wachhalten kann das nicht verhindern. Abschalten lässt es sich vor Ort: fünfmal in '
-      + 'die obere linke Ecke tippen und die Rückfrage von Windows am Panel bestätigen.');
-  } else if (s.modernStandbyAus === true) {
-    lines.push('Modern Standby ist abgeschaltet und die Schlaf-Zeitgeber stehen auf „nie" – '
-      + '<strong>wirksam ab dem nächsten Neustart</strong> des Geräts.');
+  // Der eigentliche Grund, warum das Gerät nachts erreichbar ist oder nicht: Ohne diese
+  // Fristen schläft es in derselben Sekunde ein, in der die Nachtsperre das Panel abschaltet.
+  const z = s.schlafZeitgeber;
+  if (z && z.ac === 0 && z.dc === 0) {
+    lines.push('Schlaf-Fristen stehen auf „nie" – das Gerät schläft nicht ein, wenn der '
+      + 'Bildschirm abgeschaltet wird.');
+  } else if (z) {
+    const min = (sek) => (sek ? Math.round(sek / 60) + ' Min.' : 'nie');
+    lines.push(`<strong>Achtung: Das Gerät darf einschlafen.</strong> Schlaf-Frist am Netz: `
+      + `${min(z.ac)}, am Akku: ${min(z.dc)}. Sobald die Nachtsperre den Bildschirm abschaltet, `
+      + 'geht das Gerät schlafen und diese Seite ist weg. Ein Neustart der App setzt die Fristen '
+      + 'neu – Einzelheiten im Protokoll.');
   }
   if (s.letzteSchlafluecke) {
     const minuten = Math.round(s.letzteSchlafluecke.dauerMs / 60000);

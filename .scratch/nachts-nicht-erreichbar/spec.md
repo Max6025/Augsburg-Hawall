@@ -54,6 +54,56 @@ nicht am Code. Das ist am 2026-09-23 vormittags zu klären.
    den Zustand. Das ist der Beweis dafür, dass das Gerät geschlafen hat; `powercfg /requests`
    verlangt erhöhte Rechte und fällt aus.
 
+## GELÖST in 1.0.10 — am Gerät gemessen, per SSH
+
+Der Nutzer hat am 2026-09-23 SSH-Zugang zum Surface gegeben. Damit war in zwanzig Minuten
+geklärt, was vorher zwei Releases lang geraten wurde.
+
+### Die Ursache
+
+Das Abschalten des Bildschirms macht das Gerät leerlaufend, und die **Schlaffrist des
+Energieschemas** greift sofort. Kernel-Power 506 im Windows-Protokoll steht auf die Sekunde
+genau dort, wo `panelsteuerung.log` „Panel wird ausgeschaltet" schreibt (07:09:56, 07:24:56).
+
+### Die Lösung
+
+`powercfg /change standby-timeout-ac|dc 0`, dazu `hibernate-timeout` und `monitor-timeout` —
+`control/energie.js`, bei jedem Start und nach jeder erkannten Taktlücke, **ohne erhöhte
+Rechte** (nachgemessen mit einer geplanten Aufgabe auf `/rl limited`: 0x12c → 0x0).
+
+### Der Beweis
+
+Panel fünf Minuten dunkel, davon **vier Minuten ohne ein einziges Netzwerkpaket von außen**.
+Danach antworteten Webserver *und* SSH, und im Windows-Protokoll steht für diesen Zeitraum
+**kein einziges** Standby-Ereignis. Das Gerät ist nicht schlafen gegangen.
+
+### Was widerlegt wurde
+
+- **`ES_SYSTEM_REQUIRED`** wird gestellt (`powercfg /requests` zeigt es unter SYSTEM) und
+  verhindert diesen Übergang nicht. Bleibt drin für den Leerlauf-Fall, ist aber keine Erklärung.
+- **`PlatformAoAcOverride = 0`** ist auf Windows 11 25H2 (Build 26200) wirkungslos: Wert gesetzt,
+  Neustart, `powercfg /a` unverändert. Und die Firmware des Surface Go kennt **kein S3** — ein
+  anderer Schlafzustand wäre ohnehin nicht dagewesen. Kostete 1.0.8 und 1.0.9.
+- **Electrons `prevent-app-suspension`** landet auf diesem Build als AUSFÜHRUNG-Anforderung
+  (`PowerRequestExecutionRequired`), nicht als Away Mode. Die Notiz vom 2026-09-22 war falsch.
+- **Die Anmeldung** ist nicht das Problem: Nach einem Neustart war die Konsolensitzung aktiv und
+  die App von selbst wieder da.
+
+### Am Gerät bereits erledigt (per SSH, 2026-09-23)
+
+Alle sechs Fristen stehen auf `0x00000000`. Der wirkungslose Registrierungswert
+`PlatformAoAcOverride` liegt noch dort und tut nichts — kann bei Gelegenheit weg.
+
+### Offen
+
+- [ ] **Akku:** Die Navigationsleiste meldete 21 % für das Panel, obwohl es am Netz hängen soll.
+      Ein Gerät am Netz stünde bei ~100 %. Ob das Netzteil wirklich lädt, ist noch ungeprüft.
+- [ ] `Sperre "Widget-Knopf" konnte nicht gesetzt werden: Zugriff verweigert` — eine von sieben
+      Windows-Sperren scheitert bei jedem Start (`TaskbarDa` unter HKCU). Bisher nur notiert.
+- [ ] Eine Nacht mit aktiver Nachtsperre abwarten und prüfen, dass keine Taktlücke auftritt.
+
+## Verlauf (historisch, die Sackgassen)
+
 ## Nachtrag 1.0.9: der klassische Schlaf-Timer
 
 Der Nutzer hat die Anforderung am 2026-09-23 vormittags geschärft: Der Bildschirm soll

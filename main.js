@@ -6,7 +6,7 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const { startServer } = require('./server/setup-server');
 const { Controller } = require('./control/controller');
-const modernStandby = require('./control/modernstandby');
+const energie = require('./control/energie');
 const lautstaerke = require('./control/lautstaerke');
 const hintergrund = require('./control/hintergrund');
 
@@ -215,44 +215,21 @@ function kioskSetzen(kiosk) {
   mainWindow.focus();
 }
 
-// Was `control/modernstandby.js` beim letzten Nachsehen gemeldet hat: true = abgeschaltet,
-// false = aktiv, null = nicht zu ermitteln. Nur zur Anzeige.
-let modernStandbyZustand = null;
-
-function modernStandbyNachlesen() {
-  return modernStandby.lesen().then((aus) => { modernStandbyZustand = aus; return aus; });
-}
+// Die Standby-Fristen, wie `control/energie.js` sie zuletzt gemeldet hat: { ac, dc } in
+// Sekunden, 0 heisst "nie". null heisst "nicht zu ermitteln". Nur zur Anzeige.
+let schlafZeitgeberWerte = null;
 
 /**
- * Wartung VOR ORT: Pause, Taskleiste -- und einmalig die Rueckfrage, ob Modern Standby
- * abgeschaltet werden darf.
+ * Die Schlaf-Zeitgeber auf "nie" setzen und das Ergebnis merken.
  *
- * Nur dieser Weg loest die Rueckfrage aus, nicht der Knopf auf der Einstellungsseite. Der
- * UAC-Dialog erscheint auf dem PANEL; wer die Wartung aus dem Netz anfordert, hat ihn nicht vor
- * sich und wuerde ihn dort nur stehen lassen. Fuenfmal oben links getippt oder Strg+Alt+W
- * gedrueckt heisst dagegen: Es steht jemand davor.
- *
- * Warum ueberhaupt hier und nicht im Installer: Der Wert liegt unter HKLM, der Installer ist
- * eine Per-User-Installation und laeuft unelevert. `perMachine: true` waere der falsche Ausweg,
- * dann braeuchte jedes stille Update erhoehte Rechte. Ausfuehrlich im Kopf von
- * control/modernstandby.js.
+ * Braucht KEINE erhoehten Rechte -- nachgemessen, siehe den Kopf von control/energie.js.
+ * Deshalb laeuft es still beim Start und nach jeder erkannten Taktluecke, ohne Rueckfrage und
+ * ohne Merker.
  */
-function wartungVorOrt(minuten) {
-  if (!controller) return { ok: false };
-  const r = controller.wartung(minuten);
-  if (modernStandbyZustand === false) {
-    modernStandby.abschalten({
-      store,
-      log: (s, m) => controller.log(s, m),
-      // Dasselbe Verzeichnis wie das Lautstaerke-Skript und das Protokoll: Was die App
-      // ablegt, liegt an einer Stelle, und ein Installer raeumt es mit weg.
-      verzeichnis: app.getPath('userData')
-    })
-      .then(() => modernStandbyNachlesen())
-      .then(() => controller.refresh())
-      .catch(() => {});
-  }
-  return r;
+function energieSetzen() {
+  return energie.setzen({ log: (s, m) => { if (controller) controller.log(s, m); } })
+    .then((r) => { schlafZeitgeberWerte = r.werte; return r; })
+    .catch(() => null);
 }
 
 function createWindow() {
@@ -313,7 +290,7 @@ function createWindow() {
   // Setup-Oberflaeche. Ein Geraet, das sich selbst abschalten kann, braucht mehr als einen
   // Ausweg, und eine Tastenkombination hilft auf einem Touch-Panel ohne Tastatur nicht weiter.
   globalShortcut.register('Control+Alt+W', () => {
-    wartungVorOrt();
+    if (controller) controller.wartung();
   });
 }
 
@@ -445,14 +422,17 @@ app.whenReady().then(() => {
     // sichtbar werden soll. Er selbst kennt kein Electron -- siehe den Kopf von
     // control/controller.js.
     setKiosk: kioskSetzen,
-    modernStandbyAus: () => modernStandbyZustand
+    schlafZeitgeber: () => schlafZeitgeberWerte,
+    // Nach einer Taktluecke noch einmal setzen: Geschlafen heisst, dass an den Fristen etwas
+    // nicht stimmt -- ein Windows-Update kann sie zurueckgesetzt haben.
+    energieNachziehen: () => { energieSetzen().then(() => { if (controller) controller.refresh(); }); }
   });
   controller.start();
 
-  // Einmal nachsehen, ob Modern Standby abgeschaltet ist. Das entscheidet nichts, es steht nur
-  // auf der Einrichtungsseite -- aber solange es AN ist, kann das Wachhalten nicht halten, und
-  // das gehoert dort hin, wo jemand nachsieht, warum das Geraet nachts nicht antwortet.
-  modernStandbyNachlesen().then(() => { if (controller) controller.refresh(); }).catch(() => {});
+  // Die eigentliche Loesung, und sie steht hier in einer Zeile: Ohne diese Fristen schlaeft das
+  // Geraet in derselben Sekunde ein, in der die Nachtsperre das Panel abschaltet -- gemessen am
+  // 2026-09-23, siehe den Kopf von control/energie.js.
+  energieSetzen().then(() => { if (controller) controller.refresh(); });
 
   keepSystemAwake('Start');
   // Nach einem Aufwachen die Anforderung neu setzen: Windows verwirft sie in manchen
@@ -548,7 +528,7 @@ ipcMain.handle('reload-view', () => loadCurrentView());
 // sichtbare Taskleiste, siehe controller.wartung().
 ipcMain.handle('wartung-anfordern', (event, minutes) => {
   if (!controller) return { ok: false };
-  return { ok: true, ...wartungVorOrt(minutes) };
+  return { ok: true, ...controller.wartung(minutes) };
 });
 
 ipcMain.handle('get-control-state', () => (controller ? controller.getState() : null));

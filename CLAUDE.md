@@ -28,7 +28,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 |---|---|
 | `control/panel.js` | Win32 über einen dauerhaft offenen PowerShell-Prozess: Panel per `SC_MONITORPOWER` schalten, System wach halten, Taskleiste verstecken |
 | `control/controller.js` | Zustandsautomat; die Rangfolge steht vollständig in `decide()`, die Taskleiste in `taskleisteSoll()` |
-| `control/modernstandby.js` | Modern Standby am Gerät abschalten (`PlatformAoAcOverride`) und nachlesen, ob es abgeschaltet ist |
+| `control/energie.js` | Die Schlaf-Fristen des Energieschemas auf „nie" setzen — **das** hält das Gerät nachts erreichbar |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -126,66 +126,51 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   gehört ein Test auf die **Verbindung** dazu, nicht nur auf die Teile — `test/controller.test.js`
   prüft deshalb, dass jeder Takt `setSystemWach()` ruft, und liest `main.js` daraufhin, ob der
   Akkuzustand überhaupt hereingereicht wird.
-- **Modern Standby frisst die Anwendung — und KEINE Wach-Anforderung hält das auf.** Das ist der
-  teuerste Irrtum in diesem Projekt, und er stand zwei Versionen lang genau hier als Lösung.
-  Gemessen am 2026-09-09: eine Minute nach dem Abschalten des Panels ging das *Gerät* in
-  Connected Standby (Kernel-Power 506), die App war weg, der Setup-Server unerreichbar, der
-  Wächter stand. Dagegen wurde erst `keepSystemAwake()` gesetzt (`prevent-app-suspension`, landet
-  als **Away Mode** und wirkt auf Modern Standby nicht), dann `ES_SYSTEM_REQUIRED` in `panel.js`.
-  Am 2026-09-23 um 00:41 war das Gerät trotz beidem und trotz Netzbetrieb wieder nicht
-  erreichbar.
+- **Das Gerät schläft ein, weil der Bildschirm ausgeht — und die Lösung ist eine Zeile
+  `powercfg`.** Der Weg dorthin hat zwei falsche Erklärungen und zwei Releases gekostet; beide
+  stehen unten, damit sie niemand noch einmal geht.
 
-  **Warum nichts davon greifen kann:** Auf einem Modern-Standby-Gerät ist das **Abschalten des
-  Bildschirms selbst** der Auslöser für den Standby — kein Leerlauf-Timeout. Die eigene Messung
-  sagt das bereits: Connected Standby begann *in derselben Sekunde*, in der das Panel abgeschaltet
-  wurde. Eine SYSTEM-Anforderung verhindert klassischen Leerlaufschlaf (S3), nicht diesen
-  Übergang; und gegen den Desktop Activity Moderator, der kurz darauf Win32-Anwendungen
-  suspendiert, hilft sie auch nicht. Deshalb hängen beide Symptome immer zusammen: Weboberfläche
-  weg **und** „Berührung pausiert zwei Minuten" feuert nicht — die Regel lebt in `tick()`, und
-  `tick()` läuft nicht.
+  **Was gemessen wurde (2026-09-23, Surface Go, Windows 11 25H2 Build 26200):** Sobald die
+  Nachtsperre das Panel abschaltete, war der Setup-Server **in derselben Sekunde** weg. Das
+  Windows-Protokoll zeigt Kernel-Power **506** (Standby-Beginn) auf die Sekunde genau zu den
+  Zeitpunkten, an denen `panelsteuerung.log` „Panel wird ausgeschaltet" schreibt — 07:09:56 und
+  07:24:56. Das Abschalten des Bildschirms machte das Gerät leerlaufend, und die **Schlaffrist
+  des Energieschemas** griff sofort.
 
-  **Die Antwort ist `PlatformAoAcOverride = 0`** (`control/modernstandby.js`): Modern Standby
-  abschalten, danach klassischer S3-Schlaf, und die Wach-Anforderung greift wieder. Drei Dinge
-  daran sind leicht zu übersehen:
-  1. **Wirksam erst nach einem Neustart** des Geräts. Bis dahin ändert sich nichts, und der
-     Registrierungswert allein ist kein Beweis, dass es hilft — das sagt erst eine ausbleibende
-     Taktlücke.
-  1a. **Damit ist es NICHT erledigt: der klassische Schlaf-Timer.** Ohne Modern Standby greift
-     der Schlaf-Timer des Energieschemas, ab Werk oft 30 Minuten — dann ist der Webserver aus
-     einem anderen Grund weg, und von außen sieht das genauso aus wie vorher. `modernstandby.js`
-     setzt deshalb im **selben** elevierten Schritt `standby-timeout`, `hibernate-timeout` und
-     `monitor-timeout` auf „nie", für Netz und Akku. Der Bildschirm-Zeitgeber gehört dazu, weil
-     über das Panel `decide()` entscheidet und nicht Windows — bisher hat `panel.js` jede Minute
-     gegen Windows angeschaltet, und das ist ein Wettlauf, kein Entwurf.
-  2. **Der Wert liegt unter HKLM und braucht erhöhte Rechte.** Der Installer ist eine
-     Per-User-Installation und läuft unelevert; er versucht es (`build/installer.nsh`), kommt aber
-     normalerweise nicht durch. `perMachine: true` ist der falsche Ausweg — dann bräuchte **jedes**
-     Update erhöhte Rechte, und ein UAC-Dialog auf einem Wandpanel, vor dem niemand steht, ist ein
-     Update, das für immer hängt. Deshalb fragt die **App** genau einmal, und ausschließlich bei
-     einer Wartung **vor Ort** (Tipp-Geste, Strg+Alt+W): Der Dialog erscheint auf dem Panel, und
-     wer ihn aus dem Netz auslöst, hat ihn nicht vor sich. Der Merker wird **vor** dem Versuch
-     gesetzt — einmal fragen ist Hilfe, bei jeder Wartung fragen ist Nötigung.
-  3. **Dem Rückgabewert nicht glauben, nachlesen.** Ein abgelehnter UAC-Dialog endet ohne
-     Fehlermeldung — „kein Fehler" hieße dann fälschlich „erledigt". Und die Ausgabe des
-     elevierten Prozesses erreicht die App nur über eine **Protokolldatei**, die das Skript
-     selbst schreibt; ohne sie wäre ein fehlgeschlagener `powercfg`-Aufruf unsichtbar.
-  4. **Leerzeichen vor jeder cmd-Umleitung.** Eine Ziffer unmittelbar vor `>` liest cmd.exe als
-     **Dateikennung**: `standby-timeout-ac 0>> datei` leitet die *Standardeingabe* um und
-     verschluckt die `0` — `powercfg` bekäme seinen Wert nie, der Zeitgeber bliebe stehen, und
-     zwar ohne Fehlermeldung. `2>&1` ist dagegen eine echte Kennungs-Umleitung. Ein Test prüft
-     jede Zeile des Skripts darauf.
-  5. **Die Befehle stehen in einer Datei, nicht im Aufruf.** Dasselbe Urteil wie bei
-     `lautstaerke.js`: Durch drei Ebenen (`exec` → `powershell -Command` → `-ArgumentList` →
-     `cmd /c`) müssten Anführungszeichen dreifach maskiert werden, und PowerShell liest `""` in
-     einer *einfach* bequoteten Zeichenkette als zwei Zeichen statt als ein maskiertes — der
-     Pfad käme zerlegt an. In der Datei gibt es die Ebenen nicht.
+  **Die Lösung:** `powercfg /change standby-timeout-ac|dc 0`, dazu `hibernate-timeout` und
+  `monitor-timeout` (`control/energie.js`). Danach lag das Panel fünf Minuten dunkel, davon vier
+  Minuten **ohne ein einziges Netzwerkpaket von außen** — danach antworteten Webserver *und*
+  SSH, und im Windows-Protokoll steht für diesen Zeitraum **kein** Standby-Ereignis. Das Gerät
+  hat nicht „überlebt", es ist gar nicht schlafen gegangen.
 
-  **Und die Vorlage hat dafür keine Lösung**, auch wenn es so aussieht: Italien-Hawall hat
-  denselben `prevent-app-suspension`-Aufruf mit dem Vorbehalt im Kommentar, kein `powercfg`, kein
-  `PlatformAoAcOverride`, und `.scratch/aufwecken-und-echtes-ausschalten/spec.md` dort trägt den
-  Status „erfasst, nicht entschieden, nicht gebaut". Augsburg hat mit `setSystemWach()` sogar
-  **mehr** als Italien. Ist ein Gerät nachts erreichbar und das andere nicht, liegt der
-  Unterschied am **Gerät**, nicht am Code.
+  Drei Punkte, die daran hängen:
+  1. **Kein Merker, bei jedem Start neu setzen.** Ein Windows-Update oder ein Zurücksetzen des
+     Schemas stellt die Fristen wieder her, und ein Merker würde genau dann lügen. Sechs Aufrufe
+     beim Start kosten nichts. Nach einer erkannten Taktlücke wird zusätzlich nachgezogen.
+  2. **Keine erhöhten Rechte nötig** — nachgemessen, nicht angenommen: Eine geplante Aufgabe mit
+     `/rl limited` setzte den Wert von `0x12c` (fünf Minuten) auf `0x0`. Damit entfällt jeder
+     UAC-Dialog.
+  3. **Nachlesen statt dem Rückgabewert glauben.** `powercfg` kommt auch dann ohne Fehler
+     zurück, wenn nichts steht; `setzen()` liest die Fristen danach zurück. Und die Auswertung
+     liest **keine übersetzten Beschriftungen**, sondern die letzten beiden Hexwerte in fester
+     Reihenfolge.
+
+  **Sackgasse 1: `ES_SYSTEM_REQUIRED` (`panel.js`, `setSystemWach`).** Die Anforderung wird
+  gestellt, `powercfg /requests` zeigt sie unter SYSTEM — und das Gerät schlief trotzdem. Sie
+  verhindert den expliziten und den leerlaufbedingten Schlaf, aber nicht den Übergang, den das
+  Abschalten des Bildschirms auslöst. Der Aufruf bleibt drin (er kostet nichts und deckt den
+  Leerlauf-Fall), als *Erklärung* für die Erreichbarkeit ist er falsch. Nebenbei widerlegt:
+  Electrons `prevent-app-suspension` landet auf diesem Build als **AUSFÜHRUNG**-Anforderung
+  (`PowerRequestExecutionRequired`), nicht als Away Mode.
+
+  **Sackgasse 2: `PlatformAoAcOverride = 0`, um Modern Standby abzuschalten.** Auf diesem Gerät
+  **wirkungslos**, und zwar messbar: Wert gesetzt, Gerät neu gestartet, `powercfg /a` meldete
+  Modern Standby unverändert als verfügbar. Microsoft hat die Wirkung in den neueren
+  Windows-11-Builds entfernt. Dazu kennt die Firmware des Surface Go **kein S3** (`powercfg /a`:
+  „Die Systemfirmware unterstützt diesen Standbystatus nicht") — ein anderer Schlafzustand wäre
+  also ohnehin nicht dagewesen. Das hat 1.0.8 und 1.0.9 gekostet, samt eines UAC-Dialogs, der
+  nichts bewirkt hätte. **Nicht wieder einbauen**; ein Test prüft, dass das Modul und der
+  NSIS-Einschub draußen bleiben.
 - **Ein stilles „false" ist kein Fehlerbericht.** `setSystemWach()` gab bei fehlendem Dauerprozess
   nur `false` zurück: kein Protokolleintrag, und die Einrichtungsseite meldete weiter „Das Gerät
   wird wachgehalten", weil sie den **Wunsch** anzeigte statt der Tatsache. Ein Haken, der nichts
@@ -746,7 +731,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-345 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+342 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
