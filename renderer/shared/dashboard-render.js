@@ -2172,6 +2172,11 @@
         ohneDatum: !!settings.clockNoDate,
         stunden12: settings.clockHour12 === undefined || settings.clockHour12 === '' ? undefined : settings.clockHour12 === true || settings.clockHour12 === 'true'
       });
+      // Die Schrift als KLASSE, nicht als font-family am Element: Die Schriftdatei wird in
+      // dashboard.css per @font-face bekannt gemacht, und dort steht auch die Groessenkorrektur.
+      // Permanent Marker hat andere Metriken als Segoe UI -- gleiche Punktgroesse heisst nicht
+      // gleiche Hoehe. Ein font-family hier wuerde die Korrektur umgehen.
+      if (settings.clockFont === 'marker') card.classList.add('uhr-marker');
       card.innerHTML = `<div class="clock-time">--:--</div><div class="clock-date">-</div>`;
       renderClockNow(card);
     } else if (type === 'energy') {

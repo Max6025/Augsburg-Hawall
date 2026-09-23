@@ -21,8 +21,11 @@ for (let i = 0; i < 24; i++) {
   grid.appendChild(c);
 }
 
+// ?marker zeigt die Handschrift. Der Streifen ist die engste Stelle fuer die Uhr -- wenn die
+// Schrift irgendwo nicht passt, dann hier.
+const markerSchrift = new URLSearchParams(location.search).has('marker');
 const unten = DashboardRender.buildCard('clock:1', null, 'clock', { cols: 1, rows: 1 },
-  { editable: false, settings: {}, apiBase: '' });
+  { editable: false, settings: markerSchrift ? { clockFont: 'marker' } : {}, apiBase: '' });
 document.getElementById('unterleiste').appendChild(unten);
 
 setTimeout(() => {

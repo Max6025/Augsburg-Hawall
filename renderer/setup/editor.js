@@ -778,7 +778,16 @@ function openSettings(entityId) {
       <label style="display:flex; align-items:center; gap:0.6vh; margin-top:0.4rem;">
         <input type="checkbox" id="setClockNoDate" style="width:auto; margin:0;" ${settings.clockNoDate ? 'checked' : ''}>
         Datum ausblenden
-      </label>`;
+      </label>
+      <label>Schrift</label>
+      <select id="setClockFont">
+        <option value="" ${!settings.clockFont ? 'selected' : ''}>Wie überall (Segoe UI)</option>
+        <option value="marker" ${settings.clockFont === 'marker' ? 'selected' : ''}>Permanent Marker (handgeschrieben)</option>
+      </select>
+      <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
+        Gilt nur für <strong>diese Karte</strong> – Uhrzeit und Datum. Die Schrift ist
+        <strong>mitgeliefert</strong> und wird nicht aus dem Netz geholt: Eine Uhr, die erst
+        dann richtig aussieht, wenn Google antwortet, wechselt beim Start sichtbar die Schrift.</p>`;
   }
   if (fields.gaugeExtras) {
     html += `
@@ -1520,6 +1529,8 @@ $('settingsSave').addEventListener('click', () => {
     else delete settings.clockHour12;
     settings.clockSeconds = !!($('setClockSeconds') && $('setClockSeconds').checked);
     settings.clockNoDate = !!($('setClockNoDate') && $('setClockNoDate').checked);
+    const schrift = ($('setClockFont') && $('setClockFont').value) || '';
+    if (schrift) settings.clockFont = schrift; else delete settings.clockFont;
   }
   if (settingsFields.gaugeExtras) {
     const minV = $('setMin') ? $('setMin').value : '';

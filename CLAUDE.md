@@ -42,6 +42,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
 | `renderer/shared/akku.js` | Wie dringend die Akkuwarnung ist: Stufe, Abstand, Lautstärke, Stummschalten |
 | `renderer/shared/mdi-pfade.js` | **Erzeugt.** Alle Material-Design-Symbole; wird nur bei Bedarf nachgeladen |
+| `renderer/shared/schriften/` | Mitgelieferte Schriften samt Lizenz — Herkunft in `HERKUNFT.md` |
 | `server/setup-server.js` | Express auf Port 8788, HA-Proxy — **ohne jeden Zugangsschutz** |
 | `server/dashboard-austausch.js` | Dashboards als Datei aus- und eingeben; Prüfung beim Import |
 | `server/ha-live.js` | Dauerverbindung zu HA; meldet jede Zustandsänderung weiter |
@@ -947,6 +948,26 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   einer anderen, und man musste erst merken, dass da zwei sind. Jetzt liefert es `null`, und
   jeder Aufrufer muss das behandeln. Vorher wird noch mit kleineren Maßen gesucht, damit eine
   große Vorgabegröße nicht daran scheitert, dass nur ein Feld frei ist.
+- **Eine Schrift, die der Browser nicht findet, fällt stillschweigend zurück.** Die Uhr-Karte
+  kann auf eine mitgelieferte Handschrift umgestellt werden (`clockFont: 'marker'`). Stimmt der
+  Pfad im `@font-face` nicht, nimmt der Browser einfach die nächste Schrift aus der Liste: Die
+  Uhr sieht aus wie vorher, es gibt keine Meldung, und man sucht den Fehler in der Einstellung.
+  `test/uhrschrift.test.js` prüft deshalb die ganze Kette — Editor schreibt, `buildCard` setzt
+  die Klasse, das CSS hat eine Regel, **und die Datei existiert wirklich**. Gegengeprüft: Ein
+  falscher Dateiname lässt genau diesen Test fehlschlagen.
+  Vier Entscheidungen dazu:
+  1. **Mitgeliefert, nicht nachgeladen.** Eine Uhr, die erst dann richtig aussieht, wenn Google
+     antwortet, ist eine Uhr mit Netzabhängigkeit — und beim Start sieht man den Wechsel.
+  2. **`font-display: block`, nicht `swap`.** Bei `swap` erscheint die Uhr erst in Segoe UI und
+     springt dann um. Auf einer Wand sieht man genau diesen Sprung, jeden Morgen. Lieber einen
+     Augenblick nichts; die Datei liegt lokal.
+  3. **Die Größenkorrektur steht im CSS, nicht am Element.** Permanent Marker hat andere
+     Metriken als Segoe UI: Gleiche Punktgröße heißt nicht gleiche Höhe, und bei `font-weight:
+     200` würde die Handschrift einfach ignoriert und sähe aus wie ein Zufall. Ein
+     `font-family` am Element würde die Korrektur umgehen.
+  4. **Die Lizenz reist mit.** Apache 2.0 erlaubt das Mitliefern und verlangt das. Ein Test
+     prüft, dass neben jeder Schriftdatei eine Lizenz und `HERKUNFT.md` liegen — bei einem
+     Wandpanel beschwert sich sonst nie jemand.
 - **Eine Uhr gehört nicht an den Neuaufbau, sondern an die Sekunde.** Karten werden nur neu
   gebaut, wenn sich ein Zustand geändert hat (`zustandsSignatur`) — für eine Uhr heißt das: Sie
   springt weiter, wenn irgendwo im Haus eine Lampe schaltet, und bleibt sonst stehen. Seit der
@@ -1078,7 +1099,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-492 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+501 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

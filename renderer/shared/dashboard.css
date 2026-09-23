@@ -507,6 +507,37 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 .card.type-clock .clock-time { font-size: clamp(2vh, 26cqmin, 14vh); font-weight: 200; line-height: 1; }
 .card.type-clock .clock-date { font-size: clamp(0.8vh, 8cqmin, 3vh); color: var(--muted); margin-top: 0.5vh; }
 
+/* --- Die Uhr in Handschrift ------------------------------------------------------------------
+   Mitgeliefert, nicht nachgeladen: Eine Uhr, die erst dann richtig aussieht, wenn Google
+   antwortet, wechselt beim Start sichtbar die Schrift. Herkunft und Lizenz stehen in
+   renderer/shared/schriften/HERKUNFT.md.
+
+   `font-display: block` und nicht `swap`: Bei `swap` erscheint die Uhr erst in Segoe UI und
+   springt dann in die Handschrift -- auf einer Wand sieht man genau diesen Sprung. Lieber einen
+   Augenblick nichts als ein Umspringen. Die Datei liegt lokal, der Augenblick ist kurz. */
+@font-face {
+  font-family: 'Panel Handschrift';
+  src: url('schriften/PermanentMarker-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Die Korrekturen stehen HIER und nicht am Element (siehe buildCard): Permanent Marker hat
+   andere Metriken als Segoe UI. Gleiche Punktgroesse heisst nicht gleiche Hoehe -- die Schrift
+   laeuft schmaler und sitzt hoeher, deshalb etwas groesser, mehr Zeilenhoehe und normaler
+   Schnitt statt Haarlinie (bei 200 wuerde die Handschrift einfach ignoriert und sah aus wie
+   ein Zufall). */
+.card.type-clock.uhr-marker .clock-time,
+.card.type-clock.uhr-marker .clock-date {
+  font-family: 'Panel Handschrift', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.card.type-clock.uhr-marker .clock-time { font-size: clamp(2vh, 29cqmin, 15vh); line-height: 1.12; }
+.card.type-clock.uhr-marker .clock-date { font-size: clamp(0.8vh, 8.6cqmin, 3.2vh); }
+.unterleiste > .card.type-clock.uhr-marker .clock-time { font-size: clamp(2vh, 96cqmin, 8.6vh); }
+
 .card.type-energy { padding: 1vh; }
 /* --- Energiefluss-Diagramm ------------------------------------------------------------------
    Alles im SVG-Koordinatensystem: Schriftgroessen in SVG-Einheiten, nicht in vh oder cqmin.

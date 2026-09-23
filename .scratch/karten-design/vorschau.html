@@ -49,6 +49,11 @@ const KARTEN = [
   // Wallbox eingetragen hat.
   ['energy.wallbox',   'energy', null, 2, 2],
   ['energy.wallboxAlles', 'energy', null, 4, 2],
+  // Die Uhr in beiden Schriften. Sie fehlte hier komplett -- und die Handschrift hat andere
+  // Metriken als Segoe UI, das sieht man nur nebeneinander.
+  ['clock.normal',     'clock',  null, 2, 2],
+  ['clock.marker',     'clock',  null, 2, 2],
+  ['clock.markerKlein', 'clock', null, 1, 1],
   ['light.wohnzimmer',    'light',       Z('on',  { friendly_name: 'Wohnzimmer', brightness: 180, supported_color_modes: ['color_temp'], min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500, color_temp_kelvin: 2900 }), 1, 1],
   ['light.flur',          'light',       Z('off', { friendly_name: 'Flur' }), 1, 1],
   ['switch.kaffee',       'switch',      Z('on',  { friendly_name: 'Kaffeemaschine' }), 1, 1],
@@ -153,7 +158,8 @@ const nur = new URLSearchParams(location.search).get('nur');
     energy: ENERGIE[id],
     // Gemessene Fahrzeit fuer die kalibrierten Tore -- 18 Sekunden auf.
     torZeiten: id.startsWith('cover.tor_') && id !== 'cover.tor_zu' ? { oeffnen: 18, schliessen: 20 } : undefined,
-    settings: id === 'cover.tor_dau' ? { torDaueraufEntity: 'light.dauerauf' }
+    settings: id.startsWith('clock.marker') ? { clockFont: 'marker' }
+      : id === 'cover.tor_dau' ? { torDaueraufEntity: 'light.dauerauf' }
       : typ === 'navigate' ? { targetDashboardId: 'db_1', targetDashboardName: id === 'nav.bad' ? 'Badezimmer' : 'Küche' }
       : typ === 'gate' ? { gateButtons: [
       { label: 'Tor', entity: 'switch.a', icon: 'gate' },
