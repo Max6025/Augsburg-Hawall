@@ -244,6 +244,34 @@
 
     <details class="einstellungsblock">
       <summary>
+        <span class="eb-titel">Überwachung</span>
+        <span class="eb-unter">Wartungen in Uptime Kuma</span>
+      </summary>
+      <div class="eb-inhalt">
+    <p class="hint-text">Ohne das ist jedes Update für die Überwachung ein Ausfall: Die App
+      beendet sich, der Installer läuft, das Gerät startet neu – und die Statusseite wird rot,
+      jedes Mal. Nach dem dritten Fehlalarm glaubt niemand mehr der Anzeige, auch wenn wirklich
+      etwas kaputt ist.</p>
+    <p class="hint-text">Gemeldet wird vor einem Update und bei einer Wartung vor Ort
+      (Taskleiste freigeben). Beendet wird automatisch, sobald der Webserver dieses Panels
+      wieder antwortet. <strong>Leer lassen heißt: aus</strong> – dann passiert nichts davon.</p>
+    <label>Adresse des Wartungsmelders
+      <input type="text" id="wartungsmelderUrl" placeholder="http://homeassistant.local:8099">
+    </label>
+    <p class="hint-text">Das Add-on <strong>Wartungsmelder</strong> aus
+      <code>github.com/Max6025/Hawall-Addons</code>, in Home Assistant installiert. Dort stehen
+      auch die Zugangsdaten für Uptime Kuma – hier nicht.</p>
+    <label>Zugriffsschlüssel
+      <input type="password" id="wartungsmelderSchluessel" placeholder="unverändert" autocomplete="new-password">
+    </label>
+    <p class="hint-text" id="wartungsmelderSchluesselStand"></p>
+    <button type="button" class="btn-ghost" id="wartungsmelderPruefen">Verbindung prüfen</button>
+    <pre class="hint-text" id="wartungsmelderErgebnis" hidden style="white-space:pre-wrap;"></pre>
+      </div>
+    </details>
+
+    <details class="einstellungsblock">
+      <summary>
         <span class="eb-titel">Zugangscode</span>
         <span class="eb-unter">Schutz dieser Oberfläche im Netzwerk</span>
       </summary>

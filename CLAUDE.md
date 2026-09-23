@@ -32,6 +32,7 @@ auch laufen, wenn gerade kein Dashboard geladen ist.
 | `server/systemstatus.js` | Das Urteil der Statusseite: reine Funktion, rein die Rohwerte, raus die Liste mit Stufen |
 | `renderer/setup/status.html` | Die Statusseite — zeigt nur an, bewertet nicht |
 | `renderer/dashboard.html` (Blende) | Der Übergang zwischen „Panel an" und „Panel aus", zwei Wege hinein |
+| `control/wartungsmelder.js` | Der Überwachung sagen, dass gerade gearbeitet wird — und dass es vorbei ist |
 | `control/lautstaerke.js` | Systemlautstärke anheben (nur während einer Akkuwarnung, nie senken) |
 | `control/hintergrund.js` | Windows-Hintergrundbild setzen — sichtbar nur, während die App nicht läuft |
 | `control/torzeiten.js` | Misst beim ersten Durchlauf, wie lange ein Tor auf- und zufährt |
@@ -235,6 +236,46 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   dem Zustand (`abschiedMs`), nicht aus dem CSS: eine zweite Zahl dort läuft beim nächsten
   Ändern auseinander, dieselbe Lehre wie bei `TOR_TAKT` und `HVAC_ANIMATIONEN`. Ansehen ohne
   Gerät: `.scratch/uebergaenge/blende-probe.html`.
+- **Eine Wartung, die niemand schließt, verdeckt genau den Ausfall, den sie ankündigen
+  sollte.** Vor einem Update meldet die App eine Wartung an das Add-on
+  [Wartungsmelder](https://github.com/Max6025/Hawall-Addons) (Uptime Kuma hat dafür keine
+  REST-API, und die Zugangsdaten sollen den HA-Host nicht verlassen). Ohne das ist jedes Update
+  für die Überwachung ein Ausfall: Die App beendet sich, der Installer läuft, das Gerät startet
+  neu — Statusseite rot, Alarm, jedes Mal. Vier Dinge hängen daran:
+  1. **Strategie `single`, nicht `manual`.** Eine manuelle Wartung bleibt offen, bis jemand sie
+     schließt. Bleibt das Gerät nach einem misslungenen Update aus, sagt die Statusseite
+     freundlich „in Wartung" — und niemand sieht nach. Mit einem Fenster läuft sie aus, und der
+     Alarm kommt verspätet statt nie. Geschlossen wird trotzdem ausdrücklich; das Fenster ist
+     das Fangnetz, nicht der Weg.
+  2. **Erst merken, dann melden.** Der Schlüssel wird vor dem Melden in den Speicher gelegt und
+     erst nach dem Beenden entfernt — genau dazwischen liegt `updater.install()`, und was danach
+     geschrieben würde, wird nie geschrieben.
+  3. **Das Ende erkennt der eigene Webserver, nicht die App.** „Die App läuft" wäre ein Urteil
+     über sich selbst; `gesundAbwarten()` fragt deshalb `/api/gesundheit` — genau das, was die
+     Überwachung von draußen sieht. Und beharrlich (`abschliessenWiederholt`), weil Home
+     Assistant länger bootet als das Panel.
+  4. **Gemeldet wird in `controller.wartung()`**, nicht bei den Aufrufern. Es gibt drei Wege
+     dorthin, und einer davon (der Knopf auf der Einstellungsseite) läuft über den Server und
+     ginge an `main.js` vorbei. Drei Meldestellen wären drei Stellen, an denen eine vergessen
+     wird — gemerkt hätte man es erst, wenn eine Wartung vor Ort Alarm auslöst.
+
+  Ohne eingetragene Adresse ist der Melder **still**: kein Fehler, keine Verzögerung beim
+  Update. Die Überwachung ist eine Zugabe, und ein Panel muss ohne sie genauso laufen.
+- **Eine Wartung ohne zugeordnete Monitore unterdrückt keinen einzigen Alarm.** Sie ist dann
+  angelegt, in der Liste sichtbar — und wirkungslos; dasselbe gilt für eine fehlende
+  Statusseiten-Zuordnung. Das Add-on macht nach dem Anlegen deshalb immer beide Zuordnungen,
+  und sein `GET /selbsttest` prüft ausdrücklich, ob die eingetragenen Monitornamen in Uptime
+  Kuma überhaupt **existieren**. Das ist der Fehler, der sonst unentdeckt bleibt, weil alles
+  gelingt. Der Knopf „Verbindung prüfen" auf der Einstellungsseite geht dafür **vom Panel aus**
+  und über dieselbe Adresse und denselben Schlüssel wie später das Update — eine Prüfung aus
+  dem Browser des Einrichtenden wäre grün und bewiese nichts.
+- **`$('x')` liefert `null`, und der Zugriff darauf bricht den GANZEN Seitenaufbau ab.** Ein
+  Tippfehler in einer ID genügt, und die Einstellungsseite lässt sich nicht mehr bedienen —
+  ohne dass etwas nach einem Fehler aussieht. `test/setup-seiten.test.js` vergleicht deshalb
+  jede gerufene ID mit der Seite, und zwar für **alle** Seitenpaare, die es findet: Eine von
+  Hand gepflegte Liste ließe ausgerechnet die neue Seite ungeprüft. IDs, die das Skript selbst
+  erzeugt (der Editor baut seine Einstellungsfelder vollständig in JS), zählen mit — ein Test,
+  dem man nicht glaubt, wird abgeschaltet statt gelesen.
 - **`/api/gesundheit` ist die einzige Route ohne Zugangscode — und das ist eine Entscheidung.**
   Sie ist für eine Überwachung von außen gedacht (Uptime Kuma), und die kann sich nicht
   anmelden. Hängt sie hinter dem Code, meldet die Überwachung ab dem Tag, an dem einer gesetzt
@@ -806,7 +847,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-389 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+421 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

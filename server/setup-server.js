@@ -137,7 +137,7 @@ document.getElementById('f').addEventListener('submit', async (ev) => {
 </script></body></html>`;
 
 function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
-  sperrenSoll, gestartetAm }) {
+  sperrenSoll, gestartetAm, melder }) {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
@@ -399,6 +399,12 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       nightModeForceOn: store.get('nightModeForceOn') || false,
       // Ab Werk an: lieber ein erreichbares Geraet als ein sparsames, das nachts schweigt.
       systemWachhalten: store.get('systemWachhalten') !== false,
+      // Der Wartungsmelder (Add-on in Home Assistant). Der Zugriffsschluessel geht
+      // ausdruecklich NICHT mit heraus -- nur, ob einer gesetzt ist, genauso wie beim
+      // HA-Token. Ein Feld, das den Schluessel zurueckgibt, verteilt ihn an jeden, der die
+      // Seite oeffnet.
+      wartungsmelderUrl: store.get('wartungsmelderUrl') || '',
+      wartungsmelderSchluesselGesetzt: !!store.get('wartungsmelderSchluessel'),
       customTheme: store.get('customTheme') || null,
       // Bildschirmschoner: der Ruhezustand dieses Geraets. Das Dashboard ist die Ausnahme,
       // nicht umgekehrt -- siehe renderer/shared/bildschirmschoner.js.
@@ -430,6 +436,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       haUrl, token, title, entities, layout, sunEntity,
       notifyEntity, batteryThreshold, batterySound, batteryVolume, nightModeEnabled, nightStart, nightEnd, nightModeForceOn,
       notifyTitel, notifySekunden, systemWachhalten,
+      wartungsmelderUrl, wartungsmelderSchluessel,
       setupCode,
       hintergrundBewegung, rueckkehrSekunden, desktopHintergrund,
       schonerEnabled, schonerMinuten, schonerHelligkeit, schonerDashboard, schonerHintergrund
@@ -462,6 +469,16 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (nightEnd !== undefined) store.set('nightEnd', nightEnd);
     if (nightModeForceOn !== undefined) store.set('nightModeForceOn', nightModeForceOn);
     if (systemWachhalten !== undefined) store.set('systemWachhalten', !!systemWachhalten);
+    // Ohne Schraegstrich am Ende, damit die Pfade nicht doppelt zusammengesetzt werden.
+    if (wartungsmelderUrl !== undefined) {
+      store.set('wartungsmelderUrl', String(wartungsmelderUrl || '').trim().replace(/\/+$/, ''));
+    }
+    // Nur setzen, wenn das Feld ueberhaupt mitkam: Die Seite schickt es leer nicht mit, sonst
+    // loescht jedes Speichern der Einstellungen den Schluessel -- und das faellt erst beim
+    // naechsten Update auf.
+    if (wartungsmelderSchluessel !== undefined) {
+      store.set('wartungsmelderSchluessel', String(wartungsmelderSchluessel || ''));
+    }
 
     if (hintergrundBewegung !== undefined) store.set('hintergrundBewegung', !!hintergrundBewegung);
     if (rueckkehrSekunden !== undefined) {
@@ -544,6 +561,22 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (!controller) return res.json({ ok: false, error: 'Steuerung nicht aktiv' });
     const r = controller.wartung(req.body && req.body.minutes);
     res.json({ ok: true, ...r, state: controller.getState() });
+  });
+
+  // Den Wartungsmelder pruefen -- auf GENAU dem Weg, den ein Update spaeter nimmt. Eine
+  // Pruefung, die eine andere Adresse oder einen anderen Schluessel benutzt, beweist nichts:
+  // Sie waere gruen, und beim naechsten Update kaeme die Wartung trotzdem nicht an.
+  //
+  // Die Antwort des Add-ons wird durchgereicht, samt Klartext-Fehler. "Hat nicht funktioniert"
+  // laesst niemanden wissen, ob die Adresse falsch ist, der Schluessel nicht stimmt oder
+  // Uptime Kuma die Anmeldung ablehnt.
+  app.get('/api/wartungsmelder/pruefen', async (req, res) => {
+    if (!melder) return res.json({ ok: false, error: 'Der Melder ist in diesem Programmlauf nicht aktiv.' });
+    if (!melder.konfiguriert()) {
+      return res.json({ ok: false, error: 'Keine Adresse des Wartungsmelders eingetragen.' });
+    }
+    const a = await melder.anfragen('GET', '/selbsttest');
+    res.json(a.ok ? { ok: true, bericht: a.daten } : { ok: false, error: a.fehler });
   });
 
   app.post('/api/panel/taskleiste-aus', (req, res) => {

@@ -65,6 +65,14 @@ async function load() {
   $('nightForceOn').checked = !!configRes.nightModeForceOn;
   $('systemWachhalten').checked = configRes.systemWachhalten !== false;
 
+  // Der Zugriffsschluessel kommt ausdruecklich NICHT zurueck (siehe /api/config) -- das Feld
+  // bleibt leer und heisst "unveraendert". Ohne diesen Hinweis sieht es aus, als waere keiner
+  // gesetzt, und beim naechsten Speichern traegt jemand ihn erneut ein.
+  $('wartungsmelderUrl').value = configRes.wartungsmelderUrl || '';
+  $('wartungsmelderSchluesselStand').textContent = configRes.wartungsmelderSchluesselGesetzt
+    ? 'Ein Schlüssel ist gesetzt. Das Feld leer lassen behält ihn.'
+    : 'Kein Schlüssel gesetzt. Ohne Schlüssel kann jeder im Netz beim Add-on Wartungen anlegen.';
+
   // Bildschirmschoner
   $('schonerEnabled').checked = configRes.schonerEnabled !== false;
   $('schonerMinuten').value = configRes.schonerMinuten === undefined ? 3 : configRes.schonerMinuten;
@@ -196,6 +204,7 @@ function alleFelder() {
     nightEnd: $('nightEnd').value || '06:30',
     nightModeForceOn: $('nightForceOn').checked,
     systemWachhalten: $('systemWachhalten').checked,
+    wartungsmelderUrl: $('wartungsmelderUrl').value.trim(),
 
     schonerEnabled: $('schonerEnabled').checked,
     schonerMinuten: zahl('schonerMinuten', 3),
@@ -210,6 +219,13 @@ function alleFelder() {
   // offen im Netz stand.
   const code = $('setupCode').value;
   if (code) felder.setupCode = code;
+
+  // Dasselbe beim Zugriffsschluessel des Wartungsmelders, aus demselben Grund: Ein leeres Feld
+  // heisst "unveraendert". Wuerde es mitgeschickt, loeschte jedes Speichern der Seite den
+  // Schluessel -- und aufgefallen waere das erst beim naechsten Update, wenn die Wartung
+  // nicht ankommt.
+  const wmSchluessel = $('wartungsmelderSchluessel').value;
+  if (wmSchluessel) felder.wartungsmelderSchluessel = wmSchluessel;
 
   return felder;
 }
@@ -330,4 +346,44 @@ async function schonerDashboardsLaden(gewaehlt) {
     feld.insertAdjacentHTML('beforeend',
       '<option value="" disabled>\u2013 noch kein Unterdashboard angelegt \u2013</option>');
   }
+}
+
+
+// --- Den Wartungsmelder ausprobieren ----------------------------------------------------------
+//
+// Geprueft wird vom PANEL aus, nicht von diesem Browser: Das Panel ist es, das spaeter meldet,
+// und es steht woanders im Netz. Eine Pruefung von hier waere gruen, und beim naechsten Update
+// kaeme die Wartung trotzdem nicht an.
+//
+// Das Add-on beantwortet den Selbsttest mit dem, was einzeln funktioniert hat -- Anmeldung,
+// Wartungen lesen, Monitore lesen, Statusseiten lesen. "Hat nicht geklappt" laesst niemanden
+// wissen, ob die Adresse falsch ist, der Schluessel nicht stimmt oder Uptime Kuma die
+// Anmeldung ablehnt.
+const wmPruefen = document.getElementById('wartungsmelderPruefen');
+if (wmPruefen) {
+  wmPruefen.addEventListener('click', async () => {
+    const ziel = document.getElementById('wartungsmelderErgebnis');
+    ziel.hidden = false;
+    ziel.textContent = 'Wird gepr\u00fcft \u2026';
+    wmPruefen.disabled = true;
+    try {
+      // Erst speichern: Wer die Adresse gerade eingetippt hat, will SIE pruefen und nicht die
+      // vom letzten Mal. Ohne das prueft der Knopf etwas anderes, als auf dem Schirm steht.
+      await speichereAlles();
+      const d = await fetch('/api/wartungsmelder/pruefen').then(r => r.json());
+      if (!d.ok) {
+        ziel.textContent = 'Fehler: ' + (d.error || 'unbekannt');
+        return;
+      }
+      const b = d.bericht || {};
+      const zeilen = Object.entries(b.pruefungen || b).map(([k, v]) => `${k}: ${
+        v === true ? 'ok' : (typeof v === 'object' ? JSON.stringify(v) : String(v))
+      }`);
+      ziel.textContent = zeilen.length ? zeilen.join('\n') : JSON.stringify(b, null, 1);
+    } catch (e) {
+      ziel.textContent = 'Fehler: ' + (e.message || e);
+    } finally {
+      wmPruefen.disabled = false;
+    }
+  });
 }

@@ -10,6 +10,7 @@ const { Controller } = require('./control/controller');
 const energie = require('./control/energie');
 const lautstaerke = require('./control/lautstaerke');
 const hintergrund = require('./control/hintergrund');
+const { Wartungsmelder } = require('./control/wartungsmelder');
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -70,6 +71,52 @@ store.set('lastKnownVersion', currentVersion);
 // startet die App erst mit der Anmeldung -- eine kurze Laufzeit bei langer Geraetelaufzeit
 // ist genau der Hinweis, den man dann braucht.
 const GESTARTET_AM = Date.now();
+
+// --- Der Ueberwachung sagen, dass hier gearbeitet wird ---------------------------------------
+//
+// Ohne das ist jedes Update fuer Uptime Kuma ein Ausfall: Die App beendet sich, der Installer
+// laeuft, das Geraet startet neu -- und die Statusseite wird rot, jedes Mal. Nach dem dritten
+// Fehlalarm glaubt niemand mehr der Anzeige, auch wenn wirklich etwas kaputt ist.
+//
+// Die Merker liegen im Speicher der App, nicht im Arbeitsspeicher: Zwischen "gemeldet" und
+// "beendet" liegt genau der Neustart, um den es geht.
+const melder = new Wartungsmelder({
+  konfig: () => ({
+    url: store.get('wartungsmelderUrl') || '',
+    schluessel: store.get('wartungsmelderSchluessel') || ''
+  }),
+  offeneLesen: () => store.get('wartungenOffen') || {},
+  offeneSchreiben: (d) => store.set('wartungenOffen', d),
+  log: (stufe, text) => { if (controller) controller.log(stufe, text); else console.log(stufe, text); }
+});
+
+// Die eigene Gesundheitsroute fragen, bis sie antwortet.
+//
+// Der Beweis, dass das Panel wieder da ist, ist nicht "die App laeuft" -- das waere ein Urteil
+// ueber sich selbst. Er ist "der Webserver antwortet", denn genau das sieht die Ueberwachung
+// von draussen. Erst danach wird die Wartung geschlossen.
+async function gesundAbwarten(versuche = 20, abstand = 3000) {
+  for (let i = 0; i < versuche; i++) {
+    try {
+      const a = await fetch(`http://127.0.0.1:${SETUP_PORT}/api/gesundheit`);
+      if (a.ok) return true;
+    } catch (e) { /* noch nicht da -- weiter warten */ }
+    await new Promise(f => setTimeout(f, abstand));
+  }
+  return false;
+}
+
+// Die Vorort-Wartung endet, wenn die Taskleiste wieder verschwindet -- das ist der Moment, in
+// dem niemand mehr davor steht. Gemerkt wird der letzte Stand, weil `onStateChange` bei jedem
+// Takt kommt und nicht nur beim Wechsel.
+let taskleisteWarSichtbar = false;
+function vorortEnde(state) {
+  const sichtbar = !!(state && state.taskleisteBis);
+  if (taskleisteWarSichtbar && !sichtbar) {
+    melder.beenden('wandpanel-vorort').catch(() => {});
+  }
+  taskleisteWarSichtbar = sichtbar;
+}
 
 let mainWindow = null;
 // `geprueft` trennt "noch nicht nachgesehen" von "nachgesehen, nichts da".
@@ -140,9 +187,18 @@ const updater = {
     // Jetzt, nicht spaeter: Gleich ist die App weg, und dann kann niemand mehr etwas setzen.
     // Der Desktop traegt waehrend des Updates den Hinweis, dass gerade gewartet wird.
     hintergrundSetzen('wartung').catch(() => {});
-    setTimeout(() => {
-      autoUpdater.quitAndInstall(true, true); // isSilent, isForceRunAfter
-    }, 1200);
+    // Erst melden, dann beenden -- und zwar in dieser Reihenfolge abgewartet: Nach
+    // `quitAndInstall` gibt es keinen Prozess mehr, der eine Anfrage abschicken koennte, und
+    // eine Wartung, die nie ankam, ist genau der Fehlalarm, den das hier verhindern soll.
+    // Die Verzoegerung faellt nicht auf: Auf der Wand steht schon das Update-Bild.
+    const wartungMelden = () => melder.beginnen('update', {
+      von: app.getVersion(), nach: updateState.version
+    }).catch(() => {});
+    wartungMelden().finally(() => {
+      setTimeout(() => {
+        autoUpdater.quitAndInstall(true, true); // isSilent, isForceRunAfter
+      }, 1200);
+    });
   }
 };
 
@@ -443,6 +499,7 @@ function pushControlState(state) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('control-state', state);
   }
+  vorortEnde(state);
 }
 
 // Ohne diesen Schalter laesst Chromium Ton erst zu, nachdem jemand die Seite angefasst hat.
@@ -457,6 +514,10 @@ app.whenReady().then(() => {
     store,
     logDir: app.getPath('userData'),
     onStateChange: pushControlState,
+    // Wartung vor Ort an die Ueberwachung melden. Bewusst im Controller aufgerufen und nicht
+    // hier: Der Knopf auf der Einstellungsseite laeuft ueber den Server direkt in
+    // controller.wartung() und wuerde hier vorbeigehen.
+    wartungMelden: ({ minuten }) => melder.beginnen('vorort', { minuten }).catch(() => {}),
     // Sekunden seit der letzten Eingabe am Geraet. Damit erkennt der Controller, dass jemand
     // davorsteht -- auch dann, wenn weder "resume" noch "unlock-screen" gefeuert haben, weil der
     // Bildschirm bloss dunkel geschaltet war.
@@ -545,9 +606,18 @@ app.whenReady().then(() => {
     // Fuer die Statusseite: Womit der Stand der Windows-Sperren zu vergleichen ist, und
     // seit wann die App laeuft. Beides weiss nur der Hauptprozess.
     sperrenSoll: KIOSK_SPERREN_STAND,
-    gestartetAm: GESTARTET_AM
+    gestartetAm: GESTARTET_AM,
+    // Damit die Einstellungsseite den Wartungsmelder auf demselben Weg pruefen kann, den ein
+    // Update spaeter nimmt.
+    melder
   });
   applyWindowsKioskLockdown();
+
+  // Was vor dem Neustart als Wartung gemeldet wurde, wird jetzt geschlossen -- sobald der
+  // eigene Webserver antwortet. Beharrlich, weil Home Assistant (und damit das Add-on) laenger
+  // bootet als das Panel: Ein einziger Versuch geht in genau diesem Fall ins Leere, und die
+  // Wartung liefe dann nur noch durch ihr Fenster ab.
+  gesundAbwarten().then(() => melder.abschliessenWiederholt());
 
   // Auto-Start bei Windows-Anmeldung aktivieren
   app.setLoginItemSettings({ openAtLogin: true, path: process.execPath });

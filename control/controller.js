@@ -109,7 +109,7 @@ class Controller {
    * Modul ohne Electron testbar bleibt. Ohne Angabe verhaelt es sich, als sei nie jemand da.
    */
   constructor({ store, logDir, onStateChange, idleSeconds, aufAkku, setKiosk,
-    schlafZeitgeber, energieNachziehen }) {
+    schlafZeitgeber, energieNachziehen, wartungMelden }) {
     this.store = store;
     this.idleSeconds = idleSeconds || (() => Infinity);
     // Ohne Angabe wird Netzbetrieb angenommen: Das ist der Normalfall fuer ein Wandpanel, und
@@ -124,6 +124,9 @@ class Controller {
     // und der naechste Versuch kostet sechs billige Aufrufe. Selbstheilung statt einer Meldung,
     // die niemand liest.
     this.energieNachziehen = energieNachziehen || (() => {});
+    // Sagt der Ueberwachung, dass jemand am Geraet arbeitet. Ohne Angabe still: Wer keinen
+    // Wartungsmelder eingetragen hat, soll davon nichts merken.
+    this.wartungMelden = wartungMelden || (() => {});
     // Schaltet das Fenster in den Kiosk-Modus (true) oder heraus (false). Wird aus dem
     // Hauptprozess hereingereicht, damit dieses Modul ohne Electron testbar bleibt.
     this.setKiosk = setKiosk || (() => {});
@@ -442,6 +445,16 @@ class Controller {
   wartung(minuten) {
     const pausedUntil = this.pause(minuten);
     const taskleisteBis = this.taskleisteZeigen();
+    // Hier und nicht bei den Aufrufern: Es gibt drei Wege hierher (Knopf auf der
+    // Einstellungsseite, fuenfmal oben links tippen, Strg+Alt+W), und der Knopf laeuft ueber
+    // den Server, die anderen beiden ueber main.js. Drei einzelne Meldungen waeren drei
+    // Stellen, an denen eine beim naechsten Umbau vergessen wird -- und gemerkt haette man es
+    // erst, wenn die Ueberwachung wegen einer Wartung vor Ort Alarm schlaegt.
+    try {
+      this.wartungMelden({ minuten: minuten || Math.round((taskleisteBis - Date.now()) / 60000) });
+    } catch (e) {
+      this.log('warn', `Wartung liess sich nicht melden: ${e.message}`);
+    }
     return { pausedUntil, taskleisteBis };
   }
 
