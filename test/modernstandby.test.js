@@ -19,11 +19,32 @@ function fakeStore(values = {}) {
   return { get: (k) => data[k], set: (k, v) => { data[k] = v; }, _data: data };
 }
 
-test('Der Lesebefehl fragt genau den Wert ab, um den es geht', () => {
+test('Der Lesebefehl fragt den SCHLUESSEL ab, nicht den Wert', () => {
+  // Der teuerste Einzeiler dieser Sitzung. Vorher stand hier `/v PlatformAoAcOverride`: Fehlt
+  // der Wert, endet reg.exe mit einem Fehler, und der Code unterschied "Wert fehlt" von
+  // "konnte nicht lesen" am WORTLAUT der Meldung -- gesucht nach "nicht vorhanden", auf dem
+  // Geraet steht "nicht gefunden". Ergebnis war `null` statt `false`, die Einrichtungsseite
+  // sagte zu Modern Standby gar nichts, und die Rueckfrage (die nur bei `false` kommt) ist nie
+  // erschienen. Ein eingebauter Ausweg, der ohne eine Fehlermeldung unerreichbar war.
+  //
+  // Der Schluessel existiert immer. Damit haengt die Antwort an der Ausgabe und nicht an einer
+  // uebersetzten Fehlermeldung.
   assert.ok(ms.LESE_BEFEHL.includes('reg query'));
   assert.ok(ms.LESE_BEFEHL.includes('SYSTEM\\CurrentControlSet\\Control\\Power'));
-  assert.ok(ms.LESE_BEFEHL.includes('PlatformAoAcOverride'));
+  assert.ok(!ms.LESE_BEFEHL.includes('/v'),
+    'mit /v haengt die Antwort an einer uebersetzten Fehlermeldung');
   assert.ok(!ms.LESE_BEFEHL.includes('\n'), 'ein Befehl, eine Zeile');
+});
+
+test('Die Erkennung haengt an keiner uebersetzten Meldung', () => {
+  // Gegenprobe am Quelltext: Wer hier wieder anfaengt, Fehlertexte zu vergleichen, bekommt
+  // denselben Fehler in der naechsten Windows-Sprache zurueck.
+  const quelle = require('node:fs').readFileSync(
+    require('node:path').join(__dirname, '..', 'control', 'modernstandby.js'), 'utf8');
+  for (const text of ['nicht vorhanden', 'unable to find', 'cannot find']) {
+    const zeilen = quelle.split('\n').filter(z => z.includes(text) && !z.trim().startsWith('//'));
+    assert.deepStrictEqual(zeilen, [], `Fehlertext "${text}" wird noch ausgewertet`);
+  }
 });
 
 test('Der Aufruf fordert erhoehte Rechte an und wartet auf die Antwort', () => {

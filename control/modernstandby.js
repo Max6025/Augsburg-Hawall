@@ -55,10 +55,23 @@ const WERT = 'PlatformAoAcOverride';
 const MERKER = 'aoacVersuchtStand';
 const VERSUCH_STAND = 1;
 
-// Lesen geht unelevert: HKLM ist fuer Benutzer lesbar. `powercfg /a` waere die genauere Antwort
-// -- welcher Schlafzustand wirklich verfuegbar ist -- verlangt aber erhoehte Rechte und faellt
-// damit aus. Der Registrierungswert sagt immerhin, ob die Umstellung vorgenommen wurde.
-const LESE_BEFEHL = `reg query "${SCHLUESSEL}" /v ${WERT}`;
+// Abgefragt wird der SCHLUESSEL, nicht der WERT -- und das ist der ganze Punkt.
+//
+// Vorher stand hier `/v ${WERT}`. Fehlt der Wert, beendet sich reg.exe mit einem Fehler, und
+// dieser Code unterschied "Wert fehlt" von "konnte nicht lesen" am WORTLAUT der Meldung. Auf dem
+// Geraet lautet sie "Der angegebene Registrierungsschluessel bzw. Wert wurde nicht gefunden" --
+// gesucht wurde nach "nicht vorhanden". Ein Wort daneben, und die Antwort war `null` statt
+// `false`. Folge, am 2026-09-23 auf dem Surface gemessen: Die Einrichtungsseite sagte zu Modern
+// Standby GAR NICHTS, und weil die Rueckfrage nur bei `false` ausgeloest wird, ist sie nie
+// erschienen. Der eingebaute Ausweg war unerreichbar, ohne eine einzige Fehlermeldung.
+//
+// Der Schluessel dagegen existiert immer. Kommt die Abfrage durch, ist die Antwort eindeutig:
+// Steht der Wertname in der Ausgabe, ist er gesetzt; steht er nicht da, ist er es nicht.
+// Scheitert die Abfrage, ist es wirklich unbekannt. Keine uebersetzten Meldungen mehr.
+//
+// `powercfg /a` waere die genauere Antwort -- welcher Schlafzustand wirklich verfuegbar ist --
+// verlangt aber erhoehte Rechte und faellt damit aus.
+const LESE_BEFEHL = `reg query "${SCHLUESSEL}"`;
 
 // Alles, was erhoehte Rechte braucht, in EINER Datei -- und damit hinter EINEM UAC-Dialog.
 //
@@ -141,14 +154,12 @@ function lesen() {
   if (process.platform !== 'win32') return Promise.resolve(null);
   return new Promise((fertig) => {
     exec(LESE_BEFEHL, { timeout: 5000 }, (err, stdout) => {
-      if (err) {
-        // "Der angegebene Wert ist nicht vorhanden" ist KEIN Fehler im eigentlichen Sinn --
-        // es ist die Antwort "Modern Standby ist aktiv". Unterschieden wird an der Ausgabe:
-        // Kommt der Schluesselname gar nicht vor, hat reg.exe ihn nicht gefunden.
-        fertig(/nicht vorhanden|unable to find|cannot find/i.test(String(err.message)) ? false : null);
-        return;
-      }
-      const treffer = /PlatformAoAcOverride\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(String(stdout));
+      // Scheitert die Abfrage des Schluessels, ist der Zustand wirklich unbekannt. `null` heisst
+      // "nicht zu ermitteln" und ausdruecklich nicht "aktiv" -- wer das verwechselt, zeigt auf
+      // der Einrichtungsseite eine Gewissheit an, die es nicht gibt.
+      if (err) return fertig(null);
+      const treffer = new RegExp(`${WERT}\\s+REG_DWORD\\s+0x([0-9a-f]+)`, 'i').exec(String(stdout));
+      // Schluessel gelesen, Wertname fehlt: Der Wert ist nicht gesetzt, Modern Standby ist aktiv.
       if (!treffer) return fertig(false);
       fertig(parseInt(treffer[1], 16) === 0);
     });
