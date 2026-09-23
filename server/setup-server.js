@@ -11,6 +11,7 @@ const { CARD_TYPES } = require('../renderer/shared/dashboard-render.js');
 const { HaLive } = require('./ha-live');
 const { TorBeobachter } = require('../control/torzeiten');
 const { SCHWELLE_MINDESTENS } = require('../renderer/shared/akku.js');
+const systemstatus = require('./systemstatus');
 
 // Domains, die keine sinnvollen Wall-Display-Karten sind (Helfer/System-Entitaeten)
 // -- werden weder im Editor angeboten noch als Karten dargestellt.
@@ -130,7 +131,8 @@ document.getElementById('f').addEventListener('submit', async (ev) => {
 });
 </script></body></html>`;
 
-function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize }) {
+function startServer({ port, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
+  sperrenSoll, gestartetAm }) {
   const app = express();
   app.use(express.json({ limit: '15mb' }));
 
@@ -657,6 +659,67 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     } catch (err) {
       res.status(500).end();
     }
+  });
+
+  // --- Die Statusseite -------------------------------------------------------------------------
+  //
+  // Eine Route, ein Bild. Vorher lagen die Auskuenfte auf vier Seiten verstreut (Panelzustand in
+  // den Einstellungen, Akku in der Leiste, Version beim Update, Protokoll nur am Geraet), und
+  // wer wissen wollte, ob alles laeuft, musste sie selbst zusammenrechnen.
+  //
+  // Bewertet wird in server/systemstatus.js, nicht hier und nicht in der Seite: Diese Route
+  // sammelt nur die Rohwerte ein.
+
+  // Die letzten Warnungen aus dem Protokoll der Panelsteuerung.
+  //
+  // Nur das Ende der Datei wird gelesen. Sie waechst ueber Monate, und eine Statusseite, die
+  // erst ein Megabyte einliest, ist eine Statusseite, die niemand aufmacht. Die erste Zeile des
+  // gelesenen Blocks wird verworfen -- sie ist mitten im Satz abgeschnitten.
+  const WARN_BLOCK = 64 * 1024;
+  const WARN_ZEILEN = 12;
+  function letzteWarnungen() {
+    const datei = controller && controller.logFile;
+    if (!datei) return [];
+    try {
+      const groesse = fs.statSync(datei).size;
+      const von = Math.max(0, groesse - WARN_BLOCK);
+      const fd = fs.openSync(datei, 'r');
+      const puffer = Buffer.alloc(Math.min(WARN_BLOCK, groesse));
+      fs.readSync(fd, puffer, 0, puffer.length, von);
+      fs.closeSync(fd);
+      const zeilen = puffer.toString('utf8').split(/\r?\n/);
+      if (von > 0) zeilen.shift();
+      return zeilen
+        .filter(z => /\[(warn|error)\]/.test(z))
+        .slice(-WARN_ZEILEN)
+        .reverse();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  app.get('/api/status/system', (req, res) => {
+    const dashboards = store.get('dashboards');
+    res.json({
+      ok: true,
+      ...systemstatus.pruefungen({
+        konfiguriert: !!(store.get('haUrl') && store.get('token')),
+        haVerbunden: haLive ? haLive.istVerbunden() : undefined,
+        panel: controller ? controller.getState() : null,
+        akku: akkuStand().akku || null,
+        zugangscodeGesetzt: !!store.get('setupCode'),
+        dashboards: Array.isArray(dashboards) ? dashboards.length : 0,
+        hauptKarten: (store.get('layout') || []).length,
+        sperrenStand: process.platform === 'win32' ? (store.get('kioskLockdownStand') || 0) : undefined,
+        sperrenSoll: process.platform === 'win32' ? sperrenSoll : undefined,
+        version: updater ? updater.currentVersion : undefined,
+        laeuftSeit: gestartetAm,
+        warnungen: letzteWarnungen()
+      }),
+      ips: getLocalIps(),
+      port,
+      panelGroesse: getPanelSize ? getPanelSize() : null
+    });
   });
 
   // Update-Steuerung aus dem Webinterface

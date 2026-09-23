@@ -6,22 +6,55 @@
 
 (function () {
   const current = location.pathname.split('/').pop() || 'index.html';
-  document.querySelectorAll('.hawall-nav-links a').forEach(a => {
-    if (a.getAttribute('href') === current) a.classList.add('active');
-  });
 
-  // --- Der Weg zur Live-Ansicht -------------------------------------------------------------
+  // --- Die Reihenfolge der Reiter -----------------------------------------------------------
   //
-  // Sie steht hier und nicht als Markup in zehn Seiten: Eine Verknuepfung, die man an zehn
-  // Stellen pflegen muss, fehlt an neun davon irgendwann.
-  const links = document.querySelector('.hawall-nav-links');
-  if (links && !links.querySelector('[href="/live"]')) {
-    const a = document.createElement('a');
-    a.href = '/live';
-    a.textContent = 'Live-Ansicht';
-    a.title = 'Dieselbe Anzeige wie auf der Wand – hier bedienbar';
-    links.appendChild(a);
-    if (location.pathname === '/live') a.classList.add('active');
+  // Sie steht HIER und nicht in acht HTML-Dateien. Vorher stand sie in jeder Seite als Markup,
+  // und das Ergebnis war absehbar: Zwei Seiten kannten den Design-Import nicht, eine die
+  // Unterdashboards nicht, und der Status-Reiter waere in der neunten Seite vergessen worden.
+  // Eine Reihenfolge, die man an acht Stellen pflegen muss, stimmt an sieben davon irgendwann
+  // nicht mehr.
+  //
+  // Die Gruppierung ist Absicht: vorne das Einrichten (Verbindung, Karten, Design, Dashboards),
+  // hinten der Betrieb (Update, Einstellungen, Status, Live-Ansicht). Was man einmal macht,
+  // steht vorne; was man immer wieder aufmacht, hinten -- dort ist der Weg mit dem Daumen kurz.
+  //
+  // Das Markup in den Seiten bleibt als Rückfall, falls dieses Skript nicht lädt: Eine Leiste
+  // in falscher Reihenfolge ist immer noch eine Leiste, eine leere ist eine Sackgasse.
+  const SEITEN = [
+    ['index.html', 'Verbindung', ''],
+    ['editor.html', 'Karten', ''],
+    ['design-import.html', 'Design-Import', ''],
+    ['dashboards.html', 'Unterdashboards', ''],
+    ['update.html', 'Update', ''],
+    ['theme.html', 'Einstellungen', ''],
+    ['status.html', 'Status', 'Läuft alles? Bildschirm, Verbindung, Schlaf-Fristen, Akku, Protokoll'],
+    ['/live', 'Live-Ansicht', 'Dieselbe Anzeige wie auf der Wand – hier bedienbar']
+  ];
+
+  const reiter = document.querySelector('.hawall-nav-links');
+  if (reiter) {
+    // Vorhandene Anker werden WIEDERVERWENDET, nicht neu gebaut: So bleibt erhalten, was eine
+    // Seite an ihrem Link besonders gesetzt hat.
+    const da = new Map();
+    reiter.querySelectorAll('a').forEach(a => da.set(a.getAttribute('href'), a));
+
+    const fragment = document.createDocumentFragment();
+    for (const [href, text, titel] of SEITEN) {
+      const a = da.get(href) || document.createElement('a');
+      da.delete(href);
+      a.href = href;
+      a.textContent = text;
+      if (titel) a.title = titel;
+      a.classList.toggle('active', href === '/live' ? location.pathname === '/live' : href === current);
+      fragment.appendChild(a);
+    }
+    // Was die Seite sonst noch in der Leiste hatte, bleibt -- hinten, damit die feste
+    // Reihenfolge davon unberührt ist.
+    da.forEach(a => fragment.appendChild(a));
+
+    reiter.textContent = '';
+    reiter.appendChild(fragment);
   }
 
   // --- Akkustand des Panels ---------------------------------------------------------------

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HA Wall Eurasburg – Status</title>
+<link rel="icon" href="/shared/marke.png">
+<link rel="stylesheet" href="/shared/nav.css">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* Eigener Block statt style.css: Diese Muster braucht nur diese Seite, und style.css ist
+     schon die längste Datei der Oberfläche. Farben und Radien kommen aus denselben Tokens. */
+
+  /* Das Urteil. Es steht ganz oben und ist das Einzige, was man aus drei Metern lesen soll --
+     die Einzelwerte liest man erst, wenn es nicht grün ist. */
+  .urteil {
+    max-width: 760px; margin: 0 auto 1.4rem; border-radius: 20px; padding: 1.6rem 1.8rem;
+    border: 1px solid var(--card-border); background: var(--surface);
+    display: flex; align-items: center; gap: 1.2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.35);
+    border-left: 5px solid var(--muted);
+  }
+  .urteil.ok        { border-left-color: #7fd68a; }
+  .urteil.hinweis   { border-left-color: #ffc76b; }
+  .urteil.fehler    { border-left-color: #ff8a8a; }
+  .urteil.unbekannt { border-left-color: var(--muted); }
+  .urteil-zeichen { font-size: 2.1rem; line-height: 1; flex-shrink: 0; }
+  .urteil-text { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.2px; }
+  .urteil-unter { font-size: 0.86rem; color: var(--muted); margin-top: 0.25rem; }
+
+  .status-karte {
+    max-width: 760px; margin: 0 auto 1.2rem; background: var(--surface); border-radius: 20px;
+    padding: 1.4rem 1.8rem; border: 1px solid var(--card-border);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.35);
+  }
+  .status-karte h2 {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 0.9rem; font-weight: 600;
+  }
+
+  .zeile { display: flex; align-items: flex-start; gap: 0.85rem; padding: 0.7rem 0; }
+  .zeile + .zeile { border-top: 1px solid var(--card-border); }
+  .punkt {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 0.45rem;
+    background: var(--muted);
+  }
+  .punkt.ok        { background: #7fd68a; }
+  .punkt.hinweis   { background: #ffc76b; }
+  .punkt.fehler    { background: #ff8a8a; box-shadow: 0 0 0 3px rgba(255,138,138,0.16); }
+  .punkt.unbekannt { background: #4a4b52; }
+  .zeile-text { flex: 1; min-width: 0; }
+  .zeile-titel { font-size: 0.92rem; font-weight: 600; }
+  .zeile-wert  { font-size: 0.92rem; color: var(--text); }
+  .zeile-erkl  { font-size: 0.82rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.5; }
+  .zeile-kopf  { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+
+  /* Die Warnungen aus dem Protokoll: Text, wie er dort steht. Kein Umformatieren -- wer hier
+     liest, sucht genau die Zeile, die er im Protokoll wiederfinden will. */
+  /* Umbrechen statt seitwaerts scrollen: Diese Seite wird auf dem Handy gelesen, und eine
+     Protokollzeile, deren Ende hinter dem rechten Rand liegt, ist genau die, die man sucht. */
+  .warnungen { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.76rem; line-height: 1.7; color: var(--muted);
+    background: var(--bg); border-radius: 12px; padding: 0.9rem 1.1rem;
+    white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+  .warnungen .warn { color: #ffc76b; }
+  .warnungen .err  { color: #ff8a8a; }
+
+  .status-fuss { max-width: 760px; margin: 0 auto; display: flex; gap: 0.6rem;
+    align-items: center; flex-wrap: wrap; }
+  .status-fuss button { max-width: 220px; }
+  .status-fuss .stand { font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+  <nav class="hawall-nav">
+    <div class="hawall-nav-brand"><img class="hawall-logo" src="/shared/marke.png" alt="" width="26" height="26"> HA Wall Eurasburg</div>
+    <div class="hawall-nav-links">
+      <a href="index.html">Verbindung</a>
+      <a href="editor.html">Karten</a>
+      <a href="design-import.html">Design-Import</a>
+      <a href="dashboards.html">Unterdashboards</a>
+      <a href="update.html">Update</a>
+      <a href="theme.html">Einstellungen</a>
+    </div>
+  </nav>
+  <div class="page-content">
+
+    <div class="urteil" id="urteil">
+      <div class="urteil-zeichen" id="urteilZeichen">…</div>
+      <div>
+        <div class="urteil-text" id="urteilText">Status wird geladen</div>
+        <div class="urteil-unter" id="urteilUnter"></div>
+      </div>
+    </div>
+
+    <div class="status-karte">
+      <h2>Prüfungen</h2>
+      <div id="liste"></div>
+    </div>
+
+    <div class="status-karte" id="warnKarte" hidden>
+      <h2>Zuletzt im Protokoll</h2>
+      <pre class="warnungen" id="warnungen"></pre>
+      <p class="hint-text">Neueste oben. Vollständig liegt es auf dem Gerät als
+        <code>panelsteuerung.log</code>.</p>
+    </div>
+
+    <div class="status-karte" id="netzKarte">
+      <h2>Erreichbarkeit</h2>
+      <div id="netz"></div>
+    </div>
+
+    <div class="status-karte">
+      <h2>Vor Ort eingreifen</h2>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+        <button id="panelPauseBtn" style="max-width:240px;">30 Minuten pausieren</button>
+        <button id="panelResumeBtn" style="max-width:240px;">Pause beenden</button>
+      </div>
+      <p class="hint-text">Pausieren hält den Bildschirm an, damit du das Gerät bedienen kannst –
+        die Pause endet von selbst.</p>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1.2rem;">
+        <button id="panelWartungBtn" style="max-width:240px;">Taskleiste einblenden</button>
+        <button id="panelTaskleisteAusBtn" style="max-width:240px;">Taskleiste ausblenden</button>
+      </div>
+      <p class="hint-text">Die <strong>Windows-Taskleiste</strong> ist im Betrieb nicht nur
+        zugedeckt, sondern ausgeblendet – auch eine Wischgeste vom Rand holt sie nicht hervor.
+        Einblenden gilt <strong>5 Minuten</strong> und pausiert dabei den Bildschirm; eine
+        Taskleiste auf einem Panel, das sich in fünf Sekunden abschaltet, nützt nichts. Das
+        Fenster verlässt dafür kurz den Kiosk-Modus und kehrt von selbst zurück.</p>
+      <p class="hint-text">Vor Ort geht das auch ohne Handy: fünfmal schnell in die
+        <strong>obere linke Ecke</strong> des Displays tippen, oder <strong>Strg+Alt+W</strong>
+        drücken. <strong>Strg+Alt+Q</strong> beendet die App und gibt die Taskleiste dauerhaft
+        zurück.</p>
+      <p id="aktionErgebnis" class="result"></p>
+    </div>
+
+    <div class="status-fuss">
+      <button id="neuBtn">Neu prüfen</button>
+      <span class="stand" id="stand"></span>
+    </div>
+
+  </div>
+  <script src="/shared/nav.js"></script>
+  <script src="status.js"></script>
+</body>
+</html>

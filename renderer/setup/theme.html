@@ -14,10 +14,10 @@
     <div class="hawall-nav-links">
       <a href="index.html">Verbindung</a>
       <a href="editor.html">Karten</a>
-      <a href="theme.html">Einstellungen</a>
       <a href="design-import.html">Design-Import</a>
       <a href="dashboards.html">Unterdashboards</a>
       <a href="update.html">Update</a>
+      <a href="theme.html">Einstellungen</a>
     </div>
   </nav>
   <div class="page-content">
@@ -229,42 +229,16 @@
     <details class="einstellungsblock">
       <summary>
         <span class="eb-titel">Panel</span>
-        <span class="eb-unter">Zustand, Pause und Wartung</span>
+        <span class="eb-unter">Wachhalten</span>
       </summary>
       <div class="eb-inhalt">
-    <div id="panelStatus" class="note" style="line-height:1.7;">– wird geladen –</div>
-
-    <label style="margin-top:1.2rem;"><input type="checkbox" id="systemWachhalten" style="width:auto; margin-right:0.5rem;">Gerät wach halten, auch wenn das Panel aus ist</label>
-    <p class="hint-text">Ab Werk an. Ohne das legt Windows beim Abschalten des Panels das
-      <strong>ganze Gerät</strong> schlafen – diese Seite ist dann nicht mehr erreichbar, bis
-      jemand das Panel berührt.</p>
-    <p class="hint-text"><strong>Am Stromnetz</strong> kannst du es abschalten: Das Surface
-      beherrscht „Standby mit verbundenem Netzwerk“, die Seite bleibt dann auch im Schlaf
-      erreichbar und das Gerät braucht weniger Strom. <strong>Am Akku</strong> nicht: Dort
-      trennt Windows im Schlaf das WLAN, und ohne diesen Haken ist nachts niemand zu Hause.</p>
-    <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.8rem;">
-      <button id="panelPauseBtn" style="max-width:260px;">30 Minuten pausieren</button>
-      <button id="panelResumeBtn" style="max-width:260px;">Pause beenden</button>
-    </div>
-    <p class="hint-text">Pausieren hält den Bildschirm an, damit du das Gerät bedienen kannst –
-      die Pause endet von selbst.</p>
-
-    <h3 style="margin-top:1.6rem;">Wartung: an Windows kommen</h3>
-    <p class="hint-text">Die <strong>Windows-Taskleiste</strong> ist im normalen Betrieb nicht nur
-      zugedeckt, sondern ausgeblendet – auch eine Wischgeste vom Rand holt sie nicht hervor.
-      Sonst steht auf der Wand irgendwann ein Startmenü, weil jemand im Vorbeigehen die Wand
-      gestreift hat.</p>
-    <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.8rem;">
-      <button id="panelWartungBtn" style="max-width:260px;">Taskleiste einblenden</button>
-      <button id="panelTaskleisteAusBtn" style="max-width:260px;">Taskleiste ausblenden</button>
-    </div>
-    <p class="hint-text">Blendet die Taskleiste für <strong>5 Minuten</strong> ein und pausiert
-      dabei den Bildschirm – eine Taskleiste auf einem Panel, das sich in fünf Sekunden
-      abschaltet, nützt nichts. Das Fenster verlässt dafür kurz den Kiosk-Modus und kehrt danach
-      von selbst zurück. Vor Ort geht das auch ohne Handy: fünfmal schnell in die
-      <strong>obere linke Ecke</strong> des Displays tippen, oder <strong>Strg+Alt+W</strong>
-      drücken, falls eine Tastatur angeschlossen ist. <strong>Strg+Alt+Q</strong> beendet die App
-      und gibt die Taskleiste dauerhaft zurück.</p>
+    <label><input type="checkbox" id="systemWachhalten" style="width:auto; margin-right:0.5rem;">Gerät wach halten, auch wenn das Panel aus ist</label>
+    <p class="hint-text">Ab Werk an. Es fordert bei Windows an, dass das System nicht in den
+      Leerlaufschlaf geht, während der Bildschirm abgeschaltet ist.</p>
+    <p class="hint-text">Dass das Gerät nachts erreichbar bleibt, hängt allerdings an etwas
+      anderem: den <strong>Schlaf-Fristen</strong> des Energieschemas. Die setzt die App selbst
+      auf „nie“, und ob es geklappt hat, steht auf der <a href="status.html">Statusseite</a> –
+      dort liegen auch Zustand, Pause und Wartung.</p>
       </div>
     </details>
 

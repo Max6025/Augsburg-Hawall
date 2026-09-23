@@ -1,5 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen, session, powerSaveBlocker, powerMonitor } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 const { exec } = require('child_process');
 const Store = require('electron-store');
@@ -15,6 +16,41 @@ if (!gotLock) {
   app.quit();
 }
 
+// --- Umzug des Konfigurationsordners ---------------------------------------------------------
+//
+// MUSS VOR `new Store(...)` LAUFEN. Der Speicher liest seine Datei beim Anlegen; laeuft der
+// Umzug danach, hat die App schon einen leeren Zustand gesehen und ihn beim ersten Schreiben
+// festgeschrieben.
+//
+// Anlass: Beim Umbenennen des Projekts am 2026-09-23 wurde `productName` von
+// "Augsburg Wall Display" auf "Hawall Eurasburg" geaendert. Daraus leitet Electron
+// `app.getPath('userData')` ab, also %APPDATA%\<productName> -- und dort liegen der
+// Home-Assistant-Zugang, alle Dashboards, das Design und die hochgeladenen Bilder. Ohne diesen
+// Umzug startet die App nach dem Update wie frisch installiert: keine Verbindung, keine
+// Dashboards, eine leere Wand. Von aussen sieht das wie Datenverlust aus, und es waere auch
+// einer -- die alten Dateien lagen noch da, nur hat niemand mehr hingesehen.
+//
+// Einmalig und ohne Merker: Gibt es im neuen Ordner schon eine config.json, ist der Umzug
+// erledigt. Ein Merker waere hier die falsche Wahl, denn er muesste im Speicher liegen -- also
+// in genau der Datei, um deren Existenz es geht.
+//
+// Kopiert, nicht verschoben. Wer nach dem Update auf die alte Fassung zurueckgeht, findet
+// seinen Stand dort unveraendert vor.
+function konfigurationUebernehmen() {
+  try {
+    const neu = app.getPath('userData');
+    const alt = path.join(app.getPath('appData'), 'Augsburg Wall Display');
+    if (alt === neu || !fs.existsSync(alt)) return null;
+    if (fs.existsSync(path.join(neu, 'config.json'))) return null;
+    fs.mkdirSync(neu, { recursive: true });
+    fs.cpSync(alt, neu, { recursive: true, force: false, errorOnExist: false });
+    return { alt, neu };
+  } catch (e) {
+    return { fehler: String(e.message || e) };
+  }
+}
+const umzug = konfigurationUebernehmen();
+
 const store = new Store({ name: 'config' });
 // Bewusst ein anderer Port als bei HA Wall Display (8787), damit beide Anwendungen auf
 // demselben Gerät nebeneinander laufen können -- siehe docs/adr/0001-...
@@ -29,6 +65,11 @@ const lastKnownVersion = store.get('lastKnownVersion');
 const currentVersion = app.getVersion();
 const isPostUpdateLaunch = !!lastKnownVersion && lastKnownVersion !== currentVersion;
 store.set('lastKnownVersion', currentVersion);
+
+// Wann dieser Programmlauf begonnen hat. Fuer die Statusseite: Nach einem Windows-Neustart
+// startet die App erst mit der Anmeldung -- eine kurze Laufzeit bei langer Geraetelaufzeit
+// ist genau der Hinweis, den man dann braucht.
+const GESTARTET_AM = Date.now();
 
 let mainWindow = null;
 // `geprueft` trennt "noch nicht nachgesehen" von "nachgesehen, nichts da".
@@ -438,6 +479,15 @@ app.whenReady().then(() => {
   });
   controller.start();
 
+  // Erst hier protokollierbar: Der Umzug lief, bevor es einen Controller gab.
+  if (umzug && umzug.fehler) {
+    controller.log('warn', `Konfiguration konnte nicht uebernommen werden: ${umzug.fehler}. `
+      + 'Die App startet mit leerem Zustand -- der alte Ordner liegt unveraendert weiter da.');
+  } else if (umzug) {
+    controller.log('info', `Konfiguration uebernommen: "${umzug.alt}" -> "${umzug.neu}". `
+      + 'Der alte Ordner bleibt als Sicherung liegen.');
+  }
+
   // Die eigentliche Loesung, und sie steht hier in einer Zeile: Ohne diese Fristen schlaeft das
   // Geraet in derselben Sekunde ein, in der die Nachtsperre das Panel abschaltet -- gemessen am
   // 2026-09-23, siehe den Kopf von control/energie.js.
@@ -490,7 +540,13 @@ app.whenReady().then(() => {
       return null;
     }
   };
-  startServer({ port: SETUP_PORT, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize });
+  startServer({
+    port: SETUP_PORT, store, onConfigSaved, getLocalIps, updater, controller, getPanelSize,
+    // Fuer die Statusseite: Womit der Stand der Windows-Sperren zu vergleichen ist, und
+    // seit wann die App laeuft. Beides weiss nur der Hauptprozess.
+    sperrenSoll: KIOSK_SPERREN_STAND,
+    gestartetAm: GESTARTET_AM
+  });
   applyWindowsKioskLockdown();
 
   // Auto-Start bei Windows-Anmeldung aktivieren

@@ -80,7 +80,6 @@ async function load() {
     ? 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.'
     : 'Es ist noch KEIN Zugangscode gesetzt – diese Seite ist derzeit für jeden im Netzwerk offen.';
 
-  refreshPanelStatus();
 }
 
 // Verkleinert ein gewaehltes Bild im Browser, bevor es hochgeladen wird -- ein Handyfoto mit
@@ -106,65 +105,6 @@ function bildVerkleinern(datei, maxKante) {
   });
 }
 
-function fmt(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleString('de-DE', {
-    weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-  });
-}
-
-const REASON_TEXT = {
-  'karenzzeit': 'Karenzzeit nach dem Start – es wird vorerst nicht abgeschaltet.',
-  'pause': 'Pausiert – der Bildschirm bleibt an.',
-  'nachtsperre': 'Nachtsperre aktiv – der Bildschirm ist wirklich aus (Hintergrundbeleuchtung aus). Berühren weckt ihn für zwei Minuten.',
-  'dauerbetrieb': 'Dauerbetrieb – der Bildschirm ist an. Was darauf zu sehen ist, entscheidet der Bildschirmschoner.'
-};
-
-async function refreshPanelStatus() {
-  const el = $('panelStatus');
-  if (!el) return;
-  const res = await fetch('/api/panel/state').then(r => r.json()).catch(() => ({ ok: false }));
-  if (!res.ok || !res.state) { el.textContent = 'Status nicht verfügbar.'; return; }
-  const s = res.state;
-  const lines = [];
-  lines.push(`<strong>Bildschirm ist ${s.panelOn ? 'an' : 'aus'}.</strong> ${REASON_TEXT[s.reason] || ''}`);
-  if (s.nightModeEnabled) lines.push(`Nachtsperre: ${s.nightStart} bis ${s.nightEnd}.`);
-  else lines.push('Nachtsperre ist aus – das Panel läuft durch.');
-  if (s.pausedUntil) lines.push(`Pause läuft bis ${fmt(new Date(s.pausedUntil).toISOString())}.`);
-  lines.push(s.taskleisteBis
-    ? `<strong>Wartung läuft:</strong> Taskleiste sichtbar bis ${fmt(new Date(s.taskleisteBis).toISOString())}, das Fenster ist aus dem Kiosk-Modus.`
-    : 'Taskleiste ist ausgeblendet – auch gegen Wischgesten vom Rand.');
-  // Gewünscht und tatsächlich gestellt auseinanderhalten: Ein Haken, der nichts tut, ist
-  // schlimmer als ein Haken, der aus ist -- man verlässt sich darauf.
-  if (!s.systemWachhalten) {
-    lines.push('Das Gerät darf schlafen – bei ausgeschaltetem Panel ist diese Seite nicht erreichbar.');
-  } else if (s.systemWachGestellt) {
-    lines.push('Das Gerät wird wachgehalten – diese Seite bleibt auch bei ausgeschaltetem Panel erreichbar.');
-  } else {
-    lines.push('<strong>Wachhalten ist eingeschaltet, greift aber NICHT.</strong> Die Anforderung '
-      + 'an Windows konnte nicht gestellt werden – Einzelheiten stehen im Protokoll. Bei '
-      + 'ausgeschaltetem Panel schläft das Gerät und diese Seite ist nicht erreichbar.');
-  }
-  // Der eigentliche Grund, warum das Gerät nachts erreichbar ist oder nicht: Ohne diese
-  // Fristen schläft es in derselben Sekunde ein, in der die Nachtsperre das Panel abschaltet.
-  const z = s.schlafZeitgeber;
-  if (z && z.ac === 0 && z.dc === 0) {
-    lines.push('Schlaf-Fristen stehen auf „nie" – das Gerät schläft nicht ein, wenn der '
-      + 'Bildschirm abgeschaltet wird.');
-  } else if (z) {
-    const min = (sek) => (sek ? Math.round(sek / 60) + ' Min.' : 'nie');
-    lines.push(`<strong>Achtung: Das Gerät darf einschlafen.</strong> Schlaf-Frist am Netz: `
-      + `${min(z.ac)}, am Akku: ${min(z.dc)}. Sobald die Nachtsperre den Bildschirm abschaltet, `
-      + 'geht das Gerät schlafen und diese Seite ist weg. Ein Neustart der App setzt die Fristen '
-      + 'neu – Einzelheiten im Protokoll.');
-  }
-  if (s.letzteSchlafluecke) {
-    const minuten = Math.round(s.letzteSchlafluecke.dauerMs / 60000);
-    lines.push(`<strong>Das Gerät hat geschlafen:</strong> ${minuten > 0 ? minuten + ' Min.' : Math.round(s.letzteSchlafluecke.dauerMs / 1000) + ' s'} `
-      + `bis ${fmt(new Date(s.letzteSchlafluecke.ende).toISOString())}. So lange war diese Seite nicht erreichbar.`);
-  }
-  el.innerHTML = lines.join('<br>');
-}
 
 // --- Das eigene Hintergrundbild des Schoners ---------------------------------------------------
 //
@@ -225,28 +165,6 @@ $('schonerBildWeg').addEventListener('click', async () => {
   schonerBildAnzeigen(0);
   $('saveAllResult').className = 'result';
   $('saveAllResult').textContent = 'Bild entfernt. Ohne Bild zeigt der Schoner wieder die Farbwolken.';
-});
-
-$('panelPauseBtn').addEventListener('click', async () => {
-  await fetch('/api/panel/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshPanelStatus();
-});
-
-$('panelResumeBtn').addEventListener('click', async () => {
-  await fetch('/api/panel/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshPanelStatus();
-});
-
-// Der erste von drei Wegen zur Taskleiste -- der, den man vom Handy aus findet, waehrend man
-// davorsteht. Die anderen beiden liegen am Geraet selbst (Tipp-Geste, Strg+Alt+W).
-$('panelWartungBtn').addEventListener('click', async () => {
-  await fetch('/api/panel/wartung', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshPanelStatus();
-});
-
-$('panelTaskleisteAusBtn').addEventListener('click', async () => {
-  await fetch('/api/panel/taskleiste-aus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  refreshPanelStatus();
 });
 
 // --- Speichern -------------------------------------------------------------------------------
@@ -319,7 +237,6 @@ async function speichereAlles() {
         $('setupCode').value = '';
         $('codeState').textContent = 'Es ist ein Zugangscode gesetzt. Leer lassen, um ihn nicht zu ändern.';
       }
-      setTimeout(refreshPanelStatus, 1200); // dem sofortigen Neuabruf kurz Zeit geben
     } else {
       el.className = 'result err';
       el.textContent = 'Fehler: ' + data.error;
@@ -343,8 +260,6 @@ document.addEventListener('keydown', (e) => {
 });
 
 load();
-// Status live halten, solange die Seite offen ist
-setInterval(refreshPanelStatus, 10000);
 
 // --- Warnton auf der Wand ausprobieren --------------------------------------------------------
 //

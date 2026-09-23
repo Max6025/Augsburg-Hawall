@@ -462,12 +462,15 @@ test('Die Tipp-Geste im Dashboard nimmt denselben Weg', () => {
     'die Tipp-Geste pausiert nur und laesst niemanden an Windows');
 });
 
-test('Die Einstellungsseite hat ihren Knopf und ihre Route', () => {
+test('Der Weg aus dem Netz hat seinen Knopf und seine Route', () => {
+  // Seit 1.0.11 auf der STATUSSEITE, nicht mehr unter Einstellungen: Eine Einstellung gilt bis
+  // auf Widerruf, das hier sind Handlungen fuer genau jetzt -- und wer nachsieht, ob alles
+  // laeuft, ist derjenige, der eingreifen will.
   const fs = require('node:fs');
   const path = require('node:path');
   const lies = (...t) => fs.readFileSync(path.join(__dirname, '..', ...t), 'utf8');
-  assert.match(lies('renderer', 'setup', 'theme.html'), /id="panelWartungBtn"/);
-  assert.match(lies('renderer', 'setup', 'theme.js'), /\/api\/panel\/wartung/);
+  assert.match(lies('renderer', 'setup', 'status.html'), /id="panelWartungBtn"/);
+  assert.match(lies('renderer', 'setup', 'status.js'), /\/api\/panel\/wartung/);
   assert.match(lies('server', 'setup-server.js'), /\/api\/panel\/wartung/);
   assert.match(lies('server', 'setup-server.js'), /\/api\/panel\/taskleiste-aus/);
 });
