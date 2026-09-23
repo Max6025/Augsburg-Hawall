@@ -6,6 +6,11 @@ function describe(state) {
   if (state.downloaded) return `Update ${state.version} heruntergeladen – wird installiert, die App startet gleich neu.`;
   if (state.checking) return 'Suche nach Updates...';
   if (state.available) return `Update ${state.version} verfügbar – wird heruntergeladen (${state.progress || 0}%).`;
+  // "Noch nie nachgesehen" ist NICHT dasselbe wie "nachgesehen, nichts da". Vorher stand hier
+  // für beides „Diese Version ist aktuell" – eine Behauptung ohne Grundlage, und zwar in genau
+  // dem Zustand, in dem man die Seite normalerweise öffnet: Die App fragt GitHub von sich aus
+  // nie, also ist beim Öffnen noch nichts geprüft.
+  if (!state.geprueft) return 'Noch nicht nachgesehen – ein Druck fragt GitHub.';
   return 'Kein Update verfügbar. Diese Version ist aktuell.';
 }
 

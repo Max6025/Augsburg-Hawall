@@ -524,3 +524,35 @@ test('Der Zustand trennt gewuenschtes von gestelltem Wachhalten', () => {
   assert.strictEqual(c.state.systemWach, true);
   assert.strictEqual(c.state.systemWachGestellt, false, 'gestellt wurde es nicht');
 });
+
+// --- "Noch nicht nachgesehen" ist keine Auskunft ueber die Aktualitaet ------------------------
+//
+// Gemeldet am 2026-09-23: GitHub hatte 1.0.10, das Geraet lief auf 1.0.9, und die Update-Seite
+// schrieb "Kein Update verfuegbar. Diese Version ist aktuell." Die Suche selbst war in Ordnung
+// -- ueber die API ausgeloest fand sie 1.0.10 und lud es herunter. Falsch war die ANZEIGE: Der
+// Ausgangszustand "noch nie gesucht" sah genauso aus wie "gesucht und nichts gefunden".
+//
+// Das ist der Normalzustand dieser Seite, denn die App fragt GitHub von sich aus nie.
+
+test('Der Updater-Zustand trennt "nicht geprueft" von "nichts gefunden"', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /geprueft: false/, 'der Anfangszustand kennt das Feld nicht');
+  // Jedes der drei Ereignisse, die eine Suche beenden, muss es setzen -- sonst bleibt die
+  // Seite in genau einem Fall bei der falschen Aussage stehen.
+  const treffer = main.match(/geprueft: true/g) || [];
+  assert.ok(treffer.length >= 3,
+    `update-available, update-not-available und error muessen es setzen (gefunden: ${treffer.length})`);
+
+  const seite = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'setup', 'update.js'), 'utf8');
+  assert.match(seite, /!state\.geprueft/, 'die Seite unterscheidet die Faelle nicht');
+  // Auf die RUECKGABE-Zeile pruefen, nicht auf den Satz irgendwo im Text -- der steht auch im
+  // Kommentar darueber, und danach waere die Reihenfolge immer "falsch".
+  const vorher = seite.indexOf('!state.geprueft');
+  const nachher = seite.indexOf("return 'Kein Update verf");
+  assert.notStrictEqual(vorher, -1, 'die Seite unterscheidet die Faelle nicht');
+  assert.notStrictEqual(nachher, -1, 'die Rueckgabe wurde umbenannt -- Test nachziehen');
+  assert.ok(vorher < nachher,
+    'die Pruefung muss VOR der Aktualitaets-Behauptung stehen, sonst wirkt sie nicht');
+});

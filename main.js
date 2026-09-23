@@ -31,7 +31,16 @@ const isPostUpdateLaunch = !!lastKnownVersion && lastKnownVersion !== currentVer
 store.set('lastKnownVersion', currentVersion);
 
 let mainWindow = null;
-let updateState = { checking: false, available: false, downloaded: false, version: null, progress: 0, error: null };
+// `geprueft` trennt "noch nicht nachgesehen" von "nachgesehen, nichts da".
+//
+// Ohne dieses Feld sind beide Zustaende ununterscheidbar, und die Update-Seite schrieb
+// "Diese Version ist aktuell", bevor ueberhaupt jemand GitHub gefragt hatte. Das ist eine
+// Behauptung ohne Grundlage -- und weil die App von sich aus NIE nachsieht (kein Abruf beim
+// Start, kein Intervall), ist es der Zustand, in dem man die Seite normalerweise oeffnet.
+let updateState = {
+  geprueft: false, checking: false, available: false, downloaded: false,
+  version: null, progress: 0, error: null
+};
 
 // GitHub wird ausschliesslich auf ausdruecklichen Wunsch gefragt: kein Abruf beim Start, kein
 // Intervall im Hintergrund. Ausgeloest wird eine Suche nur ueber "Nach Updates suchen" in der
@@ -49,10 +58,10 @@ autoUpdater.on('checking-for-update', () => {
   updateState = { ...updateState, checking: true, error: null };
 });
 autoUpdater.on('update-available', (info) => {
-  updateState = { ...updateState, checking: false, available: true, version: info.version };
+  updateState = { ...updateState, geprueft: true, checking: false, available: true, version: info.version };
 });
 autoUpdater.on('update-not-available', () => {
-  updateState = { ...updateState, checking: false, available: false, downloaded: false };
+  updateState = { ...updateState, geprueft: true, checking: false, available: false, downloaded: false };
 });
 autoUpdater.on('download-progress', (p) => {
   updateState = { ...updateState, progress: Math.round(p.percent) };
@@ -65,7 +74,7 @@ autoUpdater.on('update-downloaded', (info) => {
   }
 });
 autoUpdater.on('error', (err) => {
-  updateState = { ...updateState, checking: false, error: String((err && err.message) || err) };
+  updateState = { ...updateState, geprueft: true, checking: false, error: String((err && err.message) || err) };
 });
 
 const updater = {
