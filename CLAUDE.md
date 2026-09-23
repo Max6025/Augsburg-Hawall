@@ -423,6 +423,27 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   fielen damit heraus, und ausgerechnet die Fläche, die am längsten zu sehen ist, zeigte Werte,
   die sich stundenlang nicht rührten. `schonerLayout` gehört deshalb mit in die Menge, und eine
   Live-Meldung baut bei liegendem Schoner **ihn** neu statt des verdeckten Dashboards.
+- **Die Unterleiste teilte sich auf einem Tracker-Dashboard die Höhe mit der Landkarte — und
+  stand oben.** `.unterleiste` hat `flex: 1`, die Tracker-Ansicht auch, und im DOM stand die
+  Leiste **vor** der Karte. Auf dem Gerät sah das so aus: eine bildschirmhohe Uhr über einer
+  halb so großen Landkarte. Gemessen mit `.scratch/tracker/probe.html`: Streifen **421 px oben**,
+  Karte 385 px darunter. Jetzt steht die Leiste im DOM **nach** der Tracker-Ansicht und bekommt
+  über `body.tracker-an` eine feste, schmale Höhe — 94 px unten, Karte 644 px.
+  Zwei Dinge hängen daran: `render()` läuft auf einem Tracker-Dashboard **nicht**, die Leiste
+  trägt also noch die Karte des vorher gezeigten Dashboards (deshalb die Regel für `:empty` —
+  sonst reserviert eine leere Leiste 11vh für nichts). Und die Probe misst nur richtig, wenn
+  das **Browserfenster** 1280×854 ist: `vh` rechnet auf den Viewport, nicht auf einen Kasten
+  darin — der erste Anlauf zeigte 21 px Knopfhöhe statt 44.
+- **Die Zeitraum-Knöpfe des Trackers waren 23 px hoch.** Mit `1.2vh` Schrift und `0.6vh`
+  Polsterung sind das auf dem Panel keine drei Millimeter — mit dem Finger trifft man das nicht,
+  und danebengetippt heißt dort „anderer Zeitraum geladen". Jetzt 44 px und eine Mindesthöhe,
+  die einer Fingerkuppe entspricht. Dazu **„Verlauf aus"**: Eine Sieben-Tage-Linie verdeckt
+  genau die Auskunft, um die es geht — wo das Tier *jetzt* ist —, und der Kartenausschnitt bleibt
+  auf der ganzen Woche stehen. Der Knopf erscheint erst, wenn wirklich eine Linie liegt, und
+  ein zweites Tippen auf den aktiven Zeitraum tut dasselbe.
+  Dabei aufgefallen: `trackerActiveRangeBtn` war **beides** — „schon verdrahtet"-Merker und
+  aktiver Zeitraum. Wer den Verlauf ausschaltet, hat keinen aktiven mehr, und beim nächsten
+  Aufruf wären alle Knöpfe ein zweites Mal verdrahtet worden: ein Tippen, zwei Abrufe.
 - **Die Kartenfläche des Schoners hat dasselbe Raster wie der Editor: 4 Spalten, 6 Zeilen.**
   Die erste Fassung hatte 6×6 (vom Abschiedsschirm der Vorlage übernommen); am Gerät nahmen die
   Karten dann nur zwei Drittel der Breite ein. Die Karten kommen aus

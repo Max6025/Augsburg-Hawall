@@ -23,9 +23,6 @@
         </div>
       </header>
       <div class="grid" id="grid"></div>
-      <!-- Der Streifen, den das 6-Zeilen-Raster unten uebrig laesst. Er war bisher einfach
-           leer; jetzt kann dort eine Karte stehen -- gedacht fuer Uhrzeit und Datum. -->
-      <div class="unterleiste" id="unterleiste"></div>
       <div class="tracker-view" id="trackerView" style="display:none;">
         <div class="tracker-toolbar">
           <div class="tracker-battery" id="trackerBattery"></div>
@@ -35,6 +32,10 @@
             <button data-range="today">Heute</button>
             <button data-range="yesterday">Gestern</button>
             <button data-range="7d">7 Tage</button>
+            <!-- Ein Verlauf, den man nicht wieder wegbekommt, verdeckt genau das, was man
+                 danach sehen will: wo das Tier JETZT ist. Der Knopf erscheint erst, wenn
+                 wirklich eine Linie liegt -- ein Knopf ohne Wirkung ist schlimmer als keiner. -->
+            <button id="trackerClearHistory" class="tracker-aus" hidden>Verlauf aus</button>
           </div>
           <div class="tracker-custom-range">
             <input type="datetime-local" id="trackerFrom">
@@ -45,6 +46,13 @@
         </div>
         <div id="trackerMap"></div>
       </div>
+      <!-- Der Streifen, den das 6-Zeilen-Raster unten uebrig laesst. Er war bisher einfach
+           leer; jetzt kann dort eine Karte stehen -- gedacht fuer Uhrzeit und Datum.
+           STEHT ABSICHTLICH NACH der Tracker-Ansicht: Davor bekam er auf einem
+           Tracker-Dashboard sein `flex: 1` neben dem der Karte, teilte sich die Hoehe mit ihr
+           und stand OBEN -- eine bildschirmhohe Uhr ueber der Landkarte. Unten und schmal ist
+           er dieselbe Leiste wie auf jedem anderen Dashboard. -->
+      <div class="unterleiste" id="unterleiste"></div>
       <!-- Die Reiter-Leiste und die Fusszeile "Zuletzt aktualisiert" sind entfallen: beide
            standen dauerhaft am unteren Rand und nahmen Platz weg, den die Karten brauchen.
            Der Zeitstempel beantwortete ausserdem eine Frage, die niemand stellt -- solange
@@ -241,10 +249,13 @@ async function navigateTo(targetId) {
   if (dashInfo && dashInfo.type === 'tracker') {
     $('grid').style.display = 'none';
     $('trackerView').style.display = 'flex';
+    // Die Leiste darf sich hier NICHT die Hoehe mit der Karte teilen, siehe dashboard.css.
+    document.body.classList.add('tracker-an');
     await renderTrackerView(currentDashboardId);
   } else {
     $('trackerView').style.display = 'none';
     $('grid').style.display = 'grid';
+    document.body.classList.remove('tracker-an');
     await render();
   }
 }
@@ -256,6 +267,11 @@ let trackerMapInstance = null;
 let trackerMarker = null;
 let trackerPolyline = null;
 let trackerActiveRangeBtn = null;
+// Getrennt vom aktiven Knopf: Vorher diente `trackerActiveRangeBtn` als BEIDES -- als
+// "schon verdrahtet"-Merker und als aktiver Zeitraum. Wer den Verlauf wieder ausschaltet, hat
+// keinen aktiven Zeitraum mehr, und damit waeren beim naechsten Aufruf alle Knoepfe ein
+// zweites Mal verdrahtet worden: ein Tippen, zwei Abrufe.
+let trackerVerdrahtet = false;
 let trackerZoneLayers = [];
 
 function ensureTrackerMap() {
@@ -324,10 +340,17 @@ async function renderTrackerView(dashId) {
 
   // Voreinstellungen fuer den Verlaufs-Zeitraum -- einmalig verdrahten (Buttons bleiben ueber
   // mehrere Aufrufe hinweg dieselben DOM-Elemente).
-  if (!trackerActiveRangeBtn) {
-    document.querySelectorAll('#trackerRangeBtns button').forEach(btn => {
-      btn.addEventListener('click', () => loadTrackerHistory(entityId, btn.dataset.range, btn));
+  if (!trackerVerdrahtet) {
+    trackerVerdrahtet = true;
+    document.querySelectorAll('#trackerRangeBtns button[data-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Zweites Tippen auf denselben Zeitraum nimmt den Verlauf wieder weg. Das ist der
+        // Weg, den man von selbst findet -- der Knopf "Verlauf aus" ist der, den man sieht.
+        if (btn.classList.contains('active') && trackerPolyline) return trackerVerlaufAus();
+        loadTrackerHistory(entityId, btn.dataset.range, btn);
+      });
     });
+    $('trackerClearHistory').addEventListener('click', trackerVerlaufAus);
     $('trackerLoadCustom').addEventListener('click', () => {
       const from = $('trackerFrom').value, to = $('trackerTo').value;
       if (!from || !to) return;
@@ -363,10 +386,35 @@ async function loadTrackerHistory(entityId, range, btnEl, customStart, customEnd
   const data = await r.json();
   const map = ensureTrackerMap();
   if (trackerPolyline) { map.removeLayer(trackerPolyline); trackerPolyline = null; }
-  if (!data.ok || !data.points || !data.points.length) return;
+  if (!data.ok || !data.points || !data.points.length) {
+    verlaufKnopfAnpassen();
+    return;
+  }
   const latlngs = data.points.map(p => [p.lat, p.lon]);
   trackerPolyline = L.polyline(latlngs, { color: '#4f7cff', weight: 3 }).addTo(map);
   map.fitBounds(trackerPolyline.getBounds(), { padding: [30, 30] });
+  verlaufKnopfAnpassen();
+}
+
+/**
+ * Den Verlauf wieder wegnehmen.
+ *
+ * Ohne das verdeckt eine Sieben-Tage-Linie genau die Auskunft, um die es geht: wo das Tier
+ * JETZT ist. Und der Kartenausschnitt bleibt auf der gesamten Woche stehen -- man muss sich von
+ * Hand zurueckzoomen, auf einem Touch-Panel mit zwei Fingern.
+ */
+function trackerVerlaufAus() {
+  const map = ensureTrackerMap();
+  if (trackerPolyline) { map.removeLayer(trackerPolyline); trackerPolyline = null; }
+  document.querySelectorAll('#trackerRangeBtns button[data-range]').forEach(b => b.classList.remove('active'));
+  // Zurueck auf den Standort -- sonst schaut man weiter auf den Ausschnitt der ganzen Woche.
+  if (trackerMarker) map.setView(trackerMarker.getLatLng(), map.getZoom() > 1 ? map.getZoom() : 16);
+  verlaufKnopfAnpassen();
+}
+
+function verlaufKnopfAnpassen() {
+  const knopf = $('trackerClearHistory');
+  if (knopf) knopf.hidden = !trackerPolyline;
 }
 
 // Der Zeitraum ist jetzt eine Einstellung je Karte statt fest 24 Stunden. Der Zwischenspeicher

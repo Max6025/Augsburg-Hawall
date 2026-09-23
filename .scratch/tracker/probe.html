@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tracker-Probe</title>
+<!--
+  Die Tracker-Ansicht ohne Leaflet, ohne Home Assistant, ohne Geraet: dieselbe
+  dashboard.css, dieselbe Verschachtelung, dieselbe Panelgroesse (1280x854).
+
+  Geprueft werden zwei Dinge, die am Geraet gemeldet wurden:
+  1. Die Uhrzeitkarte stand OBEN und bildschirmhoch ueber der Landkarte. Sie gehoert unten in
+     den schmalen Streifen, wie auf jedem anderen Dashboard.
+  2. Die Zeitraum-Knoepfe waren mit dem Finger nicht zu treffen.
+
+  ?alt zeigt den Stand von vorher zum Vergleich.
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  html, body { margin: 0; }
+  /* KEINE feste Buehnengroesse: `vh` rechnet auf das BROWSERFENSTER, nicht auf einen Kasten
+     darin. Eine Probe in einem 1280x854-Kasten in einem 800x600-Fenster misst Knopfhoehen,
+     die es auf dem Geraet nicht gibt -- der erste Anlauf zeigte 21 px statt 45.
+     Also: Fenster auf 1280x854 stellen und die Buehne das ganze Fenster einnehmen lassen. */
+  #buehne { width: 100vw; height: 100vh; overflow: hidden; }
+  /* UNTEN, nicht oben: Oben lag sie genau ueber der Knopfleiste, die geprueft werden soll. */
+  .marke { position: fixed; z-index: 99; left: 0; bottom: 0; right: 0; background: #000c;
+    backdrop-filter: blur(4px); }
+  #trackerMap { background:
+    repeating-linear-gradient(45deg, #2a3348 0 12px, #313b52 12px 24px);
+    display: grid; place-items: center; color: #8fa3c8; font: 600 2vh system-ui; }
+  .marke { padding: 0.6rem 1rem; font: 600 13px system-ui; color: #9ab; }
+</style>
+<div class="marke" id="marke"></div>
+<div id="buehne">
+  <div class="app">
+    <div class="main">
+      <header class="statusbar"><div class="title" id="title">Sport</div></header>
+      <div class="grid" id="grid" style="display:none;"></div>
+      <div class="tracker-view" id="trackerView" style="display:flex;">
+        <div class="tracker-toolbar">
+          <div class="tracker-battery">🔋 82%</div>
+          <div class="tracker-range-btns" id="btns">
+            <button data-range="6h">6 Std</button>
+            <button data-range="24h" class="active">24 Std</button>
+            <button data-range="today">Heute</button>
+            <button data-range="yesterday">Gestern</button>
+            <button data-range="7d">7 Tage</button>
+            <button class="tracker-aus" id="aus">Verlauf aus</button>
+          </div>
+          <div class="tracker-custom-range">
+            <input type="datetime-local" value="2026-09-23T08:00">
+            <span>bis</span>
+            <input type="datetime-local" value="2026-09-23T14:00">
+            <button>Verlauf laden</button>
+          </div>
+        </div>
+        <div id="trackerMap">Landkarte</div>
+      </div>
+      <div class="unterleiste" id="unterleiste">
+        <div class="card type-clock">
+          <div class="clock-time">14:52</div>
+          <div class="clock-date">Mittwoch, 23. September</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const alt = new URLSearchParams(location.search).has('alt');
+  if (!alt) document.body.classList.add('tracker-an');
+  const b = document.getElementById('buehne');
+  if (alt) {
+    // Der Stand von vorher: Leiste VOR der Karte und mit flex:1.
+    const s = b.querySelector('.main');
+    s.insertBefore(document.getElementById('unterleiste'), document.getElementById('trackerView'));
+    document.getElementById('aus').hidden = true;
+    const r = document.createElement('style');
+    r.textContent = `.tracker-range-btns button, .tracker-custom-range button {
+      padding: 0.6vh 1.4vh !important; min-height: auto !important; font-size: 1.2vh !important; }
+      .tracker-range-btns { gap: 0.6vh !important; }
+      .tracker-custom-range input { font-size: 1.1vh !important; padding: 0.5vh 0.8vh !important;
+        min-height: auto !important; }`;
+    document.head.appendChild(r);
+  }
+  // In Pixeln nachmessen, statt es zu glauben. 9 mm sind auf diesem Panel rund 42 px.
+  const knopf = document.querySelector('#btns button');
+  const leiste = document.getElementById('unterleiste').getBoundingClientRect();
+  const karte = document.getElementById('trackerMap').getBoundingClientRect();
+  document.getElementById('marke').textContent =
+    (alt ? 'VORHER' : 'JETZT') + ` — Knopf ${Math.round(knopf.getBoundingClientRect().height)} px hoch, `
+    + `Schrift ${getComputedStyle(knopf).fontSize} · Streifen ${Math.round(leiste.height)} px `
+    + `(oben bei y=${Math.round(leiste.top)}), Karte ${Math.round(karte.height)} px `
+    + `(oben bei y=${Math.round(karte.top)})`;
+</script>

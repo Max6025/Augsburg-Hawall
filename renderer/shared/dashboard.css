@@ -712,16 +712,33 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 .tracker-toolbar { display: flex; align-items: center; gap: 1.2vh; flex-wrap: wrap; }
 .tracker-battery { font-size: 1.4vh; color: var(--muted); font-weight: 600; min-width: 6vh; }
 .tracker-battery.low { color: #ff8a8a; }
-.tracker-range-btns { display: flex; gap: 0.6vh; }
+/* Die Zeitraum-Knoepfe waren mit 1,2vh Schrift und 0,6vh Polsterung auf dem Panel keine
+   drei Millimeter hoch -- mit dem Finger trifft man das nicht, und danebengetippt heisst hier
+   "anderer Zeitraum geladen". Jetzt haben sie eine Mindesthoehe, die einer Fingerkuppe
+   entspricht (rund 9 mm), und lesbare Schrift. Dieselbe Groesse fuer den eigenen Zeitraum:
+   Zwei verschiedene Knopfgroessen in einer Leiste sehen aus wie ein Versehen. */
+.tracker-range-btns { display: flex; gap: 1vh; flex-wrap: wrap; }
 .tracker-range-btns button, .tracker-custom-range button {
-  border: 1px solid var(--card-border); border-radius: 999px; padding: 0.6vh 1.4vh; font-size: 1.2vh; font-weight: 600;
+  border: 1px solid var(--card-border); border-radius: 999px;
+  padding: 1.2vh 2.4vh; min-height: 5.2vh; font-size: 1.9vh; font-weight: 600;
   background: var(--panel2); color: var(--text); cursor: pointer; }
 .tracker-range-btns button.active { background: #4f7cff; color: #fff; border-color: transparent; }
-.tracker-custom-range { display: flex; align-items: center; gap: 0.6vh; margin-left: auto; }
-.tracker-custom-range input { font-size: 1.1vh; padding: 0.5vh 0.8vh; border-radius: 8px;
-  border: 1px solid var(--card-border); background: var(--panel2); color: var(--text); }
-.tracker-custom-range span { color: var(--muted); font-size: 1.1vh; }
+/* Der Aus-Knopf ist bewusst anders: Er nimmt etwas weg, und das soll man vor dem Tippen
+   sehen. Farbe allein wuerde nicht reichen -- deshalb steht auch "aus" darauf. */
+.tracker-range-btns button.tracker-aus {
+  background: transparent; border-style: dashed; color: var(--muted); }
+.tracker-custom-range { display: flex; align-items: center; gap: 1vh; margin-left: auto; }
+.tracker-custom-range input { font-size: 1.6vh; padding: 1vh 1.2vh; border-radius: 10px;
+  min-height: 5.2vh; border: 1px solid var(--card-border); background: var(--panel2); color: var(--text); }
+.tracker-custom-range span { color: var(--muted); font-size: 1.6vh; }
 #trackerMap { flex: 1; border-radius: 22px; overflow: hidden; min-height: 0; }
+/* Auf einem Tracker-Dashboard teilt sich die Unterleiste ihr `flex: 1` sonst mit der Karte --
+   die Uhr im Streifen wurde dann bildschirmhoch. Hier ist sie so schmal wie ueberall sonst. */
+body.tracker-an .unterleiste { flex: 0 0 11vh; }
+/* Kommt man von einem Dashboard OHNE Streifenkarte, ist die Leiste leer -- dann reserviert die
+   Zeile darueber 11vh fuer nichts, und die Landkarte wird ohne Grund kleiner. `render()` laeuft
+   auf einem Tracker-Dashboard nicht, die Leiste traegt also noch den Inhalt des vorherigen. */
+body.tracker-an .unterleiste:empty { flex: 0 0 0; padding: 0; }
 .empty { grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 6vh 0; font-size: 1.8vh; }
 
 /* Ankuendigungs-Box: erscheint, wenn die konfigurierte input_text-Entitaet Inhalt hat --
