@@ -215,6 +215,13 @@ function controllerMitAkku(aufAkku) {
   const c = new Controller({ store: fakeStore(IMMER_NACHT), logDir: null, aufAkku });
   c.panel.supported = true;
   c.panel.setPower = () => true;          // kein PowerShell im Test
+  // setTaskleiste MUSS mit abgeklemmt werden, und zwar aus einem handfesten Grund: Mit
+  // `supported = true` wuerde der echte Aufruf einen PowerShell-Prozess starten und
+  // `Taskleiste-Aus` senden -- der Testlauf versteckt dann die Taskleiste des Rechners, auf dem
+  // er laeuft, und der Dauerprozess haelt `node --test` am Leben, bis das Zeitlimit zuschlaegt.
+  // Genau das ist auf dem Windows-Runner passiert. Wer hier einen Controller mit
+  // `supported = true` baut, klemmt ALLE drei Panel-Aufrufe ab.
+  c.panel.setTaskleiste = () => true;
   c.gesendet = [];
   c.panel.setSystemWach = (w) => { c.gesendet.push(w); return true; };
   c.startedAt = Date.now() - 2 * GRACE_MS;
@@ -243,6 +250,7 @@ test('Der Akkubetrieb wird gewarnt, aber nur beim Wechsel', () => {
   c.panel.supported = true;
   c.panel.setPower = () => true;
   c.panel.setSystemWach = () => true;
+  c.panel.setTaskleiste = () => true;     // sonst echtes PowerShell, siehe controllerMitAkku
   c.log = (stufe, text) => zeilen.push(stufe + ': ' + text);
   c.startedAt = Date.now() - 2 * GRACE_MS;
 
@@ -288,6 +296,7 @@ test('Die Einstellung entscheidet ueber das Wachhalten, nicht der Akku', () => {
   // ist, weiss nur, wer das Geraet aufgehaengt hat.
   const aus = new Controller({ store: fakeStore({ ...IMMER_NACHT, systemWachhalten: false }), logDir: null });
   aus.panel.supported = true; aus.panel.setPower = () => true;
+  aus.panel.setTaskleiste = () => true;   // sonst echtes PowerShell, siehe controllerMitAkku
   const g = []; aus.panel.setSystemWach = (w) => { g.push(w); return true; };
   aus.startedAt = Date.now() - 2 * GRACE_MS;
   aus.tick();
