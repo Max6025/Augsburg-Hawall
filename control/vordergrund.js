@@ -46,6 +46,7 @@ class Vordergrund {
     this.jetzt = jetzt || (() => Date.now());
     this.versuche = [];
     this.ruheBis = 0;
+    this.zurueckgeholt = 0;
   }
 
   /**
@@ -79,10 +80,23 @@ class Vordergrund {
     return { holen: true, verzoegerung: ABSTAND_MS };
   }
 
-  /** Nach einem geglueckten Rueckholen: Der Zaehler faengt von vorne an. */
+  /**
+   * Nach einem geglueckten Rueckholen: Der Zaehler faengt von vorne an.
+   *
+   * Der ERSTE Erfolg wird protokolliert, die folgenden nicht. Ohne diese eine Zeile gibt es
+   * keinen Beleg, dass der Rueckholer ueberhaupt jemals etwas tut -- er arbeitet lautlos, und
+   * "lautlos" ist von "gar nicht" nicht zu unterscheiden. Genau daran ist `setSystemWach()`
+   * schon einmal unbemerkt vorbeigelaufen. Eine Zeile pro Programmlauf ist der Beleg; eine pro
+   * Vorgang waere Laerm, denn beim Bedienen von Windows passiert es dauernd.
+   */
   geglueckt() {
     this.versuche = [];
     this.ruheBis = 0;
+    this.zurueckgeholt += 1;
+    if (this.zurueckgeholt === 1) {
+      this.log('info', 'Das Fenster wurde nach vorne zurueckgeholt -- damit schliesst sich, was '
+        + 'davor lag (Startmenue, Benachrichtigungscenter). Weitere Male werden nicht gemeldet.');
+    }
   }
 }
 

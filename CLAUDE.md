@@ -254,11 +254,25 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
      abstürzt (eine Registry-Sperre hinterließe ein Gerät, auf dem Win+E nicht mehr geht und
      niemand weiß, warum), und es braucht **keinen Explorer-Neustart**. `Super+M` und `Super+D`
      stehen in der Liste an erster Stelle: Sie legen den nackten Desktop frei.
+     **Zehn von sechzehn gibt Windows nicht her** — am 2026-09-23 auf Build 26200 gemessen, und
+     zwar ausgerechnet Win+A und Win+N für das Benachrichtigungscenter. Durchgekommen sind
+     Win+M, Win+D, Win+E, Win+R, Win+S und Win+Q. Die reservierten sind in der Liste
+     **gekennzeichnet**, damit die Protokollzeile dafür eine *Auskunft* ist und keine Warnung:
+     Vorher stand dort eine Warnzeile mit zehn Namen, das liest sich wie ein Fehlschlag und ist
+     der Normalfall — und eine Warnung, die immer kommt, bringt einem bei, das Protokoll zu
+     überfliegen. Angefordert werden sie trotzdem alle: Auf einem anderen Build kann es anders
+     sein, und eine Liste, die aufgibt, bevor sie es versucht hat, ist eine Vermutung.
+     Was **unerwartet** scheitert, ist weiterhin eine Warnung.
   2. **Eine Bremse.** Auf dem Sperrbildschirm lässt sich das Fenster nicht nach vorne holen;
      ohne Bremse rennt der Rückholer endlos gegen Windows an. Nach einer Häufung gibt er eine
      halbe Minute Ruhe und schreibt **eine** Zeile, nicht eine pro Versuch.
   3. **Entschieden wird im Modul, gehandelt in `main.js`.** Das Modul kennt kein Electron und
      keinen Zeitgeber — nur so ist die Bremse prüfbar, ohne eine halbe Minute zu warten.
+  4. **Der erste Erfolg steht im Protokoll, die folgenden nicht.** Ohne diese eine Zeile gibt es
+     keinen Beleg, dass der Rückholer jemals etwas tut — er arbeitet lautlos, und „lautlos" ist
+     von „gar nicht" nicht zu unterscheiden. Genau daran ist `setSystemWach()` schon einmal
+     unbemerkt vorbeigelaufen. Eine Zeile pro Vorgang wäre Lärm: Beim Bedienen von Windows
+     passiert es dauernd.
 - **Die Taskleiste wird versteckt, nicht zugedeckt.** Der Kiosk-Modus legt sich nur *über* sie;
   auf einem Touch-Gerät holt eine Wischgeste vom unteren Rand sie darüber, und ein
   Explorer-Neustart oder eine Anmeldung bringt sie ohnehin zurück. `AllowEdgeSwipe=0` nimmt der
@@ -982,7 +996,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-464 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+468 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

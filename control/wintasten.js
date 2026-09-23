@@ -34,24 +34,37 @@
  */
 
 // Reihenfolge nach Schaden, nicht nach Alphabet -- das Erste ist das Wichtigste.
+//
+// `reserviert` heisst: Windows gibt die Kombination NICHT her, gemessen am 2026-09-23 auf dem
+// Surface Go (Windows 11 25H2 Build 26200). Sie stehen trotzdem in der Liste und werden
+// trotzdem angefordert -- auf einem anderen Build kann es anders sein, und eine Liste, die
+// aufgibt, bevor sie es versucht hat, waere eine Vermutung. Der Unterschied liegt nur in der
+// MELDUNG: Was hier als reserviert steht, ist eine Auskunft; alles andere ist eine Warnung.
+//
+// Die reservierten sind ausgerechnet die fuer das Benachrichtigungscenter (Win+A, Win+N). Die
+// faengt control/vordergrund.js ab: Es ist ein Ausklappfenster und schliesst sich, sobald es
+// den Fokus verliert. Deshalb ist diese Zeile kein Loch, sondern eine Arbeitsteilung.
 const KOMBINATIONEN = [
   ['Super+M', 'Alle Fenster minimieren -- danach schaut man auf den nackten Desktop'],
   ['Super+D', 'Desktop anzeigen -- dasselbe'],
-  ['Super+A', 'Schnelleinstellungen'],
-  ['Super+N', 'Benachrichtigungscenter'],
-  ['Super+C', 'Copilot'],
-  ['Super+X', 'Das Menue an der Startschaltflaeche'],
+  ['Super+A', 'Schnelleinstellungen', true],
+  ['Super+N', 'Benachrichtigungscenter', true],
+  ['Super+C', 'Copilot', true],
+  ['Super+X', 'Das Menue an der Startschaltflaeche', true],
   ['Super+E', 'Explorer'],
   ['Super+R', 'Ausfuehren'],
-  ['Super+I', 'Einstellungen'],
+  ['Super+I', 'Einstellungen', true],
   ['Super+S', 'Suche'],
   ['Super+Q', 'Suche'],
-  ['Super+K', 'Uebertragen'],
-  ['Super+P', 'Projizieren'],
-  ['Super+B', 'Infobereich der Taskleiste'],
-  ['Super+Tab', 'Task-Ansicht'],
-  ['Super+Down', 'Fenster verkleinern']
+  ['Super+K', 'Uebertragen', true],
+  ['Super+P', 'Projizieren', true],
+  ['Super+B', 'Infobereich der Taskleiste', true],
+  ['Super+Tab', 'Task-Ansicht', true],
+  ['Super+Down', 'Fenster verkleinern', true]
 ];
+
+// Welche Windows erwartungsgemaess fuer sich behaelt.
+const RESERVIERT = KOMBINATIONEN.filter(k => k[2]).map(k => k[0]);
 
 /**
  * Sollen die Kombinationen gerade geschluckt werden?
@@ -82,17 +95,24 @@ function anpassen(state, { aktiv, greifen, freigeben, log } = {}) {
   }
 
   const misslungen = [];
+  const geschluckt = [];
   for (const [taste] of KOMBINATIONEN) {
-    if (!greifen(taste)) misslungen.push(taste);
+    if (greifen(taste)) geschluckt.push(taste);
+    else misslungen.push(taste);
   }
+  // Was Windows erwartungsgemaess behaelt, ist keine Warnung. Vorher stand im Protokoll eine
+  // Warnzeile mit zehn Kombinationen darin -- das liest sich wie ein Fehlschlag und ist der
+  // Normalfall. Eine Warnung, die immer kommt, bringt einem bei, das Protokoll zu ueberfliegen.
+  const unerwartet = misslungen.filter(t => !RESERVIERT.includes(t));
   if (log) {
-    log('info', `${KOMBINATIONEN.length - misslungen.length} von ${KOMBINATIONEN.length} `
-      + 'Windows-Tastenkombinationen werden geschluckt');
-    if (misslungen.length) {
-      log('warn', `Diese behaelt Windows fuer sich: ${misslungen.join(', ')}`);
+    log('info', `Windows-Tastenkombinationen: ${geschluckt.length} geschluckt `
+      + `(${geschluckt.join(', ')}), ${misslungen.length} behaelt Windows fuer sich `
+      + '-- die davon wichtigen (Benachrichtigungscenter) faengt der Fokus-Rueckholer ab.');
+    if (unerwartet.length) {
+      log('warn', 'Diese haetten gehen sollen und gingen nicht: ' + unerwartet.join(', '));
     }
   }
-  return { geaendert: true, aktiv: true, misslungen };
+  return { geaendert: true, aktiv: true, misslungen, geschluckt, unerwartet };
 }
 
-module.exports = { KOMBINATIONEN, sollGreifen, anpassen };
+module.exports = { KOMBINATIONEN, RESERVIERT, sollGreifen, anpassen };

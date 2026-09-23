@@ -80,6 +80,19 @@ test('ein geglueckter Rueckholvorgang setzt den Zaehler zurueck', () => {
   }
 });
 
+test('der ERSTE Erfolg wird protokolliert, die folgenden nicht', () => {
+  // Ohne diese eine Zeile gibt es keinen Beleg, dass der Rueckholer jemals etwas tut -- er
+  // arbeitet lautlos, und lautlos ist von "gar nicht" nicht zu unterscheiden. Eine Zeile pro
+  // Vorgang waere Laerm: Beim Bedienen von Windows passiert es dauernd.
+  const { v, zeilen } = bauen();
+  v.geglueckt();
+  assert.strictEqual(zeilen.length, 1);
+  assert.match(zeilen[0], /zurueckgeholt/);
+  for (let i = 0; i < 20; i++) v.geglueckt();
+  assert.strictEqual(zeilen.length, 1, 'danach still');
+  assert.strictEqual(v.zurueckgeholt, 21, 'gezaehlt wird trotzdem');
+});
+
 test('main.js haengt den Rueckholer an blur und respektiert die Wartung', () => {
   const quelle = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.ok(/require\(['"]\.\/control\/vordergrund/.test(quelle), 'Modul wird geladen');
