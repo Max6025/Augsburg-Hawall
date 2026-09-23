@@ -1120,10 +1120,10 @@
   // der FORM erkennt, nicht an der Schrift:
   //
   //   - ein grosses Wort im Chip oben rechts ("INNEN" / "AUSSEN"),
-  //   - das Symbol oben links wird zum Haus bzw. zur Tanne,
+  //   - das Symbol oben links wird zum Haus bzw. zur Sonne,
   //   - und dieselbe Silhouette liegt gross und blass im Kartenhintergrund.
   //
-  // Die Silhouette ist das, was aus der Entfernung traegt: Ein Haus und eine Tanne sind auch
+  // Die Silhouette ist das, was aus der Entfernung traegt: Ein Haus und eine Sonne sind auch
   // dann noch auseinanderzuhalten, wenn man kein Wort mehr lesen kann.
   //
   // Bewusst NICHT ueber die Farbe. Die Temperaturkarte faerbt ihren Akzent schon nach dem Wert
@@ -1137,10 +1137,18 @@
       symbol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/></svg>',
       silhouette: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5 1.5 11.2l1.4 1.6L4.5 11.5V21h15v-9.5l1.6 1.3 1.4-1.6z"/></svg>'
     },
+    // SONNE, nicht mehr Tanne. Gemeldet wurde "nimm eins das man besser erkennt das draussen
+    // gemeint ist", und das war berechtigt: Eine Tanne ist ein Baum, und ein Baum ist erst ueber
+    // den Umweg "Baum -> Natur -> draussen" ein Ortszeichen. Die Sonne ist das unmittelbare
+    // Gegenstueck zum Haus -- und als grosse, blasse Silhouette traegt ein Kreis mit Strahlen
+    // weiter als eine schmale Baumspitze, weil er in jede Richtung Flaeche hat.
+    //
+    // Dass eine Sonne auch "sonnig" heissen koennte, faellt hier nicht ins Gewicht: Daneben
+    // steht der Chip "AUSSEN", und das Gegenstueck auf der Nachbarkarte ist ein Haus.
     aussen: {
       text: 'Außen',
-      symbol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 11h2.5L3.5 16h11L11.5 11H14z"/><path d="M9 16v5"/><circle cx="18.5" cy="6" r="2.5"/></svg>',
-      silhouette: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1 5.5 10h3L4.5 16h5.5v2.5h4V16h5.5l-4-6h3z"/><rect x="10.5" y="18" width="3" height="5"/></svg>'
+      symbol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.3v2.1M12 19.6v2.1M2.3 12h2.1M19.6 12h2.1M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M18.6 5.4l-1.5 1.5M6.9 17.1l-1.5 1.5"/></svg>',
+      silhouette: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5.4"/><g><rect x="10.8" y="0.6" width="2.4" height="3.6" rx="1.2"/><rect x="10.8" y="19.8" width="2.4" height="3.6" rx="1.2"/><rect x="0.6" y="10.8" width="3.6" height="2.4" rx="1.2"/><rect x="19.8" y="10.8" width="3.6" height="2.4" rx="1.2"/><rect x="10.8" y="0.6" width="2.4" height="3.6" rx="1.2" transform="rotate(45 12 12)"/><rect x="10.8" y="19.8" width="2.4" height="3.6" rx="1.2" transform="rotate(45 12 12)"/><rect x="0.6" y="10.8" width="3.6" height="2.4" rx="1.2" transform="rotate(45 12 12)"/><rect x="19.8" y="10.8" width="3.6" height="2.4" rx="1.2" transform="rotate(45 12 12)"/></g></svg>'
     }
   };
 
@@ -1175,11 +1183,19 @@
     return '';
   }
 
-  // Nur dort, wo dieselbe Messgroesse innen UND aussen vorkommt. Wind, Regen und
-  // Sonneneinstrahlung gibt es nur draussen -- ein "AUSSEN" darauf waere Rauschen.
-  // Der Ring der Gauge-Karte hat keinen Platz fuer einen Chip und traegt sein eigenes Bild;
-  // wer dort innen und aussen braucht, nimmt die Temperatur- oder Luftdruckkarte.
+  // GERATEN wird nur dort, wo dieselbe Messgroesse innen UND aussen vorkommt. Wind, Regen und
+  // Sonneneinstrahlung gibt es nur draussen -- ein selbsttaetiges "AUSSEN" darauf waere Rauschen.
   const ORT_TYPEN = ['temperature', 'pressure', 'humidity', 'sensor'];
+
+  // EINSTELLEN laesst sich der Ort dagegen auch bei Wind, Regen und Ringkarte. Das ist der
+  // Unterschied zwischen einer Vorgabe und einem Verbot: Auf dem Bildschirmschoner ordnet die
+  // Silhouette die Flaeche -- man sieht aus fuenf Metern, welche Karte nach draussen gehoert,
+  // ohne eine Zahl zu lesen. Auf einem Dashboard braucht das niemand, deshalb bleibt es dort
+  // aus, solange es nicht gesetzt ist.
+  //
+  // Und deshalb wird bei diesen drei NICHT geraten: Ein "AUSSEN", das nach einem Update von
+  // selbst auf jeder Windkarte erscheint, ist eine Aenderung, um die niemand gebeten hat.
+  const ORT_TYPEN_WAHL = ORT_TYPEN.concat(['wind', 'rain', 'gauge']);
 
   // --- Hat es geklappt? ---------------------------------------------------------------------------
   //
@@ -1504,7 +1520,14 @@
   // fluide Container-Query-Typografie wie bei allen anderen Karten.
   const GAUGE_ARC_PATH = 'M 49.7 220.9 A 124 124 0 1 1 250.3 220.9';
 
-  function gaugeSvg2(pct, valueText, unit, title, color) {
+  /**
+   * Der Ring.
+   *
+   * `chip` steht NICHT in `.gauge-content`: Dort liegen Titel und Wert uebereinander in der
+   * Mitte, und der Chip schob sich auf den Titel -- in der Probe nachgemessen, die Rechtecke
+   * ueberlappten. Er liegt deshalb in der Ecke, so wie auf jeder anderen Karte auch.
+   */
+  function gaugeSvg2(pct, valueText, unit, title, color, chip) {
     const known = pct !== null && pct !== undefined && !isNaN(pct);
     const clamped = known ? Math.max(0, Math.min(100, pct)) : 0;
     return `
@@ -1513,6 +1536,7 @@
         <path pathLength="100" d="${GAUGE_ARC_PATH}" fill="none" stroke="${color}" stroke-width="13" stroke-linecap="round"
           stroke-dasharray="${clamped} 100" opacity="${known ? 1 : 0.35}"/>
       </svg>
+      ${chip ? `<div class="gauge-ort">${chip}</div>` : ''}
       <div class="gauge-content">
         ${title ? `<div class="gauge-title">${String(title).toUpperCase()}</div>` : ''}
         <div class="gauge-value">${valueText}${unit ? `<span class="gauge-unit">${unit}</span>` : ''}</div>
@@ -1641,13 +1665,14 @@
     card.dataset.cols = cols;
     card.dataset.rows = rows;
 
-    // Der Ort gilt fuer die ganze Karte. Das Symbol oben links wird zum Haus bzw. zur Tanne,
+    // Der Ort gilt fuer die ganze Karte. Das Symbol oben links wird zum Haus bzw. zur Sonne,
     // der Chip oben rechts nennt ihn, und die Silhouette kommt am Ende hinzu (siehe
     // ortAnbringen) -- erst dann steht innerHTML, und sie darf von keinem Zweig ueberschrieben
     // werden.
+    const ortGesetzt = settings && (settings.ort === 'innen' || settings.ort === 'aussen');
     const ort = ORT_TYPEN.includes(type)
       ? ortErmitteln(settings, (settings.name && String(settings.name).trim()) || (opts.namen && opts.namen[entity_id]) || attrs.friendly_name, entity_id)
-      : '';
+      : ((ORT_TYPEN_WAHL.includes(type) && ortGesetzt) ? settings.ort : '');
     const ortSymbol = (standard) => (ort && !(settings && settings.icon)) ? ORTE[ort].symbol : symbolFuer(settings, standard);
     const ortChip = ort ? `<span class="ort-chip">${ORTE[ort].text}</span>` : '';
 
@@ -1884,7 +1909,7 @@
       const val = state ? state.state : '–';
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.wind)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(ICONS.wind)}</span>${ortChip}${tendenzTeil}</div>
         <div class="value">${fmt(zahlFormatieren(val, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
     } else if (type === 'rain') {
@@ -1892,7 +1917,7 @@
       const val = state ? state.state : '–';
       card.innerHTML = `
         ${verlaufTeil}
-        <div class="row"><span class="icon">${symbolFuer(settings, ICONS.rain)}</span>${tendenzTeil}</div>
+        <div class="row"><span class="icon">${ortSymbol(ICONS.rain)}</span>${ortChip}${tendenzTeil}</div>
         <div class="value">${fmt(zahlFormatieren(val, settings.decimals), unit)}</div>
         <div class="name">${name}</div>`;
     } else if (type === 'solar') {
@@ -1931,7 +1956,7 @@
       if (range && !isNaN(numVal)) pct = ((numVal - range[0]) / (range[1] - range[0])) * 100;
       const displayVal = rawVal === null || rawVal === undefined ? '–' : (isNaN(numVal) ? rawVal : zahlFormatieren(numVal, settings.decimals));
       const color = thresholdColor(numVal, settings.thresholds, settings.baseColor);
-      card.innerHTML = gaugeSvg2(pct, displayVal, unit, name, color);
+      card.innerHTML = gaugeSvg2(pct, displayVal, unit, name, color, ortChip);
     } else if (type === 'graph') {
       const val = state ? state.state : '–';
       const unit = (settings.suffix !== undefined && settings.suffix !== '') ? settings.suffix : attrs.unit_of_measurement;
@@ -1974,7 +1999,7 @@
       // Jetzt sagt die Karte es. Lieber ein Satz, der erklaert, als eine Zahl, die luegt.
       const falsch = [];
       for (const [feld, zustand] of [['Netzbezug', en.grid], ['Einspeisung', en.gridReturn],
-        ['Solar', en.solar], ['Batterie', en.battery]]) {
+        ['Solar', en.solar], ['Batterie', en.battery], ['Hausverbrauch', en.home]]) {
         if (!zustand) continue;
         const e = einheit(zustand);
         if (e === 'W' || e === 'kW' || klasse(zustand) === 'power') continue;
@@ -2008,11 +2033,19 @@
       const battLaedt = battRoh !== null && (battInvers ? battRoh > 0 : battRoh < 0);
       const battW = battRoh !== null ? Math.abs(battRoh) : null;
 
-      // Das Haus wird gerechnet, nicht gemessen: Was hereinkommt, geht hinaus. Ein eigener
-      // Hausverbrauchs-Sensor waere eine zweite Wahrheit daneben, und die beiden waeren sich
-      // nie einig.
-      const hausW = (solarW || 0) + (netzBezugW || 0) - (netzEinspeisungW || 0)
-        + (battLaedt ? -(battW || 0) : (battW || 0));
+      // Das Haus wird GERECHNET, solange kein eigener Sensor eingetragen ist: Was hereinkommt,
+      // geht hinaus. Der Grund fuer diese Vorgabe steht weiter oben und gilt weiter -- zwei
+      // Wahrheiten nebeneinander sind sich nie einig, und dann summieren sich die Leitungen
+      // nicht auf den Knoten in der Mitte.
+      //
+      // Wer einen Hausverbrauchs-Sensor HAT, ist damit aber besser bedient als mit der Summe:
+      // Die Rechnung kennt nur die Zaehler, die eingetragen sind. Ein Strang, der an keinem
+      // davon haengt, fehlt ihr -- dem Sensor nicht. Deshalb gewinnt eine ausdrueckliche
+      // Angabe, und der Unterschied ist dann sichtbar statt versteckt.
+      const hausGemessen = nachW(zahl(en.home), einheit(en.home));
+      const hausW = hausGemessen !== null ? Math.abs(hausGemessen)
+        : (solarW || 0) + (netzBezugW || 0) - (netzEinspeisungW || 0)
+          + (battLaedt ? -(battW || 0) : (battW || 0));
 
       // Ab wann eine Leitung als "fliesst" gilt. 5 W passten zu einem Zaehler mit ruhigem
       // Nullpunkt; ein Wechselrichter, der nachts 30 W Eigenverbrauch meldet, liesse die
@@ -2705,6 +2738,7 @@
     sizeToSpan, minSpanFor, clampSpan, resolveSpan, schonerSpanne, SCHONER_SPALTEN, SCHONER_ZEILEN, thresholdColor,
     domainsForType, typesForEntity, renderClockNow, sensorAkzente, SENSOR_FARBEN, SENSOR_FARBEN_HELL, isSolar,
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen, ortErmitteln, ORT_TYPEN,
+    ORT_TYPEN_WAHL,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, wasteDatum, wasteTage, wasteBald, wasteTagesschluessel, wasteDateLabel, zahlFormatieren, symbolFuer, symbolNamen,

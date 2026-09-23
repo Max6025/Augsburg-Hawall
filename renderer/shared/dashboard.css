@@ -376,6 +376,11 @@ body { background: var(--page-bg-image, none) center/cover fixed, var(--bg); }
    3. Die Silhouette: dasselbe Zeichen, gross und blass hinter dem Wert. Sie ist das, was aus
       fuenf Metern noch traegt. */
 .card .row-rechts { display: flex; align-items: center; gap: 0.8vh; min-width: 0; }
+/* Die Ringkarte hat keine Symbolzeile, in die der Chip passt, und in der Mitte liegen Titel
+   und Wert uebereinander -- dort schob er sich auf den Titel (in der Probe nachgemessen). Er
+   liegt deshalb in der Ecke, an derselben Stelle wie die Chips der anderen Karten. */
+.card.type-gauge .gauge-ort { position: absolute; top: 1vh; right: 1.2vh; z-index: 2; }
+
 .card .ort-chip {
   font-size: clamp(0.95vh, 7.2cqmin, 2.2vh);
   font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;

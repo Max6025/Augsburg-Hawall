@@ -563,7 +563,7 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   der Unterschied zwischen innen und außen stand nur in der Bildunterschrift — der kleinsten
   Schrift auf der Karte. Beim Luftdruck liegen die Werte innen und außen sogar fast gleich.
   `ortErmitteln()` gibt Temperatur-, Luftdruck-, Feuchte- und Sensorkarten (`ORT_TYPEN`)
-  einen Ort, und der wird an der **Form** erkennbar gemacht, nie an der Farbe: Haus oder Tanne
+  einen Ort, und der wird an der **Form** erkennbar gemacht, nie an der Farbe: Haus oder Sonne
   oben links, ein Chip „INNEN" (Ring) bzw. „AUSSEN" (gefüllt), und dieselbe Silhouette groß
   und blass hinter dem Wert. Die Silhouette ist das, was aus fünf Metern trägt. Farbe
   scheidet aus, weil die Temperaturkarte ihren Akzent schon nach dem Wert färbt — „blau"

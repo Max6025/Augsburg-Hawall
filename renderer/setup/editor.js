@@ -335,7 +335,7 @@ async function render() {
       energy = {
         grid: statesById[es.gridEntity], gridReturn: statesById[es.gridReturnEntity],
         solar: statesById[es.solarEntity], battery: statesById[es.batteryEntity],
-        batterySoc: statesById[es.batterySocEntity]
+        batterySoc: statesById[es.batterySocEntity], home: statesById[es.energyHomeEntity]
       };
     }
     const card = buildCard(entry.entity_id, state, type, span, {
@@ -603,7 +603,7 @@ function settingsFieldsForType(type) {
     decimals: mitZahl.includes(type),
     // Innen/aussen nur dort, wo dieselbe Messgroesse an beiden Orten vorkommt -- die Liste
     // steht im Renderer, damit Editor und Karte nicht auseinanderlaufen.
-    ortWahl: DashboardRender.ORT_TYPEN.includes(type),
+    ortWahl: DashboardRender.ORT_TYPEN_WAHL.includes(type),
     verlaufOpts: mitZahl.includes(type) && type !== 'graph' && type !== 'gauge',
     iconWahl: !ohneSymbol.includes(type),
     radarOpts: type === 'radar',
@@ -709,9 +709,15 @@ function openSettings(entityId) {
       <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
         Zwei Temperaturkarten sahen bisher gleich aus – der Unterschied stand nur in der
         kleinsten Schrift. Mit Ort bekommt die Karte ein Zeichen, das man aus der Entfernung
-        an der <strong>Form</strong> erkennt: Haus oder Tanne, und ein Chip „INNEN“ (Ring)
-        bzw. „AUSSEN“ (gefüllt). Automatisch erkennt Wörter wie „außen“, „outdoor“, „Garten“,
-        „Wohnzimmer“ oder „innen“ in Name und Entität.</p>`;
+        an der <strong>Form</strong> erkennt: Haus oder Sonne, und ein Chip „INNEN“ (Ring)
+        bzw. „AUSSEN“ (gefüllt).</p>
+      <p style="font-size:1.1vh; color:var(--muted); margin:0 0 1vh;">
+        Bei <strong>Temperatur, Luftdruck, Feuchte und Sensor</strong> wird der Ort automatisch
+        geraten – aus Wörtern wie „außen“, „outdoor“, „Garten“, „Wohnzimmer“ oder „innen“ in
+        Name und Entität. Bei <strong>Wind, Regen und Ringkarte</strong> nicht: Die gibt es nur
+        draußen, ein selbsttätiges „AUSSEN“ wäre dort Rauschen. Eingestellt gilt es trotzdem –
+        auf dem Bildschirmschoner ordnet die Silhouette die Fläche, man sieht aus fünf Metern,
+        welche Karte nach draußen gehört.</p>`;
   }
   if (fields.decimals) {
     html += `<label>Nachkommastellen (leer = Wert unverändert übernehmen)</label>
@@ -841,6 +847,16 @@ function openSettings(entityId) {
       <input type="text" id="setBattery" list="entityList" value="${settings.batteryEntity || ''}" placeholder="sensor.batterie_leistung">
       <label>Batterie-Ladezustand % (optional)</label>
       <input type="text" id="setBatterySoc" list="entityList" value="${settings.batterySocEntity || ''}" placeholder="sensor.batterie_soc">
+      <label>Hausverbrauch (optional, eigener Sensor)</label>
+      <input type="text" id="setEnergyHome" list="entityList" value="${settings.energyHomeEntity || ''}" placeholder="leer = wird gerechnet">
+      <p style="font-size:1.1vh; color:var(--muted); margin:0.4vh 0 1vh;">
+        <strong>Leer lassen ist der Normalfall.</strong> Ohne Angabe rechnet die Karte den
+        Hausverbrauch aus dem, was hereinkommt und hinausgeht (Solar + Netzbezug −
+        Einspeisung ± Batterie) – dann stimmen die Zahlen an den Leitungen immer mit dem
+        Knoten in der Mitte zusammen. Trägst du einen eigenen Sensor ein, gilt der, und die
+        Summe der Leitungen kann davon abweichen: Was dein Zähler nicht sieht, fehlt in der
+        Rechnung, nicht im Sensor. Dann ist der Sensor genauer – und der Unterschied ist
+        sichtbar.</p>
       <datalist id="entityList">
         ${allEntities.map(e => `<option value="${e.entity_id}">${e.name}</option>`).join('')}
       </datalist>
@@ -1533,6 +1549,8 @@ $('settingsSave').addEventListener('click', () => {
     if (solar) settings.solarEntity = solar; else delete settings.solarEntity;
     if (batt) settings.batteryEntity = batt; else delete settings.batteryEntity;
     if (battSoc) settings.batterySocEntity = battSoc; else delete settings.batterySocEntity;
+    const haus = grab('setEnergyHome');
+    if (haus) settings.energyHomeEntity = haus; else delete settings.energyHomeEntity;
     const schwelle = grab('setEnergyThreshold');
     if (schwelle !== '' && !isNaN(parseFloat(schwelle))) settings.energyThreshold = Math.abs(parseFloat(schwelle));
     else delete settings.energyThreshold;

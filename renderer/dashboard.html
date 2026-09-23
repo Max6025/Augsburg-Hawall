@@ -475,7 +475,10 @@ async function kartenZusatz(entry, type) {
     zusatz.energy = {
       grid: statesById[einst.gridEntity], gridReturn: statesById[einst.gridReturnEntity],
       solar: statesById[einst.solarEntity], battery: statesById[einst.batteryEntity],
-      batterySoc: statesById[einst.batterySocEntity]
+      batterySoc: statesById[einst.batterySocEntity],
+      // Optional: Wer einen eigenen Hausverbrauchs-Sensor hat, bekommt dessen Wert statt der
+      // Summe. Ohne Angabe bleibt es bei der Rechnung -- siehe dashboard-render.js.
+      home: statesById[einst.energyHomeEntity]
     };
   }
   return zusatz;
@@ -688,13 +691,47 @@ let letzteSignatur = null;
 // Deklarationszeile wirft einen ReferenceError, sobald jemand render() frueher aufruft.
 let letzteAnzeigeEntitaeten = null;
 
+/**
+ * Alle Entitaeten, von denen die Karten dieses Layouts abhaengen.
+ *
+ * EINE Liste fuer ZWEI Zwecke, und das ist der Punkt: Sie sagt, was die Live-Verbindung
+ * durchlassen soll, UND sie speist die Signatur, die entscheidet, ob neu gezeichnet wird.
+ * Vorher waren das zwei Listen -- die erste kannte die fremden Entitaeten der Energie-Karte,
+ * die zweite nur `entity_id`. Ergebnis: Eine Aenderung am Netzbezug kam an, aenderte die
+ * Signatur aber nicht, und ueber den Abruf-Takt wurde die Karte erst neu gezeichnet, wenn
+ * zufaellig irgendeine ANDERE Karte etwas meldete. Das konnten Minuten sein.
+ *
+ * Aufgefallen ist es nur, weil die Live-Verbindung den Fall ueberdeckte (sie setzt
+ * `aufbauErzwingen`). Faellt sie aus, tritt er in voller Laenge auf -- genau dann, wenn man
+ * am wenigsten Lust darauf hat.
+ */
+function kartenEntitaeten(layout) {
+  const alle = new Set();
+  for (const e of layout || []) {
+    if (e.entity_id) alle.add(e.entity_id);
+    const st = e.settings || {};
+    for (const f of ['gridEntity', 'gridReturnEntity', 'solarEntity', 'batteryEntity',
+      'batterySocEntity', 'energyHomeEntity', 'torDaueraufEntity']) {
+      if (st[f]) alle.add(st[f]);
+    }
+    (st.gateButtons || []).forEach(b => { if (b.entity) alle.add(b.entity); });
+    (st.tiles || []).forEach(x => {
+      if (x.mediaPlayerEntity) alle.add(x.mediaPlayerEntity);
+      if (x.entity) alle.add(x.entity);
+    });
+  }
+  return alle;
+}
+
 function zustandsSignatur(layout) {
-  return layout.map(e => {
-    const s = statesById[e.entity_id];
-    if (!s) return e.entity_id + '=-';
+  // Sortiert: Die Reihenfolge eines Sets haengt an der Einfuegefolge, und die aendert sich,
+  // wenn eine Karte umgehaengt wird -- das waere ein Neuaufbau ohne Anlass.
+  return [...kartenEntitaeten(layout)].sort().map(id => {
+    const s = statesById[id];
+    if (!s) return id + '=-';
     // Die Attribute gehoeren dazu: Eine Klimaanlage aendert beim Verstellen der
     // Zieltemperatur ihren Zustand NICHT, nur ein Attribut.
-    return e.entity_id + '=' + s.state + '#' + JSON.stringify(s.attributes || {});
+    return id + '=' + s.state + '#' + JSON.stringify(s.attributes || {});
   }).join('|');
 }
 
@@ -711,22 +748,9 @@ async function render() {
 
   // Nichts geaendert, nichts zu tun. Der Vergleich kostet den Bruchteil dessen, was ein
   // Neuaufbau kostet -- und bei fuenf Sekunden Takt faellt das ins Gewicht.
-  // Welche Entitaeten gerade zu sehen sind -- die Live-Verbindung filtert danach.
-  letzteAnzeigeEntitaeten = new Set(layout.map(e => e.entity_id));
-  // Die Energie-Karte zeigt fremde Entitaeten an; ohne sie kaeme deren Aenderung nie durch.
-  layout.forEach(e => {
-    const st = e.settings || {};
-    ['gridEntity', 'gridReturnEntity', 'solarEntity', 'batteryEntity', 'batterySocEntity',
-    ].forEach(f => { if (st[f]) letzteAnzeigeEntitaeten.add(st[f]); });
-    (st.gateButtons || []).forEach(b => { if (b.entity) letzteAnzeigeEntitaeten.add(b.entity); });
-    // Der Dauer-Auf-Melder steht auf keiner eigenen Karte -- ohne diese Zeile kaeme sein
-    // Umschalten erst beim naechsten Abruf an, und die Karte warnte in der Zwischenzeit.
-    if (st.torDaueraufEntity) letzteAnzeigeEntitaeten.add(st.torDaueraufEntity);
-    (st.tiles || []).forEach(t => {
-      if (t.mediaPlayerEntity) letzteAnzeigeEntitaeten.add(t.mediaPlayerEntity);
-      if (t.entity) letzteAnzeigeEntitaeten.add(t.entity);
-    });
-  });
+  // Welche Entitaeten gerade zu sehen sind -- die Live-Verbindung filtert danach. Dieselbe
+  // Liste speist die Signatur unten; siehe kartenEntitaeten().
+  letzteAnzeigeEntitaeten = kartenEntitaeten(layout);
   if (config && config.sunEntity) letzteAnzeigeEntitaeten.add(config.sunEntity);
   if (config && config.notifyEntity) letzteAnzeigeEntitaeten.add(config.notifyEntity);
   // Die Sensoren des BILDSCHIRMSCHONERS stehen auf einem anderen Dashboard und kaemen sonst

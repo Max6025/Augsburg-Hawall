@@ -46,15 +46,22 @@ const ort = (w) => P.has('ohne') ? { ort: 'kein' } : (w ? { ort: w } : {});
 const verlauf = (basis, schwankung) => Array.from({ length: 30 }, (_, i) =>
   ({ t: Date.now() - (30 - i) * 600000, v: basis + Math.sin(i / 4) * schwankung }));
 
+// Zwei Reihen. OBEN die vier, die den Ort schon immer kannten -- unten Wind, Regen und
+// Ringkarte, die ihn erst bekommen, wenn man ihn einstellt. Genau die sind der neue Fall, und
+// was in dieser Probe fehlt, wird nicht angesehen (siehe CLAUDE.md, vorschau.html).
 const karten = [
-  ['sensor.temp_1', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('innen'), { x: 0, y: 0 }, verlauf(21, 0.4)],
-  ['sensor.temp_2', 'temperature', Z('8.2',  { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('aussen'), { x: 3, y: 0 }, verlauf(8, 2)],
-  ['sensor.luftdruck_innen', 'pressure', Z('1013', { friendly_name: 'Luftdruck Wohnzimmer', unit_of_measurement: 'hPa' }), ort(), { x: 0, y: 3 }, verlauf(1013, 1)],
-  ['sensor.luftdruck_aussen', 'pressure', Z('1011', { friendly_name: 'Luftdruck Garten', unit_of_measurement: 'hPa' }), ort(), { x: 3, y: 3 }, verlauf(1011, 2)]
+  ['sensor.temp_1', 'temperature', Z('21.4', { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('innen'), { x: 0, y: 0, cols: 3, rows: 2 }, verlauf(21, 0.4)],
+  ['sensor.temp_2', 'temperature', Z('8.2',  { friendly_name: 'Temperatur', unit_of_measurement: '°C' }), ort('aussen'), { x: 3, y: 0, cols: 3, rows: 2 }, verlauf(8, 2)],
+  ['sensor.luftdruck_innen', 'pressure', Z('1013', { friendly_name: 'Luftdruck Wohnzimmer', unit_of_measurement: 'hPa' }), ort(), { x: 0, y: 2, cols: 2, rows: 2 }, verlauf(1013, 1)],
+  ['sensor.wind', 'wind', Z('14.6', { friendly_name: 'Wind', unit_of_measurement: 'km/h' }), ort('aussen'), { x: 2, y: 2, cols: 2, rows: 2 }, verlauf(14, 4)],
+  ['sensor.regen', 'rain', Z('0.4', { friendly_name: 'Regen', unit_of_measurement: 'mm/h' }), ort('aussen'), { x: 4, y: 2, cols: 2, rows: 2 }, verlauf(0.4, 0.2)],
+  ['sensor.uv', 'gauge', Z('3', { friendly_name: 'UV-Index', unit_of_measurement: '' }), { ...ort('aussen'), min: 0, max: 11 }, { x: 0, y: 4, cols: 2, rows: 2 }, verlauf(3, 1)],
+  ['sensor.feuchte_innen', 'humidity', Z('46', { friendly_name: 'Feuchte Schlafzimmer', unit_of_measurement: '%' }), ort(), { x: 2, y: 4, cols: 2, rows: 2 }, verlauf(46, 3)],
+  ['sensor.uv_ohne', 'gauge', Z('3', { friendly_name: 'UV ohne Ort', unit_of_measurement: '' }), { ort: 'kein', min: 0, max: 11 }, { x: 4, y: 4, cols: 2, rows: 2 }, verlauf(3, 1)]
 ];
 const raster = document.getElementById('raster');
 karten.forEach(([id, typ, zustand, settings, pos, history]) => {
-  raster.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: 3, rows: 3, ...pos }, {
+  raster.appendChild(DashboardRender.buildCard(id, zustand, typ, pos, {
     editable: false, apiBase: '', statesById: {}, settings, callbacks: {}, history
   }));
 });

@@ -174,3 +174,21 @@ test('Eine ruhende Leitung bleibt duenn und ohne Muster', () => {
   assert.ok(!svg.includes('ed-fliesst'), 'nichts darf fliessen');
   assert.ok(!svg.includes('stroke-dasharray'), 'und kein Strichmuster tragen');
 });
+
+// --- Der Hausverbrauch: gerechnet oder gemessen ---------------------------------------------
+
+test('ohne eigenen Sensor wird der Hausverbrauch gerechnet, mit Sensor nicht', () => {
+  // Die Vorgabe bleibt die Rechnung: Nur so summieren sich die Leitungen auf den Knoten in der
+  // Mitte. Wer einen eigenen Sensor hat, ist damit aber besser bedient -- die Rechnung kennt
+  // nur die eingetragenen Zaehler, ein Strang ohne Zaehler fehlt ihr.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const quelle = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard-render.js'), 'utf8');
+  const i = quelle.indexOf('const hausGemessen');
+  assert.ok(i > 0, 'hausGemessen fehlt');
+  const block = quelle.slice(i, i + 400);
+  assert.match(block, /hausGemessen !== null \? Math\.abs\(hausGemessen\)/,
+    'ein eingetragener Sensor muss gewinnen');
+  assert.match(block, /solarW \|\| 0\) \+ \(netzBezugW/,
+    'und ohne Angabe muss weiter gerechnet werden');
+});
