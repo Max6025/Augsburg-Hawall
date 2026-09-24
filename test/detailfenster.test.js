@@ -54,9 +54,17 @@ test('eine erfundene Kennung ist kein Titel', () => {
 
 test('der Titel wird uebersetzt, die Kennung nicht', () => {
   const h = de('sensor.x', 'sensor', { state: '1', attributes: {} },
-    { namen: { 'sensor.x': 'Solar Radiation' } });
+    { namen: { 'sensor.x': 'Solar Radiation' }, debug: true });
   assert.strictEqual(titel(h), 'Globalstrahlung');
   assert.match(unter(h), /sensor\.x$/, 'die Kennung gehoert unveraendert in die Unterzeile');
+});
+
+test('die Kennung steht nur mit Debug im Kopf', () => {
+  // Sie ist eine Auskunft fuer die Fehlersuche, kein Untertitel. Ohne Debug steht dort nur,
+  // was fuer eine Karte das ist.
+  const ohne = de('sensor.x', 'sensor', { state: '1', attributes: {} }, {});
+  assert.ok(!unter(ohne).includes('sensor.x'), `"${unter(ohne)}" verraet die Kennung`);
+  assert.strictEqual(unter(ohne), 'Sensor (Text)');
 });
 
 // --- Der Wert ------------------------------------------------------------------------------
@@ -125,7 +133,7 @@ test('Attribute, die schon auf der Karte stehen, werden nicht wiederholt', () =>
   const h = de('sensor.x', 'sensor', { state: '1', attributes: {
     friendly_name: 'Name', icon: 'mdi:x', unit_of_measurement: '°C', device_class: 'temperature',
     battery: 87
-  } }, {});
+  } }, { debug: true });
   assert.match(h, /battery<\/span><strong>87</, 'was Neues sagt, gehoert hinein');
   for (const doppelt of ['friendly_name', 'icon', 'device_class', 'unit_of_measurement']) {
     assert.ok(!h.includes(`>${doppelt}<`), `${doppelt} steht schon oben`);
@@ -134,7 +142,8 @@ test('Attribute, die schon auf der Karte stehen, werden nicht wiederholt', () =>
 
 test('verschachtelte Attribute werden weggelassen', () => {
   // "[object Object]" auf einer Wand ist schlechter als eine Zeile weniger.
-  const h = de('sensor.x', 'sensor', { state: '1', attributes: { forecast: [{ a: 1 }], ok: 'ja' } }, {});
+  const h = de('sensor.x', 'sensor', { state: '1', attributes: { forecast: [{ a: 1 }], ok: 'ja' } },
+    { debug: true });
   assert.ok(!h.includes('[object Object]'));
   assert.match(h, /ok<\/span><strong>ja</);
 });
@@ -173,6 +182,109 @@ test('alles Fremde wird maskiert', () => {
   assert.ok(!h.includes('<script>'), 'kein Skript aus dem Namen');
   assert.ok(!h.includes('<img src=x>'), 'kein Element aus einem Attribut');
   assert.ok(!h.includes('<b>1</b>'), 'kein Element aus dem Zustand');
+});
+
+// --- Debug an oder aus ---------------------------------------------------------------------
+
+const ZUSTAND = { state: '11.2', last_changed: new Date(Date.now() - 300000).toISOString(),
+  attributes: { unit_of_measurement: '°C', battery: 87 } };
+const VERLAUF = { history: verlauf(10, i => i) };
+
+test('ohne Debug gibt es die AUSWERTUNG, keine Rohdaten', () => {
+  // Wer davorsteht, will den Verlauf -- nicht die Attributliste.
+  const h = de('sensor.x', 'temperature', ZUSTAND, VERLAUF);
+  assert.match(h, /dt-verlauf/, 'der Verlauf gehoert hinein');
+  assert.match(h, /Höchstwert/, 'und die Kennzahlen');
+  assert.match(h, /Zuletzt aktualisiert/, 'und wann es zuletzt kam');
+  assert.ok(!/dt-roh/.test(h), 'keine Rohdaten');
+  assert.ok(!/battery/.test(h), 'keine Attribute');
+});
+
+test('mit Debug kommen Rohdaten UND Attribute dazu', () => {
+  const h = de('sensor.x', 'temperature', ZUSTAND, { ...VERLAUF, debug: true });
+  assert.match(h, /dt-roh/);
+  assert.match(h, /Zustand \(roh\)<\/span><strong>11\.2</, 'der rohe Wert, unformatiert');
+  assert.match(h, /battery/, 'die Attribute');
+  // Der Verlauf bleibt: Debug NIMMT nichts weg, es legt etwas dazu.
+  assert.match(h, /dt-verlauf/);
+  assert.match(h, /Höchstwert/);
+});
+
+test('die Energiekarte ist in BEIDEN Lagen gleich', () => {
+  // Dort sind die Sensoren die Auskunft, und das Diagramm ist ohnehin die Auswertung. Eine
+  // Weiche waere hier eine Verschlechterung in der einen Richtung.
+  const daten = { diagramm: '<svg class="ed"></svg>',
+    energy: { solar: { entity_id: 'sensor.pv', state: '8200', attributes: { unit_of_measurement: 'W' } } } };
+  const ohne = de('energy:1', 'energy', null, daten);
+  const mit = de('energy:1', 'energy', null, { ...daten, debug: true });
+  assert.match(ohne, /sensor\.pv/, 'die Quellen stehen auch ohne Debug da');
+  // Verglichen wird der KOERPER, nicht der Kopf: Dort steht mit Debug die Kennung, und das
+  // gilt fuer jede Karte gleich.
+  const koerper = (h) => h.slice(h.indexOf('dt-energie'));
+  assert.strictEqual(koerper(ohne), koerper(mit), 'der Inhalt muss identisch sein');
+  assert.ok(!/dt-roh/.test(mit), 'auch mit Debug kein zusaetzlicher Rohdaten-Block');
+});
+
+// --- Der Abfallkalender --------------------------------------------------------------------
+
+const ABFUHR = [
+  { start: '2026-10-07', summary: 'Restabfall' },
+  { start: '2026-10-07', summary: 'Papierabfall' },
+  { start: '2026-10-21', summary: 'Restabfall' },
+  { start: '2026-11-04', summary: 'Verpackungstonne' }
+];
+
+test('ohne Debug zeigen die Muelltermine einen KALENDER', () => {
+  // Ihr Rohzustand ist "off". Gross angezeigt sagt das niemandem etwas -- und genau so sah es
+  // vorher aus.
+  const h = de('calendar.awido', 'waste', { state: 'off', attributes: {} }, { waste: ABFUHR });
+  assert.match(h, /dk-raster/, 'das Monatsraster fehlt');
+  assert.ok(!/dt-wert/.test(h), '"off" darf nicht gross dastehen');
+  assert.ok(!/dt-verlauf/.test(h), 'ein Verlauf ergibt bei Terminen keinen Sinn');
+});
+
+test('mit Debug zeigen sie die Rohdaten, keinen Kalender', () => {
+  const h = de('calendar.awido', 'waste', { state: 'off', attributes: { message: 'Restabfall' } },
+    { waste: ABFUHR, debug: true });
+  assert.match(h, /dt-roh/);
+  assert.ok(!/dk-raster/.test(h));
+});
+
+test('der Kalender deckt die Monate ab, in denen Termine liegen', () => {
+  const h = de('calendar.awido', 'waste', null, { waste: ABFUHR });
+  const monate = (h.match(/class="dk-monat"/g) || []).length;
+  assert.ok(monate >= 2, `zu wenige Monate (${monate}) -- die Termine reichen bis November`);
+  assert.ok(monate <= 4, 'hoechstens vier -- der Abruf geht ueber 60 Tage, mehr waere leer');
+});
+
+test('jeder Abfuhrtag traegt die Farben seiner Tonnen', () => {
+  const h = de('calendar.awido', 'waste', null, { waste: ABFUHR });
+  const abfuhrtage = (h.match(/class="dk-tag dk-abfuhr/g) || []).length;
+  assert.strictEqual(abfuhrtage, 3, 'drei Tage mit Abfuhr, nicht vier Termine');
+  // Am 7.10. kommen zwei Tonnen -- also zwei Punkte an diesem Tag.
+  assert.ok((h.match(/dk-punkt/g) || []).length >= 4, 'Punkte auf den Tagen und in der Legende');
+});
+
+test('die Legende nennt nur Tonnen, die wirklich vorkommen', () => {
+  // Eine Legende mit Eintraegen, die nirgends auftauchen, laesst einen suchen.
+  const h = de('calendar.awido', 'waste', null, { waste: ABFUHR });
+  const legende = /dk-legende">([\s\S]*?)<\/div>/.exec(h)[1];
+  for (const art of ['Restabfall', 'Papierabfall', 'Verpackungstonne']) {
+    assert.ok(legende.includes(art), art);
+  }
+  assert.ok(!legende.includes('Biotonne'), 'was nicht vorkommt, steht nicht in der Legende');
+});
+
+test('die Woche faengt am Montag an', () => {
+  const h = de('calendar.awido', 'waste', null, { waste: ABFUHR });
+  const koepfe = [...h.matchAll(/class="dk-kopf">([^<]+)</g)].map(m => m[1]).slice(0, 7);
+  assert.deepStrictEqual(koepfe, ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']);
+});
+
+test('ohne Termine steht ein Satz, kein leeres Raster', () => {
+  const h = de('calendar.awido', 'waste', null, { waste: [] });
+  assert.match(h, /Keine Termine gefunden/);
+  assert.ok(!/dk-raster/.test(h));
 });
 
 // --- Die Verbindung ------------------------------------------------------------------------
@@ -232,4 +344,46 @@ test('das Fenster liegt unter dem Schoner und unter der Ankuendigung', () => {
   const fenster = z('\\.dt-huelle\\s*\\{');
   assert.ok(fenster < 9990, `das Fenster (${fenster}) muss unter dem Schoner (9990) liegen`);
   assert.ok(fenster > 100, 'aber ueber den Karten');
+});
+
+// --- Der Abfuhrtag auf der Karte -----------------------------------------------------------
+
+test('der Tag ist auf der Karte die GROESSTE Schrift, nicht ein Chip in der Ecke', () => {
+  // Gemeldet als "man erkennt nicht auf Anhieb, an welchem Tag das jetzt ist". Gemessen bei
+  // echter Kartengroesse (1229x120): Tag 10 px, Tonnen 22 px, Bildunterschrift 10 px -- der
+  // Tag war genau so gross wie die kleinste Schrift auf der Karte.
+  //
+  // DAMIT KIPPT die Entscheidung "welche Tonne, und wann -- in dieser Reihenfolge". Die
+  // Tonnennamen sind lang und deshalb von weitem ohnehin erkennbar; ein Datum ist kurz und
+  // verschwindet. Dieser Test haelt die neue Reihenfolge fest, damit sie beim naechsten Umbau
+  // nicht stillschweigend zurueckkippt.
+  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard.css'), 'utf8');
+  const groesse = (sel) => {
+    const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^}]*?font-size:\\s*clamp\\([^,]+,\\s*([\\d.]+)cqmin').exec(css);
+    return m ? Number(m[1]) : null;
+  };
+  const tag = groesse('.card.type-waste .waste-tag');
+  const tonnen = groesse('.card.type-waste .value.waste-art');
+  assert.ok(tag, 'die Regel fuer den Tag fehlt');
+  assert.ok(tonnen, 'die Regel fuer die Tonnenzeile fehlt');
+  assert.ok(tag > tonnen, `der Tag (${tag}cqmin) muss groesser sein als die Tonnen (${tonnen}cqmin)`);
+});
+
+test('die Tonnenzeile hat genug Spezifitaet, um zu wirken', () => {
+  // `.waste-art` allein setzte 13cqmin und wirkte NIE: `.card .value` hat zwei Klassen und
+  // gewinnt mit 23cqmin. Eine Regel, die nie greift, ist dasselbe wie keine.
+  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard.css'), 'utf8');
+  assert.match(css, /\.card\.type-waste \.value\.waste-art/,
+    'die Groesse der Tonnenzeile braucht mindestens so viele Klassen wie `.card .value`');
+});
+
+test('der Tag steht nur EINMAL auf der Karte', () => {
+  // Vorher als Chip in der Ecke, jetzt als Zeile. Beides waere dieselbe Auskunft zweimal.
+  const render = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard-render.js'), 'utf8');
+  const i = render.indexOf("} else if (type === 'waste') {");
+  const block = render.slice(i, render.indexOf("} else if (type === 'photo')", i));
+  assert.match(block, /class="waste-tag/, 'die Tagzeile fehlt');
+  assert.ok(!/class="badge/.test(block), 'der Chip in der Ecke muss weg sein');
+  assert.strictEqual((block.match(/wasteDateLabel\(naechster\.start\)/g) || []).length, 1,
+    'der naechste Tag darf nur an einer Stelle gesetzt werden');
 });

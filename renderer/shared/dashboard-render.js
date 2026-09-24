@@ -1454,6 +1454,29 @@
       </div>`;
   }
 
+  /**
+   * Die Rohdaten -- nur mit Debug.
+   *
+   * Der ROHE Zustand, unformatiert und ohne Einheit, dazu die Kennung. Das ist die Auskunft,
+   * die bei einer Fehlersuche zaehlt: Oben steht "1,23 kW", hier steht "1234.5" und daneben
+   * "kWh" -- und damit ist die Frage beantwortet.
+   */
+  function detailRoh(entity_id, state) {
+    if (!state) return '';
+    const attrs = state.attributes || {};
+    const zeile = (k, v) => (v === undefined || v === null || v === '') ? ''
+      : `<div><span>${esc(k)}</span><strong>${esc(String(v))}</strong></div>`;
+    return `
+      <div class="dt-roh">
+        ${zeile('Entität', entity_id)}
+        ${zeile('Zustand (roh)', state.state)}
+        ${zeile('Einheit', attrs.unit_of_measurement)}
+        ${zeile('Geräteklasse', attrs.device_class)}
+        ${zeile('Zuletzt geändert', state.last_changed)}
+        ${zeile('Zuletzt gemeldet', state.last_updated)}
+      </div>`;
+  }
+
   // Attribute, die auf der Karte schon stehen oder niemandem etwas sagen.
   const DETAIL_ATTR_AUS = ['friendly_name', 'icon', 'entity_picture', 'supported_features',
     'device_class', 'state_class', 'attribution', 'unit_of_measurement'];
@@ -1496,6 +1519,81 @@
   }
 
   /**
+   * Die Abfuhrtage als KALENDER.
+   *
+   * Warum nicht als Liste: Eine Liste beantwortet "was kommt als naechstes" -- das steht schon
+   * auf der Karte. Die Frage, mit der man das Fenster oeffnet, ist eine andere: "Wann ist der
+   * naechste freie Dienstag", "kommt das vor oder nach dem Urlaub", "hab ich diesen Monat schon
+   * Papier gehabt". Das liest man aus einem Monatsraster in einem Blick und aus einer Liste nie.
+   *
+   * Der Rohzustand der Kalender-Entitaet ist uebrigens `off` -- deshalb steht er hier nirgends.
+   * Eine Karte, die "off" gross anzeigt, sagt niemandem etwas (so sah es vorher aus).
+   */
+  function detailAbfallkalender(events, settings) {
+    const eigene = Array.isArray(settings && settings.wasteColors) ? settings.wasteColors : [];
+    const tage = wasteTage(events, 0);
+    if (!tage.length) return '<div class="graph-empty">Keine Termine gefunden</div>';
+
+    const nach = new Map(tage.map(t => [t.tag, t]));
+    const heute = new Date(); heute.setHours(0, 0, 0, 0);
+    const zwei = (n) => String(n).padStart(2, '0');
+    const schluessel = (d) => d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate());
+
+    // Vom laufenden Monat bis zu dem, in dem der letzte bekannte Termin liegt -- hoechstens
+    // vier. Der Kalender kommt aus dem Abruf ueber 60 Tage; mehr Monate waeren leere Raster.
+    const letzter = wasteDatum(tage[tage.length - 1].start) || heute;
+    const monate = [];
+    const lauf = new Date(heute.getFullYear(), heute.getMonth(), 1);
+    while (monate.length < 4) {
+      monate.push(new Date(lauf));
+      if (lauf.getFullYear() === letzter.getFullYear() && lauf.getMonth() === letzter.getMonth()) break;
+      lauf.setMonth(lauf.getMonth() + 1);
+    }
+
+    const WOCHENTAGE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const monatBauen = (erster) => {
+      const jahr = erster.getFullYear(), monat = erster.getMonth();
+      const imMonat = new Date(jahr, monat + 1, 0).getDate();
+      // Montag zuerst: getDay() liefert 0 fuer Sonntag, also um sechs verschieben.
+      const luecke = (erster.getDay() + 6) % 7;
+      const zellen = [];
+      for (let i = 0; i < luecke; i++) zellen.push('<div class="dk-leer"></div>');
+      for (let tag = 1; tag <= imMonat; tag++) {
+        const d = new Date(jahr, monat, tag);
+        const eintrag = nach.get(schluessel(d));
+        const istHeute = d.getTime() === heute.getTime();
+        const punkte = eintrag ? eintrag.arten.map(a =>
+          `<span class="dk-punkt" style="background:${wasteColor(a, eigene)}"></span>`).join('') : '';
+        // Der Titel traegt die Tonnenarten: Auf einem Touch-Panel nuetzt er nichts, in der
+        // Live-Ansicht am Rechner schon.
+        zellen.push(`<div class="dk-tag${eintrag ? ' dk-abfuhr' : ''}${istHeute ? ' dk-heute' : ''}"
+          ${eintrag ? `title="${esc(eintrag.arten.join(', '))}"` : ''}>
+          <span class="dk-zahl">${tag}</span>${punkte ? `<span class="dk-punkte">${punkte}</span>` : ''}
+        </div>`);
+      }
+      return `
+        <div class="dk-monat">
+          <div class="dk-name">${esc(erster.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }))}</div>
+          <div class="dk-raster">
+            ${WOCHENTAGE.map(w => `<div class="dk-kopf">${w}</div>`).join('')}
+            ${zellen.join('')}
+          </div>
+        </div>`;
+    };
+
+    // Die Legende nennt jede Tonnenart, die in diesem Zeitraum wirklich vorkommt -- nicht die
+    // Farbtabelle. Eine Legende mit Eintraegen, die nirgends auftauchen, laesst einen suchen.
+    const arten = [];
+    for (const tg of tage) for (const a of tg.arten) if (!arten.includes(a)) arten.push(a);
+
+    return `
+      <div class="dk-monate">${monate.map(monatBauen).join('')}</div>
+      <div class="dk-legende">
+        ${arten.map(a => `<span><span class="dk-punkt" style="background:${wasteColor(a, eigene)}"></span>${esc(a)}</span>`).join('')}
+      </div>`;
+  }
+
+  /**
    * Der Inhalt des Detailfensters.
    *
    * @param {string} entity_id
@@ -1516,14 +1614,26 @@
     const einheit = (settings.suffix !== undefined && settings.suffix !== '')
       ? settings.suffix : (attrs.unit_of_measurement || '');
 
+    // Die Entitaets-Kennung ist eine Auskunft fuer die Fehlersuche, kein Untertitel. Ohne
+    // Debug steht dort nur, was fuer eine Karte das ist.
+    const debug = !!opts.debug;
     const kopf = `
       <div class="dt-kopf">
         <div class="dt-titel">${name}</div>
-        <div class="dt-unter">${esc(art)} · ${esc(entity_id)}</div>
+        <div class="dt-unter">${esc(art)}${debug ? ' · ' + esc(entity_id) : ''}</div>
       </div>`;
 
+    // Die Energiekarte bleibt in BEIDEN Lagen gleich: Dort sind die Sensoren die Auskunft, und
+    // das Diagramm ist ohnehin die Auswertung. Eine Debug-Weiche waere hier eine Verschlechterung
+    // in der einen Richtung.
     if (type === 'energy') {
       return kopf + detailEnergie(opts);
+    }
+
+    // Die Muelltermine ohne Debug als KALENDER. Ihr Rohzustand ist `off` -- gross angezeigt sagt
+    // das niemandem etwas, und genau so sah es vorher aus.
+    if (type === 'waste' && !debug) {
+      return kopf + detailAbfallkalender(opts.waste, settings);
     }
 
     const roh = state ? state.state : null;
@@ -1537,10 +1647,10 @@
     return kopf + `
       <div class="dt-wert">${esc(String(wert))}${einheit ? `<span class="dt-einheit">${esc(einheit)}</span>` : ''}</div>
       ${state && state.last_changed
-        ? `<div class="dt-geaendert">Zuletzt geändert: ${esc(detailZeit(state.last_changed))}</div>` : ''}
+        ? `<div class="dt-geaendert">Zuletzt aktualisiert: ${esc(detailZeit(state.last_changed))}</div>` : ''}
       ${detailVerlaufSvg(verlauf)}
       ${detailKennzahlen(verlauf, opts.history)}
-      ${detailAttribute(attrs)}`;
+      ${debug ? detailRoh(entity_id, state) + detailAttribute(attrs) : ''}`;
   }
 
   // --- Welche Karten ein Detailfenster oeffnen ------------------------------------------------
@@ -2677,12 +2787,18 @@
       const punkte = (arten) => arten.map(a =>
         `<span class="waste-dot" style="background:${wasteColor(a, eigeneFarben)}"></span>`).join('');
 
+      // DER TAG STEHT UEBER DEM WERT, nicht als Chip in der Ecke. Gemeldet wurde "man erkennt
+      // nicht auf Anhieb, an welchem Tag das jetzt ist" -- und das war richtig: Die Tonnennamen
+      // nahmen die halbe Karte ein, das Datum sass in einem Chip von zwoelf Pixeln.
+      //
+      // Die Reihenfolge bleibt trotzdem "welche Tonne, und wann": Die Tonnen sind die groesste
+      // Schrift, der Tag die zweitgroesste. Und zweimal steht er nicht -- der Chip ist weg.
       card.innerHTML = `
         <div class="row">
           <span class="icon">${symbolFuer(settings, ICONS.trash)}</span>
-          ${naechster ? `<span class="badge${wasteBald(naechster.start) ? ' waste-bald' : ''}">${esc(wasteDateLabel(naechster.start))}</span>` : ''}
         </div>
         ${naechster ? `
+          <div class="waste-tag${wasteBald(naechster.start) ? ' waste-bald' : ''}">${esc(wasteDateLabel(naechster.start))}</div>
           <div class="value waste-art">${esc(naechster.arten.join(' · '))}</div>
           <div class="name">${name}</div>
           <div class="waste-list">

@@ -808,6 +808,77 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 .dt-quellen em { display: block; font-size: 1.2vh; color: var(--muted); font-style: normal;
   margin-top: 0.3vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-energie { height: 52vh; }
+/* Die Rohdaten: dieselbe Kachelform wie die Kennzahlen, aber gedaempft. Sie sind die Auskunft
+   fuer die Fehlersuche und nicht die Hauptsache -- auch wenn man sie mit Debug ausdruecklich
+   sehen will. */
+.dt-roh { display: grid; gap: 1.2vh; margin-top: 2vh;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.dt-roh > div { background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px dashed var(--card-border); border-radius: 14px; padding: 1.2vh 1.4vh; min-width: 0; }
+.dt-roh span { display: block; font-size: 1.3vh; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; }
+.dt-roh strong { display: block; font-size: 1.9vh; font-weight: 500; margin-top: 0.3vh;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; overflow-wrap: anywhere; }
+
+/* --- Der Abfallkalender ----------------------------------------------------------------------
+   Monatsraster statt Liste. Eine Liste beantwortet "was kommt als naechstes" -- das steht schon
+   auf der Karte. Im Raster sieht man, WO im Monat die Termine liegen, und das ist die Frage,
+   mit der man das Fenster oeffnet. */
+.dk-monate { display: grid; gap: 2vh; margin-top: 1vh;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dk-name { font-size: 1.9vh; font-weight: 600; margin-bottom: 1vh; }
+.dk-raster { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.4vh; }
+.dk-kopf { font-size: 1.2vh; color: var(--muted); text-align: center; padding-bottom: 0.4vh;
+  text-transform: uppercase; letter-spacing: 0.06em; }
+.dk-leer { aspect-ratio: 1; }
+/* Quadratisch, damit das Raster als Kalender lesbar bleibt -- ungleiche Zellen sehen aus wie
+   eine Tabelle. */
+.dk-tag { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.3vh; border-radius: 10px; font-size: 1.5vh;
+  color: var(--muted); background: color-mix(in srgb, var(--text) 3%, transparent); }
+/* Ein Abfuhrtag traegt die Farben seiner Tonnen. Die Zahl wird dabei kraeftiger: Der Tag ist
+   die Auskunft, die Punkte sagen nur, WELCHE Tonne. */
+.dk-abfuhr { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text);
+  font-weight: 600; }
+/* Heute mit Ring, nicht mit Farbe: Die Farben sind hier fuer die Tonnen vergeben. */
+.dk-heute { outline: 2px solid var(--kachel-akzent, #4f7cff); outline-offset: -2px; }
+.dk-zahl { line-height: 1; }
+.dk-punkte { display: flex; gap: 0.25vh; }
+.dk-punkt { width: 0.9vh; height: 0.9vh; min-width: 5px; min-height: 5px;
+  border-radius: 999px; display: inline-block; }
+.dk-legende { display: flex; flex-wrap: wrap; gap: 1.6vh; margin-top: 2vh;
+  font-size: 1.5vh; color: var(--muted); }
+.dk-legende span { display: inline-flex; align-items: center; gap: 0.6vh; }
+
+/* --- Der Abfuhrtag auf der KARTE ------------------------------------------------------------
+   Er stand als 12-Pixel-Chip in der Ecke, waehrend die Tonnennamen 22 px gross waren --
+   gemeldet als "man erkennt nicht auf Anhieb, an welchem Tag das jetzt ist". Das war richtig.
+
+   DAMIT KIPPT EINE ENTSCHEIDUNG, die in CLAUDE.md stand: "welche Tonne, und wann -- in dieser
+   Reihenfolge". Die Tonne war die groesste Schrift. Nur kommt die zweite Haelfte der Frage so
+   nicht an, und die Tonnennamen sind ohnehin lang und damit von weitem erkennbar; ein Datum ist
+   kurz und verschwindet. Jetzt ist der TAG die groesste Schrift und die Tonne die zweite --
+   beide kommen an.
+
+   Gemessen am 2026-09-24 in .scratch/detailfenster/probe.html bei echter Kartengroesse
+   (1229x120): Tag 10 px, Tonnen 22 px, Bildunterschrift 10 px. Der Tag war also genau so
+   gross wie die kleinste Schrift auf der Karte.
+
+   Nebenbei dabei gefunden: `.waste-art` setzt `13cqmin`, wirkt aber nicht -- `.card .value`
+   hat zwei Klassen und gewinnt mit `23cqmin`. Eine Regel, die nie greift, ist dasselbe wie
+   keine (siehe CLAUDE.md, gauge.baseColor). Die Groesse der Tonnenzeile steht deshalb jetzt
+   hier, mit ausreichender Spezifitaet. */
+.card.type-waste .waste-tag {
+  font-size: clamp(1.8vh, 23cqmin, 9vh);
+  font-weight: 600; letter-spacing: -0.01em; line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.card.type-waste .waste-tag.waste-bald { color: var(--kachel-akzent, var(--text)); }
+.card.type-waste .value.waste-art {
+  font-size: clamp(1.3vh, 14cqmin, 4.6vh);
+  font-weight: 500; color: color-mix(in srgb, var(--muted) 30%, var(--text));
+  margin-top: 0.3vh;
+}
 .dt-energie .ed { width: 100%; height: 100%; }
 /* Der Zeiger nur dort, wo ein Tippen auch etwas tut. Auf der Wand ist er ohnehin aus
    (body.wandanzeige), aber in der Live-Ansicht im Browser ist er die einzige Ankuendigung,

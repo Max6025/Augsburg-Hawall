@@ -35,10 +35,15 @@
       <div style="display:flex; align-items:center; gap:0.8rem;">
         <img id="iconPreview" style="display:none; width:2.4rem; height:2.4rem; border-radius:50%; object-fit:cover; background:var(--bg);">
         <span id="iconNoneText" style="font-size:0.85rem; color:var(--muted);">Standard-Stecknadel</span>
-        <input type="file" id="iconFileInput" accept="image/png,image/jpeg,image/webp" style="display:none;">
+        <input type="file" id="iconFileInput" accept="image/svg+xml,.svg,image/png,image/jpeg,image/webp" style="display:none;">
         <button type="button" id="iconUploadBtn" style="margin:0;">Symbol wählen</button>
         <button type="button" id="iconRemoveBtn" style="display:none; margin:0; background:#6c757d;">Entfernen</button>
       </div>
+      <p class="hint-text" id="iconInfo"></p>
+      <p class="hint-text"><strong>SVG wird unterstützt</strong> und ist hier die bessere Wahl: Sie
+        wird <em>nicht</em> umgerechnet, sondern so gespeichert, wie sie ist – und bleibt damit
+        bei jeder Zoomstufe scharf. PNG, JPEG und WebP werden dagegen auf 120 Pixel
+        verkleinert.</p>
 
       <label>Standard-Zoomstufe beim Öffnen</label>
       <input type="number" id="defaultZoom" min="1" max="19" value="16" style="max-width:120px;">

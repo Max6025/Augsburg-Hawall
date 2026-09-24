@@ -610,19 +610,32 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   gefunden", obwohl im Unterdashboard alles richtig eingestellt war. Wer einen Kartentyp mit eigenen Daten
   ergänzt, ergänzt ihn dort — zwei Kopien dieser Liste laufen beim nächsten Typ wieder
   auseinander.
-- **Die Mülltermine-Karte beantwortet „welche Tonne, und wann" — in dieser Reihenfolge.**
-  Vorher war der **Kartenname** die größte Schrift; aus zwei Metern las man „Mülltermine" und
-  sonst nichts, und die Folgetermine standen in 8-Pixel-Zeilen darunter. Jetzt dieselbe
-  Anatomie wie jede andere Karte: Symbolzeile mit dem Tag als Zustands-Chip, die Tonnenart als
-  Wert, der Kartenname als Bildunterschrift. Drei Punkte hängen daran:
+- **Die Mülltermine-Karte beantwortet „wann, und welche Tonne" — in DIESER Reihenfolge.**
+  Bis 1.0.24 war es umgekehrt, und das war falsch: Gemeldet als *„man erkennt nicht auf Anhieb,
+  an welchem Tag das jetzt ist, steht relativ klein in der Ecke"*. Gemessen in
+  `.scratch/detailfenster/probe.html` bei echter Kartengröße (1229×120): Tag **10 px**,
+  Tonnennamen **22 px**, Bildunterschrift **10 px** — der Tag war genau so groß wie die
+  kleinste Schrift auf der Karte, und er saß als Chip in der Ecke.
+  Der Grund für den Umschwung: Tonnennamen sind **lang** („Restabfall · Papierabfall ·
+  Verpackungstonne") und deshalb von weitem ohnehin erkennbar; ein Datum ist **kurz** und
+  verschwindet. Jetzt ist der Tag die größte Schrift (23cqmin), die Tonne die zweite (14cqmin),
+  und den Chip gibt es nicht mehr — dieselbe Auskunft zweimal ist Rauschen.
+  **Dabei gefunden:** `.waste-art` setzte `13cqmin` und wirkte **nie**. `.card .value` hat zwei
+  Klassen und gewinnt mit `23cqmin`; die Tonnennamen rendern deshalb seit immer mit 22 px statt
+  mit den vorgesehenen 12. Eine Regel, die nie greift, ist dasselbe wie keine — dieselbe Lehre
+  wie bei `gauge.baseColor`. Die Größe steht jetzt unter `.card.type-waste .value.waste-art`.
+  Was **davon unberührt bleibt** (und der Weg dorthin, zur Einordnung): Ganz früher war der
+  **Kartenname** die größte Schrift — aus zwei Metern las man „Mülltermine" und sonst nichts.
+  Seitdem gilt dieselbe Anatomie wie bei jeder anderen Karte, nur die Rangfolge von Tag und
+  Tonne hat sich mit 1.0.25 gedreht. Drei Punkte hängen weiterhin daran:
   1. **Gruppiert wird nach TAGEN** (`wasteTage()`), nicht nach Einträgen. In Crespina fahren
      dienstags zwei Tonnen zusammen — als Einzelzeilen frisst das die halbe Karte und sieht
      aus wie ein Fehler. Die Einstellung „wie viele" zählt seitdem Tage.
   2. **Die Farbe der nächsten Tonne wird der Kartenakzent.** Eine Tonne erkennt man an ihrer
      Farbe, lange bevor man den Namen liest; ein Punkt von zwölf Pixeln leistet das nicht.
      Gesetzt wird `--kachel-akzent` — nicht `background`, siehe [ADR 0004](docs/adr/0004-farbe-als-akzent-statt-als-kachelfarbe.md).
-  3. **Heute und morgen färben den Zustands-Chip ein** (`wasteBald()`). Bis übermorgen ist es
-     eine Information, heute ist es eine Aufgabe.
+  3. **Heute und morgen färben ein** (`wasteBald()`) — seit 1.0.25 die Tagzeile statt des
+     Chips. Bis übermorgen ist es eine Information, heute ist es eine Aufgabe.
   Und: `new Date('2026-09-14')` ist **UTC**-Mitternacht. Westlich von Greenwich ist das der
   13. September, und die Tonne stünde einen Tag zu früh auf der Karte — derselbe Fallstrick wie
   bei Ganztages-Einträgen aus einem Kalender. `wasteDatum()` liest ein reines
@@ -867,6 +880,24 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   sonst von allein auf, weil das Aufwecken mit dem Mauszeiger wackeln muss (`panel.js`), und
   bleibt dann mitten auf der Wand stehen. Bewusst an die Body-Klasse gebunden: Der
   Karten-Editor lädt dieselbe CSS-Datei, wird aber mit der Maus bedient.
+- **Das Detailfenster hat ZWEI Gesichter, und der Schalter heißt „Debug-Ansicht".**
+  Einstellungen → Panel, ab Werk **aus**. Aus zeigt das Fenster die **Auswertung**: Verlauf über
+  24 Stunden, Tiefst-, Mittel- und Höchstwert, wann zuletzt aktualisiert wurde. An zeigt es
+  zusätzlich die **Rohdaten** — Entität, roher Zustand, Einheit, Geräteklasse, Attribute.
+  Debug **nimmt nichts weg, es legt etwas dazu**; die Entitäts-Kennung im Kopf erscheint nur
+  dort, denn sie ist eine Auskunft für die Fehlersuche und kein Untertitel.
+  Zwei Karten weichen ab, und beide aus einem Grund:
+  1. **Die Energiekarte ist in beiden Lagen gleich.** Dort *sind* die Sensoren die Auskunft, und
+     das Diagramm ist ohnehin die Auswertung. Eine Weiche wäre hier eine Verschlechterung in
+     der einen Richtung.
+  2. **Die Mülltermine zeigen ohne Debug einen KALENDER.** Ihr Rohzustand ist `off` — groß
+     angezeigt sagt das niemandem etwas, und genau so sah es vorher aus. Das Monatsraster
+     beantwortet dagegen die Frage, mit der man das Fenster öffnet: *wann* ist die nächste
+     Abfuhr, liegt sie vor oder nach dem Urlaub, hatte ich diesen Monat schon Papier. Eine
+     Liste beantwortet nur „was kommt als nächstes", und das steht schon auf der Karte.
+     Die Woche fängt am **Montag** an, heute trägt einen **Ring** (Farben sind hier für die
+     Tonnen vergeben), und die Legende nennt nur Tonnen, die im Zeitraum wirklich vorkommen —
+     eine Legende mit Einträgen, die nirgends auftauchen, lässt einen suchen.
 - **Das Detailfenster öffnet NUR auf Karten, die beim Tippen nichts tun.** `DETAIL_TYPEN` in
   `dashboard-render.js` zählt sie auf — Energie, Verlauf, Ring, Temperatur, Feuchte, Luftdruck,
   Wind, Regen, Sensor, Vorhersage, Mülltermine, Radar, Flügeltor. Bei einer Lampe, einem Tor,
@@ -1007,6 +1038,24 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   einer anderen, und man musste erst merken, dass da zwei sind. Jetzt liefert es `null`, und
   jeder Aufrufer muss das behandeln. Vorher wird noch mit kleineren Maßen gesucht, damit eine
   große Vorgabegröße nicht daran scheitert, dass nur ein Feld frei ist.
+- **Das Tracker-Symbol darf eine SVG sein — und die geht NICHT durch das Canvas.**
+  `resizeImageFile()` zeichnet auf ein Canvas und gibt ein PNG zurück. Für eine SVG wäre das
+  zweimal falsch: Sie wäre auf 120 Pixel **rasterisiert** (und das Symbol steht auf einer
+  Landkarte, die man bis Zoomstufe 19 aufzieht), und eine SVG ohne `width`/`height` rendert auf
+  einem Canvas in manchen Browsern als **0×0** — dann kommt ein leeres Bild heraus, ohne
+  Fehlermeldung. `svgLesen()` speichert sie deshalb unverändert als Data-URL.
+  Vier Dinge hängen daran:
+  1. **Erkannt wird an Medientyp UND Endung.** Nicht jedes System meldet für `.svg` den Typ
+     `image/svg+xml` — unter Windows hängt das an der Registry. Wer nur den Typ prüft, schickt
+     die Datei durch das Canvas.
+  2. **Geprüft wird vor dem Speichern**: ein `<svg>`-Element muss da sein, und `viewBox` oder
+     `width` — ohne beides hat die Datei kein Seitenverhältnis und steht im Marker verzerrt.
+     Abgelehnt wird mit einem Satz, nicht stillschweigend.
+  3. **64 kB Obergrenze.** Das Symbol liegt als Data-URL in `config.json`, und die wird bei
+     jedem Start gelesen.
+  4. **Die Data-URL landet nur in einem `<img>`** (Vorschau und Leaflets `L.icon`). Dort führt
+     der Browser keine Skripte aus einer SVG aus; als `innerHTML` eingebettet wäre es etwas
+     anderes. Ein Test hält fest, dass sie nirgends dorthin gerät.
 - **Eine Schrift, die der Browser nicht findet, fällt stillschweigend zurück.** Die Uhr-Karte
   kann auf eine mitgelieferte Handschrift umgestellt werden (`clockFont: 'marker'`). Stimmt der
   Pfad im `@font-face` nicht, nimmt der Browser einfach die nächste Schrift aus der Liste: Die
@@ -1158,7 +1207,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-530 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+553 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

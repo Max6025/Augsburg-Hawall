@@ -235,6 +235,16 @@
     <label><input type="checkbox" id="systemWachhalten" style="width:auto; margin-right:0.5rem;">Gerät wach halten, auch wenn das Panel aus ist</label>
     <p class="hint-text">Ab Werk an. Es fordert bei Windows an, dass das System nicht in den
       Leerlaufschlaf geht, während der Bildschirm abgeschaltet ist.</p>
+    <label style="margin-top:1.2rem;"><input type="checkbox" id="debugModus" style="width:auto; margin-right:0.5rem;">Debug-Ansicht im Detailfenster</label>
+    <p class="hint-text">Tippen auf eine Anzeigekarte öffnet ein Detailfenster. <strong>Aus</strong>
+      zeigt es die Auswertung: Verlauf über 24 Stunden, Tiefst-, Mittel- und Höchstwert und wann
+      zuletzt aktualisiert wurde. <strong>An</strong> zeigt es stattdessen die Rohdaten – welche
+      Entität, welcher Zustand, welche Attribute. Das ist die Ansicht für die Fehlersuche
+      („warum steht da 1,23 kW"), nicht die für den Alltag.</p>
+    <p class="hint-text">Zwei Karten weichen ab: Die <strong>Energiekarte</strong> zeigt immer
+      Diagramm und Quellen – dort sind die Sensoren die Auskunft. Die <strong>Mülltermine</strong>
+      zeigen ohne Debug einen <strong>Kalender</strong> mit farbig markierten Abfuhrtagen; ihr
+      Rohzustand ist „off" und sagt niemandem etwas.</p>
     <p class="hint-text">Dass das Gerät nachts erreichbar bleibt, hängt allerdings an etwas
       anderem: den <strong>Schlaf-Fristen</strong> des Energieschemas. Die setzt die App selbst
       auf „nie“, und ob es geklappt hat, steht auf der <a href="status.html">Statusseite</a> –

@@ -1732,7 +1732,10 @@ async function detailAktualisieren() {
   }
 
   ziel.innerHTML = DashboardRender.detailInhalt(entity_id, type, statesById[entity_id], {
-    settings, namen: haNamen, history, energy: zusatz.energy, diagramm
+    settings, namen: haNamen, history, energy: zusatz.energy, waste: zusatz.waste, diagramm,
+    // Ab Werk aus: Wer davorsteht, will den Verlauf, nicht die Attributliste. Einstellbar
+    // unter Einstellungen -> Panel.
+    debug: !!(config && config.debugModus)
   });
 }
 

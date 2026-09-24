@@ -64,6 +64,7 @@ async function load() {
   $('nightEnd').value = configRes.nightEnd || '06:30';
   $('nightForceOn').checked = !!configRes.nightModeForceOn;
   $('systemWachhalten').checked = configRes.systemWachhalten !== false;
+  $('debugModus').checked = !!configRes.debugModus;
 
   // Der Zugriffsschluessel kommt ausdruecklich NICHT zurueck (siehe /api/config) -- das Feld
   // bleibt leer und heisst "unveraendert". Ohne diesen Hinweis sieht es aus, als waere keiner
@@ -201,6 +202,7 @@ function alleFelder() {
     nightEnd: $('nightEnd').value || '06:30',
     nightModeForceOn: $('nightForceOn').checked,
     systemWachhalten: $('systemWachhalten').checked,
+    debugModus: $('debugModus').checked,
     wartungsmelderUrl: $('wartungsmelderUrl').value.trim(),
 
     schonerEnabled: $('schonerEnabled').checked,

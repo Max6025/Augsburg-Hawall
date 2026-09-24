@@ -310,6 +310,9 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       nightModeForceOn: store.get('nightModeForceOn') || false,
       // Ab Werk an: lieber ein erreichbares Geraet als ein sparsames, das nachts schweigt.
       systemWachhalten: store.get('systemWachhalten') !== false,
+      // Debug-Ansicht: Das Detailfenster zeigt dann die Rohdaten statt der Auswertung.
+      // Ab Werk AUS -- wer davorsteht, will den Verlauf, nicht die Attributliste.
+      debugModus: !!store.get('debugModus'),
       // Der Wartungsmelder (Add-on in Home Assistant). Der Zugriffsschluessel geht
       // ausdruecklich NICHT mit heraus -- nur, ob einer gesetzt ist, genauso wie beim
       // HA-Token. Ein Feld, das den Schluessel zurueckgibt, verteilt ihn an jeden, der die
@@ -347,6 +350,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
       notifyEntity, batteryThreshold, batterySound, batteryVolume, nightModeEnabled, nightStart, nightEnd, nightModeForceOn,
       notifyTitel, notifySekunden, systemWachhalten,
       wartungsmelderUrl, wartungsmelderSchluessel,
+      debugModus,
       hintergrundBewegung, rueckkehrSekunden, desktopHintergrund,
       schonerEnabled, schonerMinuten, schonerHelligkeit, schonerDashboard, schonerHintergrund
     } = req.body || {};
@@ -378,6 +382,7 @@ function startServer({ port, store, onConfigSaved, getLocalIps, updater, control
     if (nightEnd !== undefined) store.set('nightEnd', nightEnd);
     if (nightModeForceOn !== undefined) store.set('nightModeForceOn', nightModeForceOn);
     if (systemWachhalten !== undefined) store.set('systemWachhalten', !!systemWachhalten);
+    if (debugModus !== undefined) store.set('debugModus', !!debugModus);
     // Ohne Schraegstrich am Ende, damit die Pfade nicht doppelt zusammengesetzt werden.
     if (wartungsmelderUrl !== undefined) {
       store.set('wartungsmelderUrl', String(wartungsmelderUrl || '').trim().replace(/\/+$/, ''));

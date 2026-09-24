@@ -24,6 +24,8 @@
   <div class="knopfleiste">
     <a href="?fall=energie">Energie</a><a href="?fall=temperatur">Temperatur</a>
     <a href="?fall=sensor">Sensor</a><a href="?fall=leer">ohne Wert</a>
+    <a href="?fall=abfall">Abfall (Kalender)</a><a href="?fall=abfalldebug">Abfall (Debug)</a>
+    <a href="?fall=temperatur&debug=1">Temperatur (Debug)</a>
   </div>
   <!-- Echte Karten, echte Rueckrufe: Hier wird geprueft, ob ein TIPP das Fenster ueberhaupt
        oeffnet. Das ist der Teil, den eine reine Inhaltsprobe nicht beweist -- die Kette
@@ -42,7 +44,9 @@
   <div class="marke" id="marke"></div>
 <script src="../../renderer/shared/dashboard-render.js"></script>
 <script>
-  const fall = new URLSearchParams(location.search).get('fall') || 'temperatur';
+  const P = new URLSearchParams(location.search);
+  const fall = P.get('fall') || 'temperatur';
+  const debug = P.has('debug') || fall === 'abfalldebug';
   const Z = (id, state, attrs) => ({ entity_id: id, state, attributes: attrs || {} });
   const verlauf = (basis, schwankung, n) => Array.from({ length: n || 60 }, (_, i) =>
     ({ t: Date.now() - (n - i) * 1440000, v: basis + Math.sin(i / 7) * schwankung + (Math.random() - .5) }));
@@ -73,6 +77,22 @@
         battery: 87, rssi: -62
       }),
       { history: verlauf(400, 300, 60), namen: { 'sensor.ecowitt_solar_radiation_11dc2': 'Solar Radiation' } });
+  } else if (fall === 'abfall' || fall === 'abfalldebug') {
+    // Termine relativ zu HEUTE, damit "Heute"/"Morgen" und der Ring um den heutigen Tag
+    // wirklich zu sehen sind. Feste Daten waeren in vier Wochen eine leere Probe.
+    const tag = (n) => { const d = new Date(); d.setDate(d.getDate() + n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    const termine = [
+      { start: tag(0), summary: 'Restabfall' },
+      { start: tag(13), summary: 'Restabfall' }, { start: tag(13), summary: 'Papierabfall' },
+      { start: tag(13), summary: 'Verpackungstonne' },
+      { start: tag(27), summary: 'Restabfall' }, { start: tag(41), summary: 'Biotonne' },
+      { start: tag(55), summary: 'Restabfall' }
+    ];
+    html = DashboardRender.detailInhalt('calendar.awido_online', 'waste',
+      Z('calendar.awido_online', 'off', { message: 'Restabfall', all_day: true }),
+      { waste: termine, debug, namen: { 'calendar.awido_online': 'AWIDO Online' } });
+    window.probeTermine = termine;
   } else if (fall === 'leer') {
     html = DashboardRender.detailInhalt('sensor.kaputt', 'temperature',
       Z('sensor.kaputt', 'unavailable', { unit_of_measurement: '°C' }), {});
@@ -81,7 +101,7 @@
       Z('sensor.ecowitt_outdoor_temp_11dc2', '11.2', {
         unit_of_measurement: '°C', friendly_name: 'Outdoor Temperature', battery: 92
       }),
-      { history: verlauf(11, 4, 60), settings: { decimals: 1 },
+      { history: verlauf(11, 4, 60), settings: { decimals: 1 }, debug,
         namen: { 'sensor.ecowitt_outdoor_temp_11dc2': 'Outdoor Temperature' } });
   }
   document.getElementById('inhalt').innerHTML = html;
@@ -98,12 +118,31 @@
     ['light.probe', 'light', Z('light.probe', 'on', { friendly_name: 'Lampe (darf NICHT öffnen)', brightness: 180 })],
     ['cover.probe', 'cover', Z('cover.probe', 'open', { friendly_name: 'Rollladen (darf NICHT öffnen)', current_position: 60 })]
   ];
+  // Die Muellkarte separat und BREIT -- so haengt sie am Geraet, und nur so sieht man, ob der
+  // Abfuhrtag gegen die grossen Tonnennamen ankommt.
+  const abfallKarte = () => {
+    const tag = (n) => { const d = new Date(); d.setDate(d.getDate() + n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    return DashboardRender.buildCard('calendar.awido_online', Z('calendar.awido_online', 'off', {}),
+      'waste', { cols: 4, rows: 1 }, {
+        editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: rueckrufe,
+        namen: { 'calendar.awido_online': 'AWIDO Online' },
+        waste: [
+          { start: tag(13), summary: 'Restabfall' }, { start: tag(13), summary: 'Papierabfall' },
+          { start: tag(13), summary: 'Verpackungstonne' },
+          { start: tag(27), summary: 'Restabfall' }, { start: tag(41), summary: 'Biotonne' }
+        ]
+      });
+  };
   const raster = document.getElementById('raster');
   for (const [id, typ, zustand] of proben) {
     raster.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: 1, rows: 1 }, {
       editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: rueckrufe
     }));
   }
+  const breit = abfallKarte();
+  breit.style.gridColumn = 'span 4';
+  raster.appendChild(breit);
   window.probenProtokoll = protokoll;
 
   // Nachmessen statt glauben: Passt der Inhalt ins Fenster, oder muss man scrollen?

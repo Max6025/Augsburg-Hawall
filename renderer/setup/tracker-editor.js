@@ -34,7 +34,12 @@ async function init() {
   $('iconFileInput').addEventListener('change', async () => {
     const file = $('iconFileInput').files[0];
     if (!file) return;
-    iconDataUrl = await resizeImageFile(file, 120);
+    try {
+      iconDataUrl = istSvg(file) ? await svgLesen(file) : await resizeImageFile(file, 120);
+      iconMeldung('');
+    } catch (e) {
+      iconMeldung(String(e.message || e));
+    }
     updateIconPreview();
     $('iconFileInput').value = '';
   });
@@ -68,6 +73,9 @@ async function init() {
 
 function updateIconPreview() {
   if (iconDataUrl) {
+    // `contain` statt `cover`: Eine SVG ist meist nicht quadratisch, und `cover` schneidet
+    // dann genau das weg, was man sehen will.
+    $('iconPreview').style.objectFit = iconDataUrl.startsWith('data:image/svg') ? 'contain' : 'cover';
     $('iconPreview').src = iconDataUrl;
     $('iconPreview').style.display = 'inline-block';
     $('iconNoneText').style.display = 'none';
@@ -77,6 +85,64 @@ function updateIconPreview() {
     $('iconNoneText').style.display = 'inline';
     $('iconRemoveBtn').style.display = 'none';
   }
+}
+
+function iconMeldung(text) {
+  const el = $('iconInfo');
+  if (el) el.textContent = text;
+}
+
+function istSvg(file) {
+  return file.type === 'image/svg+xml' || /\.svg$/i.test(file.name || '');
+}
+
+// Groesser gehoert so ein Symbol nicht in die Konfiguration: Es liegt als Data-URL in
+// config.json, und die wird bei jedem Start gelesen.
+const SVG_MAX = 64 * 1024;
+
+/**
+ * Eine SVG SO speichern, wie sie ist -- ohne Canvas.
+ *
+ * Das ist der ganze Punkt: `resizeImageFile()` zeichnet auf ein Canvas und gibt ein PNG
+ * zurueck. Damit waere eine SVG rasterisiert, und zwar auf 120 Pixel -- genau der Vorteil,
+ * wegen dem man eine SVG nimmt, waere weg. Beim Hineinzoomen auf der Landkarte sieht man den
+ * Unterschied sofort.
+ *
+ * Ein zweiter Grund: Eine SVG ohne `width`/`height` rendert auf einem Canvas in manchen
+ * Browsern als 0x0, und dann kommt ein LEERES Bild heraus -- ohne Fehlermeldung.
+ *
+ * Gefahrlos ist das, weil Leaflet daraus ein `<img>` macht und die Vorschau hier auch: In
+ * einem `<img>` fuehrt ein Browser keine Skripte aus einer SVG aus. Eingebettet als
+ * `innerHTML` waere es etwas anderes -- deshalb darf diese Data-URL nirgends dorthin.
+ */
+function svgLesen(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Datei nicht lesbar'));
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      if (!/<svg[\s>]/i.test(text)) {
+        return reject(new Error('Das sieht nicht nach einer SVG aus – kein <svg>-Element gefunden.'));
+      }
+      // Ohne viewBox UND ohne Groessenangabe hat eine SVG kein Seitenverhaeltnis. Im Marker
+      // steht sie dann verzerrt oder gar nicht -- und man sucht den Fehler an der Landkarte.
+      if (!/viewBox=/i.test(text) && !/<svg[^>]*\swidth=/i.test(text)) {
+        return reject(new Error('Diese SVG hat weder viewBox noch width – so lässt sie sich nicht '
+          + 'zuverlässig skalieren. Bitte eine mit viewBox exportieren.'));
+      }
+      const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(text)));
+      if (url.length > SVG_MAX) {
+        return reject(new Error(`Die SVG ist ${Math.round(url.length / 1024)} kB groß – `
+          + `mehr als ${SVG_MAX / 1024} kB gehören nicht in die Konfiguration. `
+          + 'Meist hilft "Als einfache SVG exportieren" oder das Entfernen eingebetteter Bilder.'));
+      }
+      iconMeldung(`SVG übernommen, ${Math.round(url.length / 1024)} kB – unverändert gespeichert.`);
+      resolve(url);
+    };
+    // Als TEXT, nicht als Data-URL: Nur so lassen sich viewBox und Groesse pruefen, bevor die
+    // Datei in der Konfiguration landet.
+    reader.readAsText(file);
+  });
 }
 
 // Verkleinert ein Bild vor dem Speichern auf max. maxDim Pixel (laengste Seite), komprimiert
