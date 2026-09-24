@@ -403,6 +403,9 @@ async function loadTrackerHistory(entityId, range, btnEl, customStart, customEnd
  * Hand zurueckzoomen, auf einem Touch-Panel mit zwei Fingern.
  */
 function trackerVerlaufAus() {
+  // Ohne diese Zeile wuerde ein Aufruf von aussen (Schonerbeginn) eine Leaflet-Karte in einem
+  // unsichtbaren Container ANLEGEN, nur um nichts daraus zu entfernen.
+  if (!trackerMapInstance) return;
   const map = ensureTrackerMap();
   if (trackerPolyline) { map.removeLayer(trackerPolyline); trackerPolyline = null; }
   document.querySelectorAll('#trackerRangeBtns button[data-range]').forEach(b => b.classList.remove('active'));
@@ -1395,12 +1398,42 @@ function schonerPruefen() {
   if (schonen) {
     schonerHintergrundAnwenden();
     schoner.zeigen();
+    // ERST zeigen, DANN aufraeumen. Der Schoner liegt auf z-index 9990 und deckt das
+    // Dashboard vollstaendig ab -- der Wechsel passiert also hinter ihm und ist nicht zu
+    // sehen. Umgekehrt saehe man ihn: einen Augenblick das Hauptdashboard, dann den Schoner.
+    hinterDemSchonerAufraeumen();
   } else {
     schoner.verbergen();
   }
   // Erst umschalten, dann rechnen: helligkeitAnpassen() liest den GESAMTEN Zustand, nicht das
   // letzte Ereignis.
   helligkeitAnpassen();
+}
+
+/**
+ * Hinter dem liegenden Schoner in den Ausgangszustand zurueckgehen.
+ *
+ * DAS PROBLEM, das das loest: Wer abends auf dem Unterdashboard "Heizung" nachgesehen hat,
+ * findet morgens das Unterdashboard "Heizung" vor -- und muss erst auf "zurueck" tippen, bevor
+ * er das sieht, was er sehen wollte. Auf einem Tracker-Dashboard sogar zweimal, weil dort noch
+ * die Verlaufslinie der letzten Woche liegt und die Karte auf die ganze Woche gezoomt ist.
+ *
+ * `rueckkehrPruefen()` steigt beim liegenden Schoner ausdruecklich aus, mit dem Kommentar "ist
+ * die Rueckkehr sein Job" -- nur hat diesen Job nie jemand gemacht. Jetzt macht ihn der Schoner.
+ *
+ * UNABHAENGIG von der Einstellung `rueckkehrSekunden`. Die beantwortet eine andere Frage: "Wie
+ * lange darf ein Unterdashboard stehen bleiben, waehrend jemand davorsteht?" Wer dort 0
+ * eintraegt, will nicht weggeschaltet werden, solange er hinsieht. Beim liegenden Schoner sieht
+ * per Definition niemand hin.
+ */
+function hinterDemSchonerAufraeumen() {
+  // Der Verlauf zuerst: Er gehoert zur Tracker-Ansicht, die gleich nicht mehr aktiv ist.
+  trackerVerlaufAus();
+  if (currentDashboardId !== 'main') {
+    // navigateTo setzt `letzteBedienung` NICHT -- sonst wuerde der Schoner sich im selben
+    // Augenblick wieder verbergen, und das Panel haette sich selbst geweckt.
+    Promise.resolve(navigateTo('main')).catch(() => {});
+  }
 }
 
 function schonerHintergrundAnwenden() {
@@ -1588,7 +1621,10 @@ function rueckkehrPruefen() {
   if (currentDashboardId === 'main') return;
   const sekunden = Number(config && config.rueckkehrSekunden);
   if (!(sekunden > 0)) return;                       // 0 oder leer heisst: gar nicht
-  if (schoner && schoner.istSichtbar()) return;   // liegt der Schoner, ist die Rueckkehr sein Job
+  // Liegt der Schoner, hat er die Rueckkehr beim Hinlegen schon gemacht -- siehe
+  // hinterDemSchonerAufraeumen(). Bis 1.0.23 stand hier dasselbe Kommentar und der Job war
+  // unerledigt: ein Ausstieg, der auf eine Zusage verwies, die niemand eingeloest hat.
+  if (schoner && schoner.istSichtbar()) return;
   if ((Date.now() - letzteBedienungAufUnterdashboard) / 1000 >= sekunden) navigateTo('main');
 }
 

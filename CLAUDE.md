@@ -524,6 +524,31 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Er läuft **nur auf dem Panel** (`IM_PANEL`): In der Live-Ansicht würde er dem, der von
   unterwegs nachsieht, genau das verdecken, wofür er die Seite geöffnet hat.
 
+- **Der Schoner räumt beim Hinlegen auf — hinter sich, wo es niemand sieht.** Wer abends auf
+  dem Unterdashboard „Heizung" nachgesehen hat, fand morgens das Unterdashboard „Heizung" vor
+  und musste erst auf „zurück" tippen. Auf einem Tracker-Dashboard zweimal, weil dort noch die
+  Verlaufslinie der letzten Woche lag und die Karte auf die ganze Woche gezoomt war.
+  `hinterDemSchonerAufraeumen()` nimmt den Verlauf weg und wechselt aufs Hauptdashboard.
+  Vier Dinge hängen daran:
+  1. **ERST `schoner.zeigen()`, DANN aufräumen.** Umgekehrt sieht man den Wechsel: einen
+     Augenblick das Hauptdashboard, dann den Schoner. Er liegt auf `z-index: 9990` und deckt
+     alles ab — hinter ihm ist der Wechsel unsichtbar, davor nicht.
+  2. **`navigateTo()` darf `letzteBedienung` nicht anfassen.** Sonst verbirgt sich der Schoner
+     im selben Augenblick wieder, in dem er sich hinlegt — das Panel hätte sich selbst geweckt,
+     jede Nacht. Es setzt nur `letzteBedienungAufUnterdashboard`, und das ist eine andere Uhr.
+  3. **Unabhängig von `rueckkehrSekunden`.** Die Einstellung beantwortet eine andere Frage: Wie
+     lange darf ein Unterdashboard stehen bleiben, *während* jemand davorsteht? Wer dort 0
+     einträgt, will nicht weggeschaltet werden, solange er hinsieht — beim liegenden Schoner
+     sieht per Definition niemand hin. `rueckkehrPruefen()` steigt beim liegenden Schoner
+     weiterhin aus; zwei Stellen, die gleichzeitig zurückwechseln, wären ein Wettlauf.
+  4. **`trackerVerlaufAus()` legt keine Landkarte an.** Von außen gerufen hätte
+     `ensureTrackerMap()` sonst eine Leaflet-Karte in einem unsichtbaren Container erzeugt, nur
+     um nichts daraus zu entfernen — bei jedem Hinlegen, auf einem Gerät, das nie ein
+     Tracker-Dashboard gesehen hat.
+
+  Nebenbei: In `rueckkehrPruefen()` stand seit Anfang an der Kommentar „liegt der Schoner, ist
+  die Rückkehr sein Job" — und diesen Job hat nie jemand gemacht. Ein Ausstieg, der auf eine
+  Zusage verweist, die niemand einlöst, ist derselbe Fall wie eine Funktion, die niemand aufruft.
 - **Die Karten des Schoners werden bei JEDER Prüfung nachgezogen, nicht nur beim Hinlegen.**
   In `schonerPruefen()` stand zuerst ein früher Ausstieg, sobald sich die Sichtbarkeit nicht
   änderte. Die Karten entstanden dadurch genau einmal — beim Start, als noch kein einziger
@@ -1099,7 +1124,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-501 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+508 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
