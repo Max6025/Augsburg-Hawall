@@ -153,6 +153,10 @@ let historyCache = {};
 // hinter dem Text -- eine Zahl allein beantwortet nicht, ob sie gerade steigt oder faellt.
 const MIT_VERLAUF = ['graph', 'gauge', 'temperature', 'humidity', 'pressure', 'wind', 'rain', 'solar', 'sensor'];
 
+// Wie weit der Verlauf einer Karte zurueckreicht: DashboardRender.verlaufStunden(). Die
+// Begruendung steht dort, weil dort auch die Tests dazu greifen koennen.
+const verlaufStunden = (type, settings) => DashboardRender.verlaufStunden(type, settings);
+
 let forecastCache = {};
 let currentDashboardId = 'main';
 
@@ -473,7 +477,7 @@ async function ensureForecast(entityId, forecastType) {
 async function kartenZusatz(entry, type) {
   const zusatz = {};
   const einst = entry.settings || {};
-  if (MIT_VERLAUF.includes(type)) zusatz.history = await ensureHistory(entry.entity_id, einst.graphHours);
+  if (MIT_VERLAUF.includes(type)) zusatz.history = await ensureHistory(entry.entity_id, verlaufStunden(type, einst));
   if (type === 'forecast') {
     const fr = await ensureForecast(entry.entity_id, einst.forecastType);
     zusatz.forecast = fr.forecast; zusatz.forecastError = fr.error;
@@ -683,7 +687,7 @@ async function unterleisteAufbauen(entry) {
   if (brauchtZustand && !s) { el.hidden = true; el.innerHTML = ''; return; }
 
   let history;
-  if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, (entry.settings || {}).graphHours);
+  if (MIT_VERLAUF.includes(type)) history = await ensureHistory(entry.entity_id, verlaufStunden(type, entry.settings));
 
   el.hidden = false;
   el.innerHTML = '';

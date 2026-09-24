@@ -1,7 +1,7 @@
 {
   "name": "hawall-eurasburg",
   "productName": "Hawall Eurasburg",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "description": "Wall Display fuer Home Assistant im Dauerbetrieb: im Ruhezustand liegt der Bildschirmschoner, ein Tipp holt das Dashboard, nachts ist das Panel wirklich aus",
   "main": "main.js",
   "author": "Max",

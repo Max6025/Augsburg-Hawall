@@ -387,3 +387,62 @@ test('der Tag steht nur EINMAL auf der Karte', () => {
   assert.strictEqual((block.match(/wasteDateLabel\(naechster\.start\)/g) || []).length, 1,
     'der naechste Tag darf nur an einer Stelle gesetzt werden');
 });
+
+// --- Wie weit der Verlauf zurueckreicht ----------------------------------------------------
+
+test('hinter einer Wertkarte steht EINE Stunde', () => {
+  // Die Flaeche dort ist kein Diagramm, sie zeigt "geht gerade rauf oder runter". Bei 24
+  // Stunden plattet der Tagesgang die letzte Stunde zu einer waagerechten Linie -- und genau
+  // so sah es aus, weil ensureHistory() 24 als Vorgabe hat.
+  for (const typ of ['temperature', 'humidity', 'pressure', 'wind', 'rain', 'solar', 'sensor']) {
+    assert.strictEqual(R.verlaufStunden(typ, {}), 1, typ);
+  }
+});
+
+test('Verlaufskarte und RINGKARTE bleiben bei 24 Stunden', () => {
+  // Die Verlaufskarte IST das Diagramm. Und die Ringkarte rechnet ihren Wertebereich aus dem
+  // beobachteten Verlauf (gaugeRange) -- mit einer Stunde waere der Bereich so eng, dass die
+  // Nadel bei jedem Rauschen von links nach rechts schlaegt. Das ist der Grund, warum hier
+  // nicht einfach "alles auf 1" steht.
+  assert.strictEqual(R.verlaufStunden('graph', {}), 24);
+  assert.strictEqual(R.verlaufStunden('gauge', {}), 24);
+});
+
+test('eine ausdrueckliche Einstellung gewinnt immer', () => {
+  // Sie steht im Editor nur bei der Verlaufskarte, kann aber aus einem importierten Dashboard
+  // an jeder Karte haengen.
+  assert.strictEqual(R.verlaufStunden('temperature', { graphHours: 168 }), 168);
+  assert.strictEqual(R.verlaufStunden('graph', { graphHours: 1 }), 1);
+});
+
+test('Unsinn faellt auf die Vorgabe zurueck', () => {
+  for (const murks of [{ graphHours: 0 }, { graphHours: -5 }, { graphHours: 'abc' }, {}, null, undefined]) {
+    assert.strictEqual(R.verlaufStunden('temperature', murks), 1, JSON.stringify(murks));
+  }
+});
+
+test('dashboard.html holt den Verlauf ueber diese eine Funktion', () => {
+  // Zwei Stellen holen ihn (Raster und Unterleiste). Eine davon mit einer eigenen Zahl waere
+  // ein Unterschied, den niemand sieht, bis er vor der Wand steht.
+  const dash = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'dashboard.html'), 'utf8');
+  const aufrufe = (dash.match(/ensureHistory\(entry\.entity_id, verlaufStunden\(/g) || []).length;
+  assert.strictEqual(aufrufe, 2, `${aufrufe} von 2 Stellen benutzen verlaufStunden()`);
+  assert.ok(!/ensureHistory\([^)]*\.graphHours\)/.test(dash),
+    'keine Stelle darf graphHours direkt durchreichen');
+});
+
+test('das Detailfenster nennt die DAUER, nicht zwei Uhrzeiten', () => {
+  // Bei 24 Stunden stand dort "13:13 – 13:04" -- ohne Datum liest sich das wie neun Minuten
+  // rueckwaerts, und genau so wurde es gemeldet.
+  const jetzt = Date.now();
+  const reihe = (stunden, n) => Array.from({ length: n }, (_, i) =>
+    ({ t: jetzt - (n - 1 - i) * (stunden * 3600000 / (n - 1)), v: 20 }));
+  const zeitraum = (h) => (/Zeitraum<\/span><strong>([^<]*)</.exec(h) || [])[1];
+
+  const lang = de('s.x', 'temperature', { state: '20', attributes: {} }, { history: reihe(24, 40) });
+  assert.strictEqual(zeitraum(lang), 'letzte 24 Std.');
+  const kurz = de('s.x', 'temperature', { state: '20', attributes: {} }, { history: reihe(0.75, 20) });
+  assert.strictEqual(zeitraum(kurz), 'letzte 45 Min.');
+  // Und keine Uhrzeit mit Bindestrich mehr, die man als Zeitspanne lesen koennte.
+  assert.ok(!/\d\d:\d\d\s*–\s*\d\d:\d\d/.test(lang), 'keine zwei Uhrzeiten');
+});

@@ -1441,9 +1441,16 @@
     if (!w.length) return '';
     const min = Math.min(...w), max = Math.max(...w);
     const mittel = w.reduce((a, b) => a + b, 0) / w.length;
-    const zeit = Array.isArray(history) && history.length
-      ? `${detailUhr(history[0].t)} – ${detailUhr(history[history.length - 1].t)}`
-      : '';
+    // DIE DAUER, nicht die Uhrzeiten. Bei 24 Stunden stand dort "13:13 – 13:04" -- ohne Datum
+    // liest sich das wie neun Minuten rueckwaerts, und genau so wurde es gemeldet. Die Dauer
+    // beantwortet ausserdem die Frage, die man hat: Worueber sind diese Zahlen gerechnet?
+    let zeit = '';
+    if (Array.isArray(history) && history.length > 1) {
+      const minuten = Math.round((history[history.length - 1].t - history[0].t) / 60000);
+      zeit = minuten >= 90
+        ? `letzte ${Math.round(minuten / 60)} Std.`
+        : `letzte ${Math.max(1, minuten)} Min.`;
+    }
     const zahl = (v) => v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
     return `
       <div class="dt-kennzahlen">
@@ -1651,6 +1658,31 @@
       ${detailVerlaufSvg(verlauf)}
       ${detailKennzahlen(verlauf, opts.history)}
       ${debug ? detailRoh(entity_id, state) + detailAttribute(attrs) : ''}`;
+  }
+
+  /**
+   * Wie weit der Verlauf einer Karte zurueckreicht.
+   *
+   * DREI VERSCHIEDENE ANTWORTEN, und jede hat ihren Grund:
+   *
+   *   1. Hinter einer WERTKARTE: eine Stunde. Die Flaeche dort ist kein Diagramm, sie zeigt
+   *      "geht gerade rauf oder runter" -- und dafuer sind 24 Stunden zu grob: Der Tagesgang
+   *      plattet die letzte Stunde zu einer waagerechten Linie. Bis 1.0.25 standen hier 24 h,
+   *      weil `ensureHistory()` das als Vorgabe hat.
+   *   2. Die VERLAUFSKARTE und die RINGKARTE: 24 Stunden. Die Verlaufskarte IST das Diagramm.
+   *      Und die Ringkarte rechnet ihren Wertebereich aus dem beobachteten Verlauf
+   *      (`gaugeRange`) -- mit einer Stunde waere der Bereich so eng, dass die Nadel bei jedem
+   *      Rauschen von links nach rechts schlaegt.
+   *   3. Im DETAILFENSTER: mindestens 24 Stunden. Dort ist der Verlauf der Inhalt.
+   *
+   * Eine ausdrueckliche Einstellung gewinnt immer -- sie steht im Editor nur bei der
+   * Verlaufskarte, kann aber aus einem importierten Dashboard an jeder Karte haengen.
+   */
+  const VERLAUF_LANG = ['graph', 'gauge'];
+  function verlaufStunden(type, settings) {
+    const gesetzt = Number((settings || {}).graphHours);
+    if (gesetzt > 0) return gesetzt;
+    return VERLAUF_LANG.includes(type) ? 24 : 1;
   }
 
   // --- Welche Karten ein Detailfenster oeffnen ------------------------------------------------
@@ -3254,6 +3286,7 @@
     sensornameDeutsch, SENSORNAMEN,
     ORT_TYPEN_WAHL,
     DETAIL_TYPEN,
+    verlaufStunden,
     detailInhalt,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
