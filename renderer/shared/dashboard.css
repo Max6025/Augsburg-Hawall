@@ -743,6 +743,77 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 
 .card.editable.moving { outline: 2px solid #4f7cff; z-index: 6; opacity: 0.9; }
 
+/* --- Das Detailfenster ----------------------------------------------------------------------
+   Fast Vollbild, aber nicht ganz: Der Rand zeigt, dass darunter noch das Dashboard liegt --
+   ein echtes Vollbild sieht aus wie eine andere Seite, und dann sucht man den Zurueck-Knopf
+   in der Kopfzeile statt daneben zu tippen.
+
+   z-index 9980 -- UNTER dem Bildschirmschoner (9990) und unter der Ankuendigung (9998). Eine
+   Nachricht ist dringender als eine Detailansicht, und der Schoner deckt ohnehin alles ab. */
+.dt-huelle {
+  position: fixed; inset: 0; z-index: 9980;
+  background: color-mix(in srgb, #000 62%, transparent);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  animation: dt-auf 180ms ease-out both;
+}
+@keyframes dt-auf { from { opacity: 0 } to { opacity: 1 } }
+.dt-fenster {
+  position: relative;
+  width: min(92vw, 1180px); height: min(88vh, 820px);
+  background: var(--bg); border: 1px solid var(--card-border);
+  border-radius: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  padding: 3vh 3vw; box-sizing: border-box; overflow: auto;
+  animation: dt-hoch 200ms ease-out both;
+}
+@keyframes dt-hoch { from { transform: scale(0.97) } to { transform: scale(1) } }
+/* Gross genug fuer einen Finger, und in der Ecke, in der man ihn sucht. Ein Fenster ohne
+   sichtbaren Ausgang ist auf einem Touch-Panel eine Falle. */
+.dt-zu {
+  position: absolute; top: 1.6vh; right: 1.6vw; z-index: 2;
+  width: 6vh; height: 6vh; min-width: 44px; min-height: 44px;
+  border-radius: 999px; border: 1px solid var(--card-border);
+  background: var(--surface); color: var(--text);
+  font-size: 2.4vh; line-height: 1; cursor: pointer;
+}
+.dt-kopf { margin-bottom: 2vh; }
+.dt-titel { font-size: clamp(2vh, 3.4vh, 4vh); font-weight: 600; }
+.dt-unter { font-size: 1.5vh; color: var(--muted); margin-top: 0.4vh; }
+.dt-wert { font-size: clamp(4vh, 11vh, 14vh); font-weight: 200; line-height: 1; }
+.dt-einheit { font-size: 0.34em; font-weight: 400; color: var(--muted); margin-left: 0.2em; }
+.dt-geaendert { font-size: 1.5vh; color: var(--muted); margin-top: 0.8vh; }
+.dt-verlauf { width: 100%; height: 26vh; margin-top: 2vh; display: block; }
+.dt-flaeche { fill: color-mix(in srgb, var(--kachel-akzent, #4f7cff) 22%, transparent); stroke: none; }
+.dt-linie { fill: none; stroke: var(--kachel-akzent, #4f7cff); stroke-width: 2.4;
+  vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+/* Vier Zahlen in einer Reihe, jede mit ihrer Beschriftung darueber -- dieselbe Anatomie wie
+   auf den Karten: erst was es ist, dann der Wert. */
+.dt-kennzahlen, .dt-attr, .dt-quellen { display: grid; gap: 1.2vh; margin-top: 2vh; }
+.dt-kennzahlen { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.dt-attr, .dt-quellen { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.dt-kennzahlen > div, .dt-attr > div, .dt-quellen > div {
+  background: var(--surface); border: 1px solid var(--card-border);
+  border-radius: 14px; padding: 1.2vh 1.4vh; min-width: 0;
+}
+.dt-kennzahlen span, .dt-attr span, .dt-quellen span {
+  display: block; font-size: 1.3vh; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.dt-kennzahlen strong, .dt-attr strong, .dt-quellen strong {
+  display: block; font-size: 2.2vh; font-weight: 500; margin-top: 0.3vh;
+  overflow-wrap: anywhere;
+}
+/* Die Entitaets-Kennung: klein, einzeilig, abgeschnitten wenn zu lang. Sie ist die Auskunft
+   fuer die Fehlersuche, nicht die Hauptsache. */
+.dt-quellen em { display: block; font-size: 1.2vh; color: var(--muted); font-style: normal;
+  margin-top: 0.3vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-energie { height: 52vh; }
+.dt-energie .ed { width: 100%; height: 100%; }
+/* Der Zeiger nur dort, wo ein Tippen auch etwas tut. Auf der Wand ist er ohnehin aus
+   (body.wandanzeige), aber in der Live-Ansicht im Browser ist er die einzige Ankuendigung,
+   dass eine Karte mehr zu sagen hat. */
+.card.hat-detail { cursor: pointer; }
+
 /* Tracker-Unterdashboard: Standort + Verlauf auf einer OpenStreetMap-Karte */
 .tracker-view { flex: 1; display: flex; flex-direction: column; padding: 0 2vw 1vh; gap: 1vh; min-height: 0; }
 .tracker-toolbar { display: flex; align-items: center; gap: 1.2vh; flex-wrap: wrap; }

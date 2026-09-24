@@ -1378,6 +1378,183 @@
   // Sonneneinstrahlung gibt es nur draussen -- ein selbsttaetiges "AUSSEN" darauf waere Rauschen.
   const ORT_TYPEN = ['temperature', 'pressure', 'humidity', 'sensor'];
 
+  // --- Der Inhalt des Detailfensters --------------------------------------------------------
+  //
+  // Reine Funktion: rein Kennung, Typ, Zustand und Zusatzdaten, raus HTML. Kein DOM, kein Netz
+  // -- deshalb pruefbar, und deshalb liegt sie hier und nicht in dashboard.html.
+  //
+  // WAS "DETAILLIERTER" HEISST, und das ist die eigentliche Entscheidung: nicht dasselbe in
+  // Gross. Eine Karte zeigt einen Wert; das Fenster zeigt, WOHER er kommt und WIE er sich
+  // verhaelt. Also: die Zahl gross, der Verlauf mit Achsen statt als Hintergrundflaeche,
+  // Tiefst-, Hoechst- und Mittelwert, wann sich zuletzt etwas geaendert hat, und welche
+  // Entitaet das ueberhaupt ist. Wer davorsteht, will meist genau eine dieser Auskuenfte.
+
+  // Erfundene Kennungen der Karten ohne Entitaet: "energy:1790160724518", "clock:2", ...
+  // Eine echte Entitaets-ID hat einen Punkt ("sensor.temperatur"), diese nicht.
+  const KUENSTLICHE_KENNUNG = /^[a-z_]+:[0-9]+$/i;
+
+  function detailZeit(iso) {
+    const d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    const sek = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+    if (sek < 60) return 'gerade eben';
+    const min = Math.round(sek / 60);
+    if (min < 60) return `vor ${min} Min.`;
+    const std = Math.floor(min / 60);
+    if (std < 24) return `vor ${std} Std. ${min % 60} Min.`;
+    const tage = Math.floor(std / 24);
+    return tage === 1 ? 'vor einem Tag' : `vor ${tage} Tagen`;
+  }
+
+  function detailUhr(ms) {
+    return new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(ms));
+  }
+
+  /**
+   * Der Verlauf MIT Achsen.
+   *
+   * Der Verlauf auf der Karte ist eine ruhige Flaeche im Hintergrund -- ohne Achsen, ohne
+   * Zahlen, absichtlich: Er soll die Zahl nicht ueberdecken. Im Fenster ist er der Inhalt,
+   * und ohne Beschriftung ist eine Kurve eine Verzierung.
+   */
+  function detailVerlaufSvg(werte) {
+    const w = (werte || []).map(Number).filter(Number.isFinite);
+    if (w.length < 2) return '';
+    const B = 1000, H = 300, LINKS = 8, RECHTS = 8, OBEN = 18, UNTEN = 26;
+    const min = Math.min(...w), max = Math.max(...w);
+    const spanne = (max - min) || 1;
+    const x = (i) => LINKS + (i / (w.length - 1)) * (B - LINKS - RECHTS);
+    const y = (v) => OBEN + (1 - (v - min) / spanne) * (H - OBEN - UNTEN);
+    const punkte = w.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    // Das fuehrende M ist SVG-Kommando, keine Variable -- siehe edBahn().
+    const linie = 'M' + punkte.join(' L');
+    const flaeche = `${linie} L${x(w.length - 1).toFixed(1)},${H - UNTEN} L${x(0).toFixed(1)},${H - UNTEN} Z`;
+    return `
+      <svg class="dt-verlauf" viewBox="0 0 ${B} ${H}" preserveAspectRatio="none" role="img">
+        <path d="${flaeche}" class="dt-flaeche"/>
+        <path d="${linie}" class="dt-linie"/>
+      </svg>`;
+  }
+
+  function detailKennzahlen(werte, history) {
+    const w = (werte || []).map(Number).filter(Number.isFinite);
+    if (!w.length) return '';
+    const min = Math.min(...w), max = Math.max(...w);
+    const mittel = w.reduce((a, b) => a + b, 0) / w.length;
+    const zeit = Array.isArray(history) && history.length
+      ? `${detailUhr(history[0].t)} – ${detailUhr(history[history.length - 1].t)}`
+      : '';
+    const zahl = (v) => v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+    return `
+      <div class="dt-kennzahlen">
+        <div><span>Tiefstwert</span><strong>${zahl(min)}</strong></div>
+        <div><span>Mittel</span><strong>${zahl(mittel)}</strong></div>
+        <div><span>Höchstwert</span><strong>${zahl(max)}</strong></div>
+        ${zeit ? `<div><span>Zeitraum</span><strong>${esc(zeit)}</strong></div>` : ''}
+      </div>`;
+  }
+
+  // Attribute, die auf der Karte schon stehen oder niemandem etwas sagen.
+  const DETAIL_ATTR_AUS = ['friendly_name', 'icon', 'entity_picture', 'supported_features',
+    'device_class', 'state_class', 'attribution', 'unit_of_measurement'];
+
+  function detailAttribute(attrs) {
+    const zeilen = Object.entries(attrs || {})
+      .filter(([k, v]) => !DETAIL_ATTR_AUS.includes(k) && v !== null && v !== undefined
+        && typeof v !== 'object' && String(v) !== '')
+      .slice(0, 12);
+    if (!zeilen.length) return '';
+    return `
+      <div class="dt-attr">
+        ${zeilen.map(([k, v]) => `<div><span>${esc(k)}</span><strong>${esc(String(v))}</strong></div>`).join('')}
+      </div>`;
+  }
+
+  /**
+   * Die Energiekarte im Fenster: das Diagramm gross UND die Zahlen als Tabelle.
+   *
+   * Das Diagramm zeigt, was gerade fliesst -- die Tabelle, WORAUS es gerechnet ist. Genau das
+   * fehlt auf der Karte: Welcher Sensor liefert welche Zahl, und stimmen die Einheiten. Bei der
+   * Fehlersuche ("warum steht da 1,23 kW") ist das die einzige Auskunft, die hilft.
+   */
+  function detailEnergie(opts) {
+    const en = opts.energy || {};
+    const zeile = (name, zustand) => {
+      if (!zustand) return '';
+      const einheit = (zustand.attributes && zustand.attributes.unit_of_measurement) || '';
+      return `<div><span>${esc(name)}</span><strong>${esc(zustand.state)} ${esc(einheit)}</strong>
+        <em>${esc(zustand.entity_id || '')}</em></div>`;
+    };
+    const tabelle = [
+      ['Solar', en.solar], ['Netzbezug', en.grid], ['Einspeisung', en.gridReturn],
+      ['Batterie', en.battery], ['Ladezustand', en.batterySoc],
+      ['Wallbox', en.wallbox], ['Hausverbrauch', en.home]
+    ].map(([n, z]) => zeile(n, z)).join('');
+    return `
+      <div class="dt-energie">${opts.diagramm || ''}</div>
+      ${tabelle ? `<div class="dt-quellen">${tabelle}</div>` : ''}`;
+  }
+
+  /**
+   * Der Inhalt des Detailfensters.
+   *
+   * @param {string} entity_id
+   * @param {string} type
+   * @param {object|null} state
+   * @param {object} opts  { settings, namen, history, energy, diagramm }
+   */
+  function detailInhalt(entity_id, type, state, opts = {}) {
+    const settings = opts.settings || {};
+    const attrs = (state && state.attributes) || {};
+    const art = (CARD_TYPES[type] && CARD_TYPES[type].label) || type;
+    // Karten ohne echte Entitaet (Energie, Uhr, Foto, Schnellzugriff) tragen eine erfundene
+    // Kennung wie "energy:1790160724518". Als Titel ist das kein Name, sondern eine
+    // Zeitmarke -- dann ist die Art der Karte die bessere Auskunft.
+    const bekannt = (settings.name && String(settings.name).trim())
+      || (opts.namen && opts.namen[entity_id]) || attrs.friendly_name;
+    const name = esc(bekannt ? sensornameDeutsch(bekannt) : (KUENSTLICHE_KENNUNG.test(entity_id) ? art : entity_id));
+    const einheit = (settings.suffix !== undefined && settings.suffix !== '')
+      ? settings.suffix : (attrs.unit_of_measurement || '');
+
+    const kopf = `
+      <div class="dt-kopf">
+        <div class="dt-titel">${name}</div>
+        <div class="dt-unter">${esc(art)} · ${esc(entity_id)}</div>
+      </div>`;
+
+    if (type === 'energy') {
+      return kopf + detailEnergie(opts);
+    }
+
+    const roh = state ? state.state : null;
+    // Dieselbe Liste wie ueberall: "unknown", "unavailable", aber auch das vertippte "unknow"
+    // und die Handschriften der Menschen ("-", "keine"). Siehe NICHTS_ANZUZEIGEN.
+    const leer = roh === null || roh === undefined
+      || NICHTS_ANZUZEIGEN.includes(String(roh).trim().toLowerCase());
+    const wert = leer ? '–' : zahlFormatieren(roh, settings.decimals);
+    const verlauf = Array.isArray(opts.history) ? opts.history.map(p => p.v) : [];
+
+    return kopf + `
+      <div class="dt-wert">${esc(String(wert))}${einheit ? `<span class="dt-einheit">${esc(einheit)}</span>` : ''}</div>
+      ${state && state.last_changed
+        ? `<div class="dt-geaendert">Zuletzt geändert: ${esc(detailZeit(state.last_changed))}</div>` : ''}
+      ${detailVerlaufSvg(verlauf)}
+      ${detailKennzahlen(verlauf, opts.history)}
+      ${detailAttribute(attrs)}`;
+  }
+
+  // --- Welche Karten ein Detailfenster oeffnen ------------------------------------------------
+  //
+  // NUR Karten, die beim Tippen nichts TUN. Eine Lampe, ein Tor, ein Rollladen, ein
+  // Media Player: Dort ist das Tippen die Bedienung, und ein Fenster davor waere genau der
+  // Fehler, der aus einem Schalter ein Ratespiel macht -- man tippt, es geht nichts an, und
+  // stattdessen erscheint etwas zum Lesen.
+  //
+  // Die Uhr ist ausdruecklich NICHT dabei: Eine Uhr in Gross sagt dasselbe wie die Uhr in
+  // Klein. Das Foto auch nicht, das IST schon die grosse Ansicht.
+  const DETAIL_TYPEN = ['energy', 'graph', 'gauge', 'temperature', 'humidity', 'pressure',
+    'wind', 'rain', 'solar', 'sensor', 'forecast', 'waste', 'radar', 'fluegeltor'];
+
   // EINSTELLEN laesst sich der Ort dagegen auch bei Wind, Regen und Ringkarte. Das ist der
   // Unterschied zwischen einer Vorgabe und einem Verbot: Auf dem Bildschirmschoner ordnet die
   // Silhouette die Flaeche -- man sieht aus fuenf Metern, welche Karte nach draussen gehoert,
@@ -2652,6 +2829,21 @@
       card.insertBefore(umriss, card.firstChild);
     }
 
+    // Das Detailfenster. NACH allen Kartenzweigen, damit kein Zweig den Zuhoerer ueberschreibt,
+    // und nur auf Karten, die von sich aus nichts tun (siehe DETAIL_TYPEN).
+    //
+    // Im EDITOR nicht: Dort ist ein Tippen das Auswaehlen der Karte, und ein Fenster davor
+    // machte das Anordnen unmoeglich.
+    if (!editable && cb.onDetail && DETAIL_TYPEN.includes(type)) {
+      card.classList.add('hat-detail');
+      card.addEventListener('click', (e) => {
+        // Bedienelemente innerhalb einer Anzeigekarte gibt es doch (die Zeitraum-Knoepfe der
+        // Verlaufskarte etwa). Wer eines davon trifft, will nicht das Fenster.
+        if (e.target.closest('[data-act], button, input, select, a')) return;
+        cb.onDetail(entity_id, type, settings);
+      });
+    }
+
     if (editable) {
       card.classList.add('editable');
 
@@ -2945,6 +3137,8 @@
     mdiSymbol, brauchtMdi, HINTERGRUND_WOLKEN, wolkenCss, wolkenMalen, ortErmitteln, ORT_TYPEN,
     sensornameDeutsch, SENSORNAMEN,
     ORT_TYPEN_WAHL,
+    DETAIL_TYPEN,
+    detailInhalt,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, wasteDatum, wasteTage, wasteBald, wasteTagesschluessel, wasteDateLabel, zahlFormatieren, symbolFuer, symbolNamen,

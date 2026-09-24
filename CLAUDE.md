@@ -867,6 +867,40 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   sonst von allein auf, weil das Aufwecken mit dem Mauszeiger wackeln muss (`panel.js`), und
   bleibt dann mitten auf der Wand stehen. Bewusst an die Body-Klasse gebunden: Der
   Karten-Editor lädt dieselbe CSS-Datei, wird aber mit der Maus bedient.
+- **Das Detailfenster öffnet NUR auf Karten, die beim Tippen nichts tun.** `DETAIL_TYPEN` in
+  `dashboard-render.js` zählt sie auf — Energie, Verlauf, Ring, Temperatur, Feuchte, Luftdruck,
+  Wind, Regen, Sensor, Vorhersage, Mülltermine, Radar, Flügeltor. Bei einer Lampe, einem Tor,
+  einem Rollladen ist das Tippen die **Bedienung**; ein Fenster davor macht aus einem Schalter
+  ein Ratespiel — man tippt, es geht nichts an, und stattdessen erscheint etwas zum Lesen.
+  Die **Uhr** ist ausdrücklich nicht dabei (eine Uhr in Groß sagt dasselbe wie die Uhr in Klein),
+  das **Foto** auch nicht (das *ist* schon die große Ansicht). Im **Editor** hängt der Zuhörer
+  nie: Dort ist ein Tippen das Auswählen der Karte.
+  Vier Dinge hängen daran:
+  1. **Es schließt sich selbst**, nach 30 s ohne Eingabe. Auf einem Wandpanel räumt niemand auf:
+     Wer im Vorbeigehen eine Karte antippt, lässt das Fenster offen stehen, und morgen steht
+     dort noch ein Verlauf von gestern. Die Uhr wird von **jeder** Eingabe zurückgestellt, nicht
+     nur von einer im Fenster — wer daneben tippt, ist noch da. Deshalb `capture: true`: Ein
+     `stopPropagation` einer Karte würde die Eingabe sonst verschlucken.
+  2. **Es bleibt lebendig.** Der Inhalt wird bei jedem Abruf neu gebaut. Ein Fenster, das 30 s
+     eine stehende Zahl zeigt, ist bei einem Energiefluss-Diagramm schlechter als die Karte
+     darunter.
+  3. **Mehr als ein Weg hinaus**: Knopf (51 px, nachgemessen), Tippen daneben, Escape — und der
+     Schoner schließt es ohnehin, denn es liegt auf `z-index: 9980` **unter** ihm (9990) und wäre
+     beim Aufwachen sonst noch offen, mit Zahlen von gestern.
+  4. **Das Diagramm der Energieansicht baut `buildCard()`**, nicht das Fenster. Es hier
+     nachzubauen wäre eine zweite Wahrheit — samt Einheiten-Prüfung, Hausrechnung und Wallbox —,
+     und die beiden wären sich beim nächsten Umbau nicht mehr einig.
+
+  **Was „detaillierter" heißt**, ist die eigentliche Entscheidung: nicht dasselbe in Groß. Eine
+  Karte zeigt einen Wert; das Fenster zeigt, **woher** er kommt und **wie** er sich verhält —
+  die Zahl groß, der Verlauf mit Fläche statt als Hintergrund, Tiefst-, Mittel- und Höchstwert,
+  wann sich zuletzt etwas geändert hat, die Attribute, und bei der Energiekarte jede Quelle
+  samt Entitäts-Kennung. Letzteres ist die Auskunft, die auf der Karte fehlt: Bei der
+  Fehlersuche („warum steht da 1,23 kW") hilft nur sie.
+  Angesehen in `.scratch/detailfenster/probe.html` — die Probe klickt auch **echte Karten** an
+  und protokolliert, was passiert: Temperatur und Sensor öffnen, die Lampe schaltet. Und sie
+  misst erst nach `document.fonts.ready` plus zwei Bildern; der erste Anlauf meldete „Fenster
+  2×2 px", weil die Einblend-Animation noch lief.
 - **Eine Karte, die etwas TUT, muss anders aussehen als eine, die etwas anzeigt.** Die
   Wechsel-Karte trug ein Fadenkreuz-Symbol und ein Wort, mittig, ohne Akzent — zwischen zwanzig
   Messwerten sah sie aus wie der einundzwanzigste, und gemeldet wurde sie als „versteht man
@@ -1124,7 +1158,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-508 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+530 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Detailfenster – Probe</title>
+<!--
+  Das Detailfenster in allen Lagen, ohne Home Assistant und ohne Electron. ECHTES Modul,
+  ECHTES CSS -- eine Probe, die eine Kopie ansieht, beweist nichts (siehe .scratch/energiekarte).
+
+  ?fall=energie|temperatur|sensor|leer   waehlt den Inhalt
+  Bei 1280x854 ansehen, das ist die echte Panelgroesse.
+-->
+<link rel="stylesheet" href="../../renderer/shared/dashboard.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  .marke { position: fixed; left: 0; bottom: 0; right: 0; z-index: 99999;
+    background: #000c; color: #9ab; font: 12px system-ui; padding: .4rem .8rem; }
+  .knopfleiste { position: fixed; left: 0; top: 0; z-index: 99999; display: flex; gap: .4rem; padding: .4rem; }
+  .knopfleiste a { font: 12px system-ui; color: #cde; background: #2228; padding: .3rem .6rem;
+    border-radius: 6px; text-decoration: none; }
+</style>
+</head>
+<body class="wandanzeige">
+  <div class="knopfleiste">
+    <a href="?fall=energie">Energie</a><a href="?fall=temperatur">Temperatur</a>
+    <a href="?fall=sensor">Sensor</a><a href="?fall=leer">ohne Wert</a>
+  </div>
+  <!-- Echte Karten, echte Rueckrufe: Hier wird geprueft, ob ein TIPP das Fenster ueberhaupt
+       oeffnet. Das ist der Teil, den eine reine Inhaltsprobe nicht beweist -- die Kette
+       buildCard -> DETAIL_TYPEN -> callbacks.onDetail. Und daneben eine Lampe: Die darf NICHT
+       oeffnen, dort ist das Tippen die Bedienung. -->
+  <div class="raster" id="raster" style="position:fixed; left:0; right:0; bottom:2rem; display:grid;
+    grid-template-columns:repeat(4,1fr); gap:1vh; padding:1vh 2vw; z-index:1;"></div>
+  <div class="app"><div class="main">
+    <div class="dt-huelle">
+      <div class="dt-fenster">
+        <button class="dt-zu" aria-label="Schließen">✕</button>
+        <div class="dt-inhalt" id="inhalt"></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="marke" id="marke"></div>
+<script src="../../renderer/shared/dashboard-render.js"></script>
+<script>
+  const fall = new URLSearchParams(location.search).get('fall') || 'temperatur';
+  const Z = (id, state, attrs) => ({ entity_id: id, state, attributes: attrs || {} });
+  const verlauf = (basis, schwankung, n) => Array.from({ length: n || 60 }, (_, i) =>
+    ({ t: Date.now() - (n - i) * 1440000, v: basis + Math.sin(i / 7) * schwankung + (Math.random() - .5) }));
+
+  let html = '';
+  if (fall === 'energie') {
+    const I = DashboardRender.ICONS;
+    const diagramm = DashboardRender.energieDiagramm({
+      solarW: 8200, netzBezugW: 0, netzEinspeisungW: 400, hausW: 7800, wallboxW: 7400,
+      batterieW: 1500, batterieLaedt: true, batterieSoc: 78, schwelleW: 5,
+      symbole: { solar: I.sun2, netz: I.grid, haus: I.home2, batterie: I.battery2, wallbox: I.wallbox }
+    });
+    html = DashboardRender.detailInhalt('energy:1', 'energy', null, {
+      diagramm,
+      energy: {
+        solar: Z('sensor.kostal_wechselrichter', '8200', { unit_of_measurement: 'W' }),
+        grid: Z('sensor.netzbezug', '0', { unit_of_measurement: 'W' }),
+        gridReturn: Z('sensor.netzeinspeisung', '400', { unit_of_measurement: 'W' }),
+        battery: Z('sensor.akkuleistung', '-1500', { unit_of_measurement: 'W' }),
+        batterySoc: Z('sensor.akku_soc', '78', { unit_of_measurement: '%' }),
+        wallbox: Z('sensor.wallbox_leistung', '7400', { unit_of_measurement: 'W' })
+      }
+    });
+  } else if (fall === 'sensor') {
+    html = DashboardRender.detailInhalt('sensor.ecowitt_solar_radiation_11dc2', 'sensor',
+      Z('sensor.ecowitt_solar_radiation_11dc2', '612', {
+        unit_of_measurement: 'W/m²', friendly_name: 'Solar Radiation', device_class: 'irradiance',
+        battery: 87, rssi: -62
+      }),
+      { history: verlauf(400, 300, 60), namen: { 'sensor.ecowitt_solar_radiation_11dc2': 'Solar Radiation' } });
+  } else if (fall === 'leer') {
+    html = DashboardRender.detailInhalt('sensor.kaputt', 'temperature',
+      Z('sensor.kaputt', 'unavailable', { unit_of_measurement: '°C' }), {});
+  } else {
+    html = DashboardRender.detailInhalt('sensor.ecowitt_outdoor_temp_11dc2', 'temperature',
+      Z('sensor.ecowitt_outdoor_temp_11dc2', '11.2', {
+        unit_of_measurement: '°C', friendly_name: 'Outdoor Temperature', battery: 92
+      }),
+      { history: verlauf(11, 4, 60), settings: { decimals: 1 },
+        namen: { 'sensor.ecowitt_outdoor_temp_11dc2': 'Outdoor Temperature' } });
+  }
+  document.getElementById('inhalt').innerHTML = html;
+
+  // --- Die Kette buildCard -> onDetail ---------------------------------------------------
+  const protokoll = [];
+  const rueckrufe = {
+    onDetail: (id, typ) => { protokoll.push('DETAIL ' + typ + ' ' + id); },
+    onToggle: (dom, id) => { protokoll.push('SCHALTEN ' + id); }
+  };
+  const proben = [
+    ['sensor.temp_probe', 'temperature', Z('sensor.temp_probe', '11.2', { unit_of_measurement: '°C', friendly_name: 'Temperatur' })],
+    ['sensor.text_probe', 'sensor', Z('sensor.text_probe', '612', { unit_of_measurement: 'W/m²', friendly_name: 'Sensor' })],
+    ['light.probe', 'light', Z('light.probe', 'on', { friendly_name: 'Lampe (darf NICHT öffnen)', brightness: 180 })],
+    ['cover.probe', 'cover', Z('cover.probe', 'open', { friendly_name: 'Rollladen (darf NICHT öffnen)', current_position: 60 })]
+  ];
+  const raster = document.getElementById('raster');
+  for (const [id, typ, zustand] of proben) {
+    raster.appendChild(DashboardRender.buildCard(id, zustand, typ, { cols: 1, rows: 1 }, {
+      editable: false, apiBase: '', statesById: {}, settings: {}, callbacks: rueckrufe
+    }));
+  }
+  window.probenProtokoll = protokoll;
+
+  // Nachmessen statt glauben: Passt der Inhalt ins Fenster, oder muss man scrollen?
+  //
+  // NACH `fonts.ready` und zwei Bildern. Der erste Anlauf mass nach 100 ms und meldete
+  // "Fenster 2x2 px, Inhalt 10 px -> SCROLLT" -- zu diesem Zeitpunkt lief die
+  // Einblend-Animation noch und die Schrift war nicht geladen. Eine Probe, die falsche Zahlen
+  // meldet, ist schlimmer als eine ohne Zahlen: Man sucht dann einen Fehler, den es nicht gibt.
+  (async () => {
+    await document.fonts.ready;
+    await new Promise(f => requestAnimationFrame(() => requestAnimationFrame(f)));
+    const f = document.querySelector('.dt-fenster');
+    const zu = document.querySelector('.dt-zu').getBoundingClientRect();
+    document.getElementById('marke').textContent =
+      `Fall "${fall}" — Fenster ${Math.round(f.getBoundingClientRect().width)}×`
+      + `${Math.round(f.getBoundingClientRect().height)} px, Inhalt ${f.scrollHeight} px`
+      + (f.scrollHeight > f.clientHeight + 2 ? ' → SCROLLT' : ' → passt')
+      + ` · Schließen-Knopf ${Math.round(zu.width)}×${Math.round(zu.height)} px`;
+  })();
+</script>
+</body>
+</html>

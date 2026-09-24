@@ -53,6 +53,14 @@
            und stand OBEN -- eine bildschirmhohe Uhr ueber der Landkarte. Unten und schmal ist
            er dieselbe Leiste wie auf jedem anderen Dashboard. -->
       <div class="unterleiste" id="unterleiste"></div>
+      <!-- Das Detailfenster. Liegt UNTER dem Bildschirmschoner (9980 gegen 9990): Legt der
+           sich hin, deckt er es ab, und beim Aufwachen ist es ohnehin geschlossen. -->
+      <div class="dt-huelle" id="detailHuelle" hidden>
+        <div class="dt-fenster" id="detailFenster" role="dialog" aria-modal="true">
+          <button class="dt-zu" id="detailZuKnopf" aria-label="Schließen">✕</button>
+          <div class="dt-inhalt" id="detailInhalt"></div>
+        </div>
+      </div>
       <!-- Die Reiter-Leiste und die Fusszeile "Zuletzt aktualisiert" sind entfallen: beide
            standen dauerhaft am unteren Rand und nahmen Platz weg, den die Karten brauchen.
            Der Zeitstempel beantwortete ausserdem eine Frage, die niemand stellt -- solange
@@ -592,6 +600,9 @@ function erwartungenAnwenden() {
 
 function dashboardRueckrufe() {
   return {
+    // Das Detailfenster. Nur Karten aus DETAIL_TYPEN bekommen diesen Zuhoerer -- siehe
+    // buildCard().
+    onDetail: (entity_id, type, settings) => { detailOeffnen(entity_id, type, settings); },
     onToggle: (domain, entityId, state) => {
       zustandVorwegnehmen(entityId, { state: state === 'on' ? 'off' : 'on' });
       return callService(domain, state === 'on' ? 'turn_off' : 'turn_on', entityId);
@@ -877,6 +888,9 @@ async function refresh() {
   erwartungenAnwenden();
   applyTheme();
   applyNotify();
+  // Das offene Detailfenster mitziehen. Ohne das steht dort eine Zahl von vor dreissig
+  // Sekunden -- bei einem Energiefluss-Diagramm schlechter als die Karte darunter.
+  detailAktualisieren();
   const dashInfo = dashboardOrder.find(d => d.id === currentDashboardId);
   if (dashInfo && dashInfo.type === 'tracker') {
     await renderTrackerView(currentDashboardId); // aktualisiert Position/Akku/Zonen, nicht das (versteckte) Karten-Raster
@@ -1427,7 +1441,10 @@ function schonerPruefen() {
  * per Definition niemand hin.
  */
 function hinterDemSchonerAufraeumen() {
-  // Der Verlauf zuerst: Er gehoert zur Tracker-Ansicht, die gleich nicht mehr aktiv ist.
+  // Das Detailfenster zuerst: Es liegt UNTER dem Schoner und waere beim Aufwachen sonst noch
+  // offen -- mit Zahlen von gestern.
+  detailSchliessen();
+  // Der Verlauf dann: Er gehoert zur Tracker-Ansicht, die gleich nicht mehr aktiv ist.
   trackerVerlaufAus();
   if (currentDashboardId !== 'main') {
     // navigateTo setzt `letzteBedienung` NICHT -- sonst wuerde der Schoner sich im selben
@@ -1637,6 +1654,104 @@ function rueckkehrTaktAnpassen() {
 document.addEventListener('pointerdown', () => {
   letzteBedienungAufUnterdashboard = Date.now();
 }, { capture: true, passive: true });
+
+// --- Das Detailfenster -----------------------------------------------------------------------
+//
+// Tippen auf eine ANZEIGEKARTE oeffnet eine groessere Ansicht. Welche Karten das sind, steht in
+// DashboardRender.DETAIL_TYPEN -- und zwar nur solche, die beim Tippen nichts tun. Bei einer
+// Lampe ist das Tippen die Bedienung.
+//
+// DREI DINGE, die daran haengen:
+//
+//   1. **Es schliesst sich selbst.** Nach dreissig Sekunden ohne Eingabe. Auf einem Wandpanel
+//      raeumt niemand auf: Wer im Vorbeigehen eine Karte antippt, laesst das Fenster offen
+//      stehen, und dann steht dort morgen noch ein Verlauf von gestern. Die Uhr wird von JEDER
+//      Eingabe zurueckgestellt, nicht nur von einer im Fenster -- wer daneben tippt, ist noch da.
+//   2. **Es bleibt lebendig.** Der Inhalt wird bei jedem Abruf neu gebaut. Ein Fenster, das
+//      dreissig Sekunden lang eine stehende Zahl zeigt, ist auf einem Energiefluss-Diagramm
+//      schlechter als die Karte darunter.
+//   3. **Es gibt mehr als einen Weg hinaus.** Knopf, Tippen daneben, Escape -- und der Schoner
+//      schliesst es ohnehin. Ein Fenster ohne sichtbaren Ausgang ist auf einem Touch-Panel
+//      eine Falle (siehe CLAUDE.md, "Der Weg zurueck darf nie verschwinden").
+const DETAIL_RUHE_MS = 30000;
+let detailLaeuft = null;      // { entity_id, type, settings } des offenen Fensters
+let detailUhr = null;
+
+function detailUhrStellen() {
+  if (detailUhr) clearTimeout(detailUhr);
+  if (!detailLaeuft) return;
+  detailUhr = setTimeout(detailSchliessen, DETAIL_RUHE_MS);
+}
+
+function detailSchliessen() {
+  if (detailUhr) { clearTimeout(detailUhr); detailUhr = null; }
+  if (!detailLaeuft) return;
+  detailLaeuft = null;
+  const h = $('detailHuelle');
+  if (h) h.hidden = true;
+}
+
+async function detailOeffnen(entity_id, type, settings) {
+  detailLaeuft = { entity_id, type, settings: settings || {} };
+  const h = $('detailHuelle');
+  if (!h) return;
+  h.hidden = false;
+  await detailAktualisieren();
+  detailUhrStellen();
+}
+
+/**
+ * Den Inhalt des offenen Fensters neu bauen.
+ *
+ * Der Verlauf wird hier mit 24 Stunden geholt, auch wenn die Karte auf sechs steht: Im Fenster
+ * ist der Verlauf der Inhalt, und sechs Stunden sind dafuer eine willkuerliche Grenze, die von
+ * der Kachelgroesse stammt.
+ */
+async function detailAktualisieren() {
+  if (!detailLaeuft) return;
+  const { entity_id, type, settings } = detailLaeuft;
+  const ziel = $('detailInhalt');
+  if (!ziel) return;
+
+  const eintrag = { entity_id, settings };
+  const zusatz = await kartenZusatz(eintrag, type);
+  const stunden = Math.max(24, Number(settings.graphHours) || 0);
+  const history = DashboardRender.DETAIL_TYPEN.includes(type) && type !== 'energy'
+    ? await ensureHistory(entity_id, stunden) : zusatz.history;
+
+  // Die Energiekarte baut ihr Diagramm SELBST -- samt Einheiten-Pruefung, Hausrechnung und
+  // Wallbox. Es hier nachzubauen waere eine zweite Wahrheit, und die beiden waeren sich beim
+  // naechsten Umbau nicht mehr einig.
+  let diagramm = '';
+  if (type === 'energy') {
+    const gross = buildCard(entity_id, null, 'energy', { cols: 4, rows: 4 }, {
+      editable: false, ...zusatz, apiBase: API, statesById, namen: haNamen,
+      settings, callbacks: {}
+    });
+    diagramm = gross.innerHTML;
+  }
+
+  ziel.innerHTML = DashboardRender.detailInhalt(entity_id, type, statesById[entity_id], {
+    settings, namen: haNamen, history, energy: zusatz.energy, diagramm
+  });
+}
+
+(function detailVerdrahten() {
+  const h = $('detailHuelle');
+  if (!h) return;
+  // Tippen DANEBEN schliesst, Tippen im Fenster nicht. Ohne die Pruefung auf das Ziel wuerde
+  // jeder Tipp im Fenster es zuklappen.
+  h.addEventListener('click', (e) => { if (e.target === h) detailSchliessen(); });
+  const zu = $('detailZuKnopf');
+  if (zu) zu.addEventListener('click', detailSchliessen);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') detailSchliessen(); });
+  // JEDE Eingabe stellt die Uhr zurueck, auch eine neben dem Fenster: Wer daneben tippt, steht
+  // noch davor.
+  for (const ev of ['pointerdown', 'keydown']) {
+    document.addEventListener(ev, () => { if (detailLaeuft) detailUhrStellen(); },
+      { capture: true, passive: true });
+  }
+})();
 
 // --- Die Blende ------------------------------------------------------------------------------
 //
