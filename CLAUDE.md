@@ -880,6 +880,25 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   sonst von allein auf, weil das Aufwecken mit dem Mauszeiger wackeln muss (`panel.js`), und
   bleibt dann mitten auf der Wand stehen. Bewusst an die Body-Klasse gebunden: Der
   Karten-Editor lädt dieselbe CSS-Datei, wird aber mit der Maus bedient.
+- **Der Verlauf reicht an drei Stellen unterschiedlich weit zurück — `verlaufStunden()`.**
+  1. **Hinter einer Wertkarte: eine Stunde.** Die Fläche dort ist kein Diagramm, sie zeigt
+     „geht gerade rauf oder runter" — und dafür sind 24 Stunden zu grob: Der Tagesgang plattet
+     die letzte Stunde zu einer waagerechten Linie. Bis 1.0.25 standen dort 24 h, weil
+     `ensureHistory()` das als Vorgabe hat und `graphHours` im Editor **nur** bei der
+     Verlaufskarte angeboten wird.
+  2. **Verlaufskarte und Ringkarte: 24 Stunden.** Die Verlaufskarte *ist* das Diagramm. Und die
+     Ringkarte rechnet ihren Wertebereich aus dem beobachteten Verlauf (`gaugeRange`) — mit
+     einer Stunde wäre der Bereich so eng, dass die Nadel bei jedem Rauschen von links nach
+     rechts schlägt. Das ist der Grund, warum hier nicht einfach „alles auf 1" steht.
+  3. **Im Detailfenster: mindestens 24 Stunden.** Dort ist der Verlauf der Inhalt.
+
+  Eine ausdrückliche Einstellung gewinnt immer. Die Funktion liegt in `dashboard-render.js` und
+  nicht in `dashboard.html`: Nur so lässt sich die Entscheidung testen, statt sie im Quelltext
+  zu greppen — und zwei Stellen holen den Verlauf (Raster und Unterleiste), eine davon mit einer
+  eigenen Zahl wäre ein Unterschied, den niemand sieht, bis er vor der Wand steht.
+  Dazu: Das Detailfenster nennt beim Zeitraum die **Dauer**, nicht zwei Uhrzeiten. Bei 24
+  Stunden stand dort „13:13 – 13:04" — ohne Datum liest sich das wie neun Minuten rückwärts,
+  und genau so wurde es gemeldet.
 - **Das Detailfenster hat ZWEI Gesichter, und der Schalter heißt „Debug-Ansicht".**
   Einstellungen → Panel, ab Werk **aus**. Aus zeigt das Fenster die **Auswertung**: Verlauf über
   24 Stunden, Tiefst-, Mittel- und Höchstwert, wann zuletzt aktualisiert wurde. An zeigt es
@@ -1207,7 +1226,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-553 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+559 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
