@@ -489,7 +489,18 @@ test('Die Zeitachse trägt fünf Marken, die äußeren hängen an der Kante', ()
   assert.deepStrictEqual(marken.map(m => Number(m[2])), [0, 25, 50, 75, 100]);
   assert.strictEqual(marken[0][1], 'dt-achse-a');
   assert.strictEqual(marken[4][1], 'dt-achse-e');
-  assert.strictEqual(marken[4][3], '14:00', 'die letzte Marke ist das Ende des Verlaufs');
+  // KEINE feste Uhrzeit hier: `detailUhr()` formatiert in der Zeitzone des Geraets, und der
+  // Windows-Laeufer steht auf UTC. Gegen '14:00' geprueft war der Test auf diesem Rechner
+  // gruen (UTC+2) und auf dem Laeufer rot -- ein Fehlschlag, der nichts ueber den Code sagt.
+  const ende = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
+    .format(new Date(jetzt()));
+  assert.strictEqual(marken[4][3], ende, 'die letzte Marke ist das Ende des Verlaufs');
+  // Und die Marken sind nicht alle gleich. Nicht die erste gegen die letzte pruefen: Bei
+  // genau 24 Stunden zeigt die Uhr dort dieselbe Zeit -- richtig, und trotzdem ein Test, der
+  // dann aus dem falschen Grund rot wird.
+  const mitte = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
+    .format(new Date(jetzt() - 12 * 3600000));
+  assert.strictEqual(marken[2][3], mitte, 'die mittlere Marke liegt zwoelf Stunden davor');
   for (const m of marken) assert.match(m[3], /^\d\d:\d\d$/);
 });
 
