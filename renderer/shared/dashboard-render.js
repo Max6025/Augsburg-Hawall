@@ -17,255 +17,321 @@
   // Name), und beim untersten Knoten muessen die noch ins Bild passen. Mit einem Quadrat wurde
   // die Beschriftung der Batterie abgeschnitten -- sichtbar erst, wenn eine Batterie
   // konfiguriert ist, also beim Nutzer und nicht beim Bauen.
-  const ED_B = 400;
-  const ED_R = 44;               // Radius eines Knotens
-  const ED_BAHN = 136;           // Abstand der Knotenmitte von der Mitte
-  const ED_MITTE_Y = 240;
-  // Unter jedem Knoten stehen zwei Zeilen. Beim UNTERSTEN muessen die noch ins Bild passen --
-  // sonst wird die Beschriftung der Batterie abgeschnitten, und zwar erst beim Nutzer, weil
-  // ohne Batterie nichts dort unten steht.
+  // --- Das Energiefluss-Diagramm ----------------------------------------------------------------
   //
-  // Die Hoehe haengt deshalb davon ab, ob eine Batterie dabei ist. Eine feste Hoehe sah ohne
-  // Batterie aus wie eine Karte, die zu einem Drittel leer ist: Die Zeichnung wird auf die
-  // Hoehe eingepasst, und das reservierte Feld unten bleibt leer.
-  const ED_H_OHNE = ED_MITTE_Y + ED_R + 70;
-  const ED_H_MIT = ED_MITTE_Y + ED_BAHN + ED_R + 74;
+  // Aufbau wie in der myenergi-App: eine NABE in der Mitte, und darum herum die Beteiligten an
+  // festen Himmelsrichtungen -- Haus oben, Netz rechts, Solar unten, Wallbox links, Batterie
+  // auf der Diagonale unten links. Gerade Leitungen, ein Dreieck in der Mitte jeder Leitung
+  // zeigt die Richtung.
+  //
+  // WARUM DAS SO UMGEBAUT WURDE (1.0.27, auf Vorlage einer App-Ansicht): Vorher liefen vier
+  // geschwungene Bahnen durch einen unsichtbaren Punkt, und jede Leitung ging von Quelle zu
+  // Verbraucher (Solar->Haus, Netz->Haus). Das ist zwar physikalisch naeher dran, liest sich
+  // aber schlechter: Bei drei gleichzeitigen Fluessen kreuzen sich die Bahnen in der Mitte, und
+  // man sieht nicht mehr, was wohin geht. Mit einer sichtbaren Nabe hat jede Leitung genau
+  // einen Anfang und ein Ende, und die Richtung steht als Pfeil darauf.
+  //
+  // DIE NABE ZEIGT DEN EIGENANTEIL. Das ist die eine Zahl, die auf keiner Leitung steht und die
+  // man eigentlich wissen will: Wie viel von dem, was das Haus zieht, kommt nicht aus dem Netz.
+  // 0 % heisst "alles gekauft", 100 % heisst "nichts gekauft".
+  //
+  // KEINE NAMEN AB WERK. Ein Haus, ein Strommast, ein Solarmodul, ein Auto und eine Batterie
+  // sind als Zeichen unmissverstaendlich -- "HAUS" unter einem Haus ist aus fuenf Metern
+  // verschenkte Flaeche. Wer einen Knoten AUSDRUECKLICH benennt (energyLabelSolar und Co.),
+  // bekommt seinen Text; die Einstellung ist damit eine Abweichung und keine Pflicht.
+  const ED_B = 400;
+  const ED_R = 34;               // Radius eines Knotens
+  const ED_R_NABE = 40;
+  const ED_BAHN = 140;           // Abstand der Knotenmitte von der Nabe
+  const ED_MITTE_Y = 190;
+
+  // Ueber dem obersten Knoten steht ein Wert, unter jedem anderen zwei Zeilen. Beides muss ins
+  // Bild passen -- sonst wird abgeschnitten, und zwar erst beim Nutzer. Wie hoch die Zeichnung
+  // sein muss, haengt davon ab, WELCHE Knoten es gibt, und wird deshalb gerechnet (edAusschnitt).
+  const ED_ZEILE_WERT = 30;      // Zeilenkasten des Wertes (26px Schrift)
+  const ED_ZEILE_NAME = 20;      // Zeilenkasten einer Beschriftung (14px Schrift)
+  // ZWEI Zeilen unter einem Knoten, nie drei: Wert und eine Beschriftung. Die Richtung steht
+  // deshalb MIT im Namen ("Netz · Bezug") statt in einer dritten Zeile. Das ist keine
+  // Platzsparerei um ihrer selbst willen -- mit drei Zeilen reicht der Wallbox-Knoten links in
+  // den Batteriering hinein, und zwar nur bei dem, der beides hat. In der Probe gesehen.
+  const ED_TEXT = 4 + ED_ZEILE_WERT + ED_ZEILE_NAME;
+  const ED_LUFT = 12;            // Rand oben und unten
+  const ED_RAND = 34;            // Rand links und rechts, fuer die Beschriftungen
 
   const ED_MITTE = { x: ED_B / 2, y: ED_MITTE_Y };
+
+  // Feste Plaetze, auch wenn einer leer bleibt: Ein Knoten, der je nach Anlage die Seite
+  // wechselt, laesst einen bei jedem Hinsehen neu suchen.
+  //
+  // Die Batterie sitzt auf der Diagonale -- die vier Himmelsrichtungen sind vergeben -- und
+  // dort WEITER AUSSEN (Faktor 1,18). Das ist keine Kosmetik: Auf der Bahn der anderen lag ihr
+  // Ring genau in dem Streifen, in dem der Wert des Wallbox-Knotens steht ("7,40 kW" quer
+  // durch den Batteriering). In der Probe nachgesehen, nicht ausgerechnet.
+  const ED_BATT_WINKEL = 130 * Math.PI / 180;
+  const ED_BAHN_DIAG = ED_BAHN * 1.35;
   const ED_ORT = {
-    solar:    { x: ED_MITTE.x,        y: ED_MITTE.y - ED_BAHN },
-    netz:     { x: ED_MITTE.x - ED_BAHN, y: ED_MITTE.y },
-    haus:     { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y },
-    batterie: { x: ED_MITTE.x,        y: ED_MITTE.y + ED_BAHN },
-    // Die Wallbox haengt UNTER dem Haus, nicht am Kreuz. Das ist keine Platzfrage, sondern die
-    // Wahrheit der Anlage: Das Auto zieht seinen Strom nicht aus einer fuenften Richtung, es
-    // ist ein Teil des Hausverbrauchs. Deshalb geht ihre Leitung auch direkt vom Haus nach
-    // unten und nicht durch die Mitte wie die vier anderen.
-    wallbox:  { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y + ED_BAHN }
+    haus:     { x: ED_MITTE.x, y: ED_MITTE.y - ED_BAHN, textOben: true },
+    netz:     { x: ED_MITTE.x + ED_BAHN, y: ED_MITTE.y },
+    solar:    { x: ED_MITTE.x, y: ED_MITTE.y + ED_BAHN },
+    wallbox:  { x: ED_MITTE.x - ED_BAHN, y: ED_MITTE.y },
+    batterie: { x: Math.round(ED_MITTE.x + Math.cos(ED_BATT_WINKEL) * ED_BAHN_DIAG),
+      y: Math.round(ED_MITTE.y + Math.sin(ED_BATT_WINKEL) * ED_BAHN_DIAG) }
   };
 
   const ED_FARBE = {
     solar: '#f5b544',
-    netz: '#6f7784',
-    haus: '#4f7cff',
+    netz: '#e8623c',
+    haus: '#c464e0',
     batterie: '#57c98a',
-    // Violett: Es muss sich von Haus-Blau UND Batterie-Gruen unterscheiden, sonst haelt man
-    // die Wallbox-Leitung aus fuenf Metern fuer die des Hauses.
-    wallbox: '#a78bfa',
-    ruhe: 'rgba(255,255,255,0.13)'
+    wallbox: '#5b8def',
+    nabe: '#7bd44b',
+    ruhe: 'rgba(255,255,255,0.16)'
   };
 
+  const ED_GROESSE = 40;
+
   function edFmt(w) {
-    if (w === null || w === undefined || !isFinite(w)) return '–';
-    const a = Math.abs(w);
-    if (a >= 10000) return (w / 1000).toFixed(1).replace('.', ',') + ' kW';
-    if (a >= 1000) return (w / 1000).toFixed(2).replace('.', ',') + ' kW';
-    return Math.round(w) + ' W';
+    if (w === null || w === undefined || !Number.isFinite(Number(w))) return '–';
+    const a = Math.abs(Number(w));
+    if (a >= 1000) return (a / 1000).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kW';
+    return Math.round(a).toLocaleString('de-DE') + ' W';
   }
 
+  /**
+   * Der Eigenanteil: Wie viel von dem, was das Haus zieht, kommt NICHT aus dem Netz.
+   *
+   * Reine Funktion, damit die Zahl in der Nabe pruefbar ist. Drei Faelle, die man leicht
+   * uebersieht:
+   *   - Haus 0 W: Es gibt nichts zu decken, also gibt es keinen Anteil -- `null`, nicht 0 %.
+   *     0 % wuerde "alles gekauft" behaupten, und gekauft wurde gar nichts.
+   *   - Netzbezug groesser als der Hausverbrauch (Batterie laedt, Auto laedt): Der Anteil waere
+   *     negativ. Nach unten auf 0 begrenzt.
+   *   - Kein Netzsensor: unbekannt, nicht 100 %.
+   */
+  function edEigenanteil(hausW, netzBezugW) {
+    const haus = Number(hausW);
+    const bezug = Number(netzBezugW);
+    if (!Number.isFinite(haus) || haus <= 0) return null;
+    if (!Number.isFinite(bezug)) return null;
+    return Math.max(0, Math.min(100, Math.round((1 - bezug / haus) * 100)));
+  }
 
-  // Eine Kurve von A nach ED_B, die durch die Mitte ausholt. Der Kontrollpunkt liegt auf der
-  // Verbindung zur Mitte -- so biegt jede Leitung zur Mitte hin und die vier sehen wie ein
-  // System aus und nicht wie vier Striche.
-  // Staerke, Punktdichte und Tempo einer Leitung nach der Leistung.
+  // Staerke und Tempo einer Leitung nach der Leistung.
   //
   // LOGARITHMISCH, und das ist der ganze Trick: Zwischen 12 W Netzbezug und 5,2 kW Solar
   // liegen fast drei Zehnerpotenzen. Linear skaliert waere die 12-W-Leitung ein unsichtbarer
   // Haarstrich und ab etwa 2 kW jede Leitung gleich dick -- man saehe also genau im
   // interessanten Bereich keinen Unterschied mehr.
-  //
-  // Das Tempo laeuft mit: viel Leistung heisst schnelle Punkte. Zusammen ist das der
-  // Unterschied zwischen einer Grafik, die Zahlen zeigt, und einer, an der man im Vorbeigehen
-  // sieht, dass gerade etwas passiert.
   const ED_BEZUG_W = 6000;      // ab hier ist die Leitung "voll"
   function edFluss(w) {
     const a = Math.abs(Number(w) || 0);
     const rel = Math.min(1, Math.log10(1 + a / 8) / Math.log10(1 + ED_BEZUG_W / 8));
     return {
-      dicke: (2.4 + 7.4 * rel).toFixed(1),
-      // Punkte wachsen mit, Luecken schrumpfen: sonst wirkt eine dicke Leitung gestrichelt
-      // statt fliessend.
-      punkt: (3.5 + 6 * rel).toFixed(1),
-      luecke: (19 - 5 * rel).toFixed(1),
+      dicke: (2.2 + 3.4 * rel).toFixed(1),
+      pfeil: (7 + 5 * rel).toFixed(1),
       dauer: (2.3 - 1.6 * rel).toFixed(2)
     };
   }
 
   /**
-   * Eine DIREKTE Verbindung zwischen zwei Knoten, ohne den Umweg ueber die Mitte.
+   * Eine gerade Leitung zwischen Nabe und Knoten, von Rand zu Rand.
    *
-   * Fuer die Wallbox: Sie haengt am Haus, nicht am Verteilpunkt. Eine Leitung, die erst zur
-   * Mitte laeuft, wuerde behaupten, das Auto bekaeme seinen Strom direkt von Netz und Solar --
-   * und der Unterschied ist nicht Kosmetik, sondern das, was die Grafik erklaeren soll.
+   * Von RAND zu RAND und nicht von Mittelpunkt zu Mittelpunkt: Sonst liegt das Ende der Linie
+   * unter der Scheibe, und bei einem Ring (der Knoten ist nur eine Kontur) sieht man die Linie
+   * quer durch das Symbol laufen.
    */
-  function edStrecke(a, b) {
+  function edStrecke(a, b, abstandA, abstandB) {
     const dx = b.x - a.x, dy = b.y - a.y;
     const laenge = Math.hypot(dx, dy) || 1;
-    const ax = a.x + dx * (ED_R / laenge), ay = a.y + dy * (ED_R / laenge);
-    const bx = b.x - dx * (ED_R / laenge), by = b.y - dy * (ED_R / laenge);
-    // Das fuehrende `M` ist SVG-Kommando, keine Variable -- siehe edBahn().
+    const ax = a.x + dx * (abstandA / laenge), ay = a.y + dy * (abstandA / laenge);
+    const bx = b.x - dx * (abstandB / laenge), by = b.y - dy * (abstandB / laenge);
+    // Das fuehrende `M` ist SVG-Kommando, keine Variable. Beim Umbenennen der Konstanten ist es
+    // einmal mitumbenannt worden ("ED_M200.0,148.0") -- der Browser verwirft den Pfad dann
+    // STILLSCHWEIGEND, getTotalLength() gibt 0, und die Karte zeigt Knoten ohne Leitungen.
     return `M${ax.toFixed(1)},${ay.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`;
   }
 
-  function edBahn(a, b) {
-    const ax = a.x + (ED_MITTE.x - a.x) * (ED_R / ED_BAHN);
-    const ay = a.y + (ED_MITTE.y - a.y) * (ED_R / ED_BAHN);
-    const bx = b.x + (ED_MITTE.x - b.x) * (ED_R / ED_BAHN);
-    const by = b.y + (ED_MITTE.y - b.y) * (ED_R / ED_BAHN);
-    // ACHTUNG: Das führende `M` ist das SVG-Kommando "moveto", keine Variable. Beim Umbenennen
-    // der Konstanten ist es einmal mitumbenannt worden ("ED_M200.0,148.0") -- der Browser hat
-    // den Pfad dann stillschweigend verworfen, getTotalLength() gab 0, und die Karte zeigte
-    // Knoten ohne eine einzige Leitung. Deshalb heißt der Mittelpunkt hier ED_MITTE und nicht M.
-    return `M${ax.toFixed(1)},${ay.toFixed(1)} Q${ED_MITTE.x},${ED_MITTE.y} ${bx.toFixed(1)},${by.toFixed(1)}`;
+  /**
+   * Das Richtungsdreieck auf der Mitte einer Leitung.
+   *
+   * `zurNabe` dreht es um. Ohne Pfeil waere die Grafik zweideutig: Eine leuchtende Leitung
+   * zwischen Netz und Nabe kann Bezug ODER Einspeisung heissen, und das ist der Unterschied
+   * zwischen Geld ausgeben und Geld verdienen.
+   */
+  function edPfeil(ort, zurNabe, groesse, farbe, dauer) {
+    const mx = (ED_MITTE.x + ort.x) / 2, my = (ED_MITTE.y + ort.y) / 2;
+    // Winkel der Leitung; das Dreieck zeigt entlang der Leitung.
+    const dx = ort.x - ED_MITTE.x, dy = ort.y - ED_MITTE.y;
+    const winkel = Math.atan2(dy, dx) * 180 / Math.PI + (zurNabe ? 180 : 0);
+    const g = Number(groesse);
+    const punkte = `${g},0 ${-g * 0.6},${g * 0.7} ${-g * 0.6},${-g * 0.7}`;
+    // Die Dauer steht am Element, nicht im CSS: Sie haengt an der Leistung, und ein Pfeil, der
+    // bei 12 W genauso hektisch pocht wie bei 5 kW, sagt ueber die Menge nichts.
+    return `<polygon points="${punkte}" class="ed-pfeil" fill="${farbe}"
+      style="animation-duration:${dauer}s"
+      transform="translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${winkel.toFixed(1)})"/>`;
   }
 
-  // Die Symbole kommen von AUSSEN (ICONS aus dashboard-render.js), nicht aus dieser Datei.
-  //
-  // Der erste Anlauf hatte eigene Pfade -- und das Netz-Symbol sah aus wie ein Muelleimer. Vor
-  // allem aber waeren es zwei Symbolsaetze im selben Dashboard geworden, mit unterschiedlicher
-  // Strichstaerke und unterschiedlicher Formensprache. Der Satz in ICONS ist der eine.
-  //
-  // Eingesetzt wird als VERSCHACHTELTE SVG: Die Symbole bringen ihr eigenes `viewBox="0 0 24
-  // 24"` mit, und eine verschachtelte SVG rechnet das selbst um. Ein `<g transform="scale()">`
-  // muesste die Strichstaerke mitskalieren und haette sie verzerrt.
-  const ED_GROESSE = 46;
-  function edSymbol(quelle, ort, farbe) {
+  function edSymbol(quelle, ort, farbe, groesse) {
     if (!quelle) return '';
-    const x = (ort.x - ED_GROESSE / 2).toFixed(1);
-    const y = (ort.y - ED_GROESSE / 2).toFixed(1);
+    const g = groesse || ED_GROESSE;
+    const x = (ort.x - g / 2).toFixed(1);
+    const y = (ort.y - g / 2).toFixed(1);
     return quelle.replace('<svg ',
-      `<svg class="ed-symbol" x="${x}" y="${y}" width="${ED_GROESSE}" height="${ED_GROESSE}" `
+      `<svg class="ed-symbol" x="${x}" y="${y}" width="${g}" height="${g}" `
       + `style="color:${farbe}" `);
   }
 
-  // Symbol IN der Scheibe, Wert und Name DARUNTER.
-  //
-  // Der erste Anlauf legte den Wert in die Scheibe, mitten auf das Symbol -- "5,20 kW" stand
-  // quer ueber der Sonne und war beides unlesbar. Es gibt in einer Scheibe von 88 Pixeln nicht
-  // genug Platz fuer ein Symbol und eine vierstellige Zahl; eines davon muss raus.
-  // Symbol IN der Scheibe, Wert und Name DARUNTER -- beim obersten Knoten DARUEBER.
-  //
-  // Zwei Anlaeufe waren hier falsch. Der erste legte den Wert in die Scheibe, mitten auf das
-  // Symbol: "5,20 kW" stand quer ueber der Sonne, beides unlesbar. Der zweite setzte den Text
-  // bei jedem Knoten nach unten -- und beim Solarknoten laufen die Leitungen nach unten weg,
-  // mitten durch das Wort "SOLAR".
-  //
-  // Deshalb: Text auf der Seite, an der KEINE Leitung abgeht. Oben der Solarknoten, unten die
-  // Batterie, seitlich Netz und Haus (dort laufen die Leitungen waagerecht und kreuzen den
-  // Text nicht).
   /**
-   * Ein Knoten mit Scheibe, Symbol, Wert und Namen.
+   * Ein Knoten: Ring, Symbol, und der Wert AUSSERHALB auf der naben-abgewandten Seite.
    *
-   * `textOben` schreibt die zwei Zeilen UEBER die Scheibe statt darunter. Beim Solarknoten war
-   * das von Anfang an so (unter ihm laufen die Leitungen weg). Beim HAUS wird es noetig, sobald
-   * eine Wallbox darunter haengt: Der Hauswert stand bei y+76 und die Wallbox-Scheibe beginnt
-   * bei y+92 -- Text und Scheibe waeren ineinander gelaufen, und zwar erst bei dem, der eine
-   * Wallbox eingetragen hat.
+   * Der Wert steht nur da, wenn wirklich etwas fliesst -- so wie in der Vorlage. Ein Knoten
+   * ohne Zahl ist dort erkennbar vorhanden (grauer Ring) und sichtbar untaetig; "0 W" an fuenf
+   * Knoten gleichzeitig ist dagegen Zahlensalat, den niemand liest.
    */
-  function edKnoten(art, ort, wert, beschriftung, aktiv, zusatz, symbole, textOben) {
-    const farbe = ED_FARBE[art];
-    const name = zusatz ? beschriftung + ' \u00b7 ' + zusatz : beschriftung;
-    // Wert immer naeher an der Scheibe als der Name: Er ist die Zahl, die man sucht.
-    const yWert = textOben ? ort.y - ED_R - 16 : ort.y + ED_R + 32;
-    const yName = textOben ? ort.y - ED_R - 38 : ort.y + ED_R + 56;
+  function edKnoten(art, wert, beschriftung, aktiv, zusatz, symbole) {
+    const ort = ED_ORT[art];
+    const farbe = aktiv ? ED_FARBE[art] : ED_FARBE.ruhe;
+
+    // Zwei Zeilen, von innen nach aussen: der Wert, dann die Beschriftung. Die Richtung haengt
+    // MIT im Namen ("Netz · Bezug") -- als eigene Zeile stand sie zuerst auf derselben
+    // Grundlinie wie der Name, und am Netzknoten las man "BEEZTUZG". Kein Fehler, den ein Test
+    // bemerkt haette: Beide Texte waren da, nur an derselben Stelle.
+    const zeilen = [];
+    if (aktiv) zeilen.push({ k: 'ed-wert', t: edFmt(wert), h: ED_ZEILE_WERT, b: 25,
+      stil: ` style="fill:${ED_FARBE[art]}"` });
+    const label = [beschriftung, zusatz].filter(Boolean).join(' · ');
+    if (label) zeilen.push({ k: 'ed-name', t: label, h: ED_ZEILE_NAME, b: 16, stil: '' });
+
+    // Nach OBEN stapeln, wenn der Knoten ueber der Nabe sitzt -- sonst kreuzt der Text die
+    // eigene Leitung. Der Wert bleibt in beiden Faellen der Zeile am Ring am naechsten: Er
+    // gehoert zum Ring, der Name nur zur Karte.
+    let text = '';
+    if (ort.textOben) {
+      let unten = ort.y - ED_R - 4;
+      for (const z of zeilen) {
+        const oben = unten - z.h;
+        text += `<text x="${ort.x}" y="${(oben + z.b).toFixed(0)}" class="${z.k}"${z.stil}>${esc(z.t)}</text>`;
+        unten = oben;
+      }
+    } else {
+      let oben = ort.y + ED_R + 4;
+      for (const z of zeilen) {
+        text += `<text x="${ort.x}" y="${(oben + z.b).toFixed(0)}" class="${z.k}"${z.stil}>${esc(z.t)}</text>`;
+        oben += z.h;
+      }
+    }
+
     return `
       <g class="ed-knoten ${aktiv ? 'ed-aktiv' : ''}">
-        <circle cx="${ort.x}" cy="${ort.y}" r="${ED_R}" class="ed-scheibe"/>
         <circle cx="${ort.x}" cy="${ort.y}" r="${ED_R}" class="ed-ring" style="stroke:${farbe}"/>
-        ${edSymbol(symbole[art], ort, farbe)}
-        <text x="${ort.x}" y="${yWert}" class="ed-wert">${esc(edFmt(wert))}</text>
-        <text x="${ort.x}" y="${yName}" class="ed-name">${esc(name)}</text>
+        ${edSymbol(symbole[art], ort, aktiv ? ED_FARBE[art] : 'currentColor')}
+        ${text}
       </g>`;
   }
 
   /**
-   * daten: { solarW, netzBezugW, netzEinspeisungW, batterieW, batterieLaedt, batterieSoc,
-   *          hausW, wallboxW, schwelleW, namen: {solar, netz, haus, batterie, wallbox} }
-   * Fehlende Zweige werden weggelassen, nicht mit Null gezeichnet.
+   * Wie hoch die Zeichnung sein muss -- gerechnet aus den Knoten, die es WIRKLICH gibt.
+   *
+   * Vorher standen hier zwei feste Zahlen (mit und ohne Batterie). Das war zweimal falsch: Wer
+   * keinen Solarsensor eingetragen hat, bekam unten ein leeres Drittel geschenkt (die Zeichnung
+   * wird auf die Hoehe eingepasst, also wurde alles andere kleiner), und wer eine Batterie hat,
+   * bekam 30 Pixel Luft, die niemand braucht -- sie sitzt auf der Diagonale und reicht nicht
+   * tiefer als Solar.
+   *
+   * Gerechnet wird mit dem, was auch gezeichnet wird: Ring plus Textzeilen, oben oder unten je
+   * nach `textOben`.
+   */
+  function edAusschnitt(arten) {
+    let oben = ED_MITTE.y - ED_R_NABE, unten = ED_MITTE.y + ED_R_NABE;
+    for (const art of arten) {
+      const ort = ED_ORT[art];
+      if (!ort) continue;
+      if (ort.textOben) {
+        oben = Math.min(oben, ort.y - ED_R - ED_TEXT);
+        unten = Math.max(unten, ort.y + ED_R);
+      } else {
+        oben = Math.min(oben, ort.y - ED_R);
+        unten = Math.max(unten, ort.y + ED_R + ED_TEXT);
+      }
+    }
+    return { oben: Math.round(oben - ED_LUFT), hoehe: Math.round(unten - oben + 2 * ED_LUFT) };
+  }
+
+  /**
+   * Das ganze Diagramm.
+   *
+   * Erwartet: { solarW, netzBezugW, netzEinspeisungW, batterieW, batterieLaedt, batterieSoc,
+   *             hausW, verbrauchW, wallboxW, schwelleW, namen: {...}, symbole: {...} }
+   *
+   * `hausW` ist der Hausverbrauch OHNE die Wallbox, `verbrauchW` der gesamte -- nur damit
+   * stimmen die Summe der Leitungen und der Eigenanteil in der Nabe gleichzeitig.
+   *
+   * Jeder Knoten haengt an EINER Leitung zur Nabe, und die Richtung sagt alles: Solar und
+   * Netzbezug fliessen zur Nabe, Haus und Wallbox davon weg, Einspeisung von der Nabe zum Netz,
+   * die Batterie je nach Laden oder Entladen.
    */
   function edDiagramm(d) {
     const symbole = d.symbole || {};
     const s = d.schwelleW === undefined ? 5 : Math.abs(d.schwelleW);
-    const n = Object.assign({ solar: 'Solar', netz: 'Netz', haus: 'Haus', batterie: 'Batterie',
-      wallbox: 'Wallbox' }, d.namen || {});
-    const hatSolar = d.solarW !== null && d.solarW !== undefined;
-    const hatBatterie = d.batterieW !== null && d.batterieW !== undefined;
-    const hatWallbox = d.wallboxW !== null && d.wallboxW !== undefined;
-    const wallboxAktiv = hatWallbox && Math.abs(d.wallboxW) > s;
+    const n = d.namen || {};
+    const da = (w) => w !== null && w !== undefined;
 
     const bezug = d.netzBezugW || 0;
     const einspeisung = d.netzEinspeisungW || 0;
-    const netzAktiv = Math.abs(bezug) > s || Math.abs(einspeisung) > s;
-    // Der Netzknoten zeigt den BETRAG, die Richtung steht im Namen ("Netz · Einspeisung").
-    // Ein Minuszeichen vor einer Zahl liest man aus fuenf Metern nicht, und zwei Zahlen
-    // nebeneinander schon gar nicht.
     const netzWert = einspeisung > s ? einspeisung : bezug;
+    const netzAktiv = Math.abs(bezug) > s || Math.abs(einspeisung) > s;
+
+    const hatSolar = da(d.solarW), hatBatterie = da(d.batterieW), hatWallbox = da(d.wallboxW);
     const solarAktiv = hatSolar && Math.abs(d.solarW) > s;
     const battAktiv = hatBatterie && Math.abs(d.batterieW) > s;
+    const wallboxAktiv = hatWallbox && Math.abs(d.wallboxW) > s;
+    const hausAktiv = (d.hausW || 0) > s;
 
-    // Jede Leitung traegt ihre LEISTUNG mit: Staerke und Tempo haengen daran (edFluss).
-    const leitungen = [];
-    if (hatSolar) {
-      leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.haus), farbe: ED_FARBE.solar,
-        aktiv: solarAktiv, w: d.solarW });
-      if (einspeisung > s) {
-        leitungen.push({ d: edBahn(ED_ORT.solar, ED_ORT.netz), farbe: ED_FARBE.solar,
-          aktiv: true, w: einspeisung });
-      }
-    }
-    // Die Netzleitung wird IMMER gezeichnet, auch ohne Fluss: Sie zeigt, dass der Weg da ist.
-    leitungen.push({ d: edBahn(ED_ORT.netz, ED_ORT.haus), farbe: ED_FARBE.netz,
-      aktiv: bezug > s, w: bezug });
+    // Welche Knoten es ueberhaupt gibt. Haus und Netz immer -- ohne die beiden ist die Karte
+    // nicht eingerichtet, und ein leeres Kreuz erklaert das besser als eine halbe Grafik.
+    const knoten = [
+      ['haus', d.hausW, hausAktiv, false, ''],
+      ['netz', netzWert, netzAktiv, bezug > s, einspeisung > s ? 'Einspeisung' : (bezug > s ? 'Bezug' : '')]
+    ];
+    if (hatSolar) knoten.push(['solar', d.solarW, solarAktiv, true, '']);
+    if (hatWallbox) knoten.push(['wallbox', d.wallboxW, wallboxAktiv, false, wallboxAktiv ? 'lädt' : '']);
     if (hatBatterie) {
-      leitungen.push({
-        d: d.batterieLaedt ? edBahn(ED_ORT.solar, ED_ORT.batterie) : edBahn(ED_ORT.batterie, ED_ORT.haus),
-        farbe: ED_FARBE.batterie, aktiv: battAktiv, w: d.batterieW
-      });
-    }
-    // Direkt vom Haus nach unten, nicht durch die Mitte -- siehe ED_ORT.wallbox und edStrecke().
-    if (hatWallbox) {
-      leitungen.push({ d: edStrecke(ED_ORT.haus, ED_ORT.wallbox), farbe: ED_FARBE.wallbox,
-        aktiv: wallboxAktiv, w: d.wallboxW });
+      knoten.push(['batterie', d.batterieW, battAktiv, !d.batterieLaedt,
+        da(d.batterieSoc) ? Math.round(d.batterieSoc) + ' %' + (d.batterieLaedt ? ' ↑' : ' ↓') : '']);
     }
 
-    // LUFT OBEN. Der Name des Solarknotens steht ueber seiner Scheibe und lag ohne diesen Rand
-    // auf der Kante des Ausschnitts -- in einer Karte mit `overflow: hidden` ist er dann halb
-    // abgeschnitten, und zwar nur oben, was wie ein Zufall aussieht und keiner ist.
-    const LUFT = 14;
-    // LUFT AUCH LINKS UND RECHTS. Die Beschriftungen stehen mittig unter ihrem Knoten, und die
-    // aeusseren Knoten sitzen nur ED_R vom Rand entfernt -- ein langer Name ragt damit ueber
-    // den Ausschnitt hinaus und wird abgeschnitten. In der Probe nachgemessen:
-    // "Netz · Einspeisung" lief von x=-16 bis 144 (16 px fehlten links, und zwar schon vor der
-    // Wallbox), "Wallbox · lädt" von 269 bis 404.
-    //
-    // Der Ausschnitt wird deshalb breiter gemacht, nicht der Text kuerzer: `xMidYMid meet`
-    // passt die ganze Zeichnung ein, sie wird also nur etwas kleiner -- und zwar gleichmaessig.
-    // Die Alternative waere, die Textbreite vorherzusagen, und die kennt erst der Browser.
-    const RAND = 30;
-    const hoehe = ((hatBatterie || hatWallbox) ? ED_H_MIT : ED_H_OHNE) + LUFT;
+    const leitungen = knoten.map(([art, wert, aktiv, zurNabe]) => {
+      const f = edFluss(wert);
+      const farbe = aktiv ? ED_FARBE[art] : ED_FARBE.ruhe;
+      const pfad = edStrecke(ED_MITTE, ED_ORT[art], ED_R_NABE, ED_R);
+      return `
+        <path d="${pfad}" class="ed-leitung ${aktiv ? 'ed-fliesst' : ''}"
+          style="stroke:${farbe};stroke-width:${aktiv ? f.dicke : 2}px"/>
+        ${aktiv ? edPfeil(ED_ORT[art], zurNabe, f.pfeil, farbe, f.dauer) : ''}`;
+    }).join('');
+
+    // Der Eigenanteil rechnet auf ALLES, was verbraucht wird -- Haus und Auto zusammen.
+    // Seit die Wallbox ein eigener Knoten an der Nabe ist, traegt `hausW` nur noch den Rest;
+    // wer die Nabe aus dem Rest rechnete, bekaeme beim Laden einen Eigenanteil, der plausibel
+    // aussieht und falsch ist.
+    const verbrauch = da(d.verbrauchW) ? d.verbrauchW : (d.hausW || 0) + (d.wallboxW || 0);
+    const anteil = edEigenanteil(verbrauch, bezug);
+    const nabeAktiv = anteil !== null;
+
+    const aus = edAusschnitt(knoten.map(k => k[0]));
     return `
-      <svg class="ed" viewBox="${-RAND} ${-LUFT} ${ED_B + 2 * RAND} ${hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
-        <g>
-          ${leitungen.map(l => {
-            const f = edFluss(l.w);
-            // Eine ruhende Leitung bleibt duenn und gleichmaessig -- sie zeigt den Weg, nicht
-            // einen Fluss.
-            const stil = l.aktiv
-              ? `stroke:${l.farbe};stroke-width:${f.dicke}px;`
-                + `stroke-dasharray:${f.punkt} ${f.luecke};animation-duration:${f.dauer}s`
-              : `stroke:${ED_FARBE.ruhe};stroke-width:2.4px`;
-            return `<path d="${l.d}" class="ed-leitung ${l.aktiv ? 'ed-fliesst' : ''}" style="${stil}"/>`;
-          }).join('')}
+      <svg class="ed" viewBox="${-ED_RAND} ${aus.oben} ${ED_B + 2 * ED_RAND} ${aus.hoehe}" preserveAspectRatio="xMidYMid meet" role="img">
+        <g>${leitungen}</g>
+        <g class="ed-nabe ${nabeAktiv ? 'ed-aktiv' : ''}">
+          <circle cx="${ED_MITTE.x}" cy="${ED_MITTE.y}" r="${ED_R_NABE}" class="ed-ring"
+            style="stroke:${nabeAktiv ? ED_FARBE.nabe : ED_FARBE.ruhe}"/>
+          ${edSymbol(symbole.nabe, { x: ED_MITTE.x, y: ED_MITTE.y - 11 }, ED_FARBE.nabe, 26)}
+          <text x="${ED_MITTE.x}" y="${ED_MITTE.y + 22}" class="ed-anteil"
+            style="fill:${nabeAktiv ? ED_FARBE.nabe : ''}">${anteil === null ? '–' : anteil + '%'}</text>
         </g>
-        ${hatSolar ? edKnoten('solar', ED_ORT.solar, d.solarW, n.solar, solarAktiv, '', symbole, true) : ''}
-        ${edKnoten('netz', ED_ORT.netz, netzWert, n.netz, netzAktiv,
-          einspeisung > s ? 'Einspeisung' : (bezug > s ? 'Bezug' : ''), symbole)}
-        ${edKnoten('haus', ED_ORT.haus, d.hausW, n.haus, (d.hausW || 0) > s, '', symbole, hatWallbox)}
-        ${hatBatterie ? edKnoten('batterie', ED_ORT.batterie, d.batterieW, n.batterie, battAktiv,
-          d.batterieSoc !== null && d.batterieSoc !== undefined
-            ? Math.round(d.batterieSoc) + ' %' + (d.batterieLaedt ? ' ↑' : ' ↓') : '', symbole) : ''}
-        ${hatWallbox ? edKnoten('wallbox', ED_ORT.wallbox, d.wallboxW, n.wallbox, wallboxAktiv,
-          wallboxAktiv ? 'lädt' : '', symbole) : ''}
+        ${knoten.map(([art, wert, aktiv, , zusatz]) =>
+          edKnoten(art, wert, n[art] || '', aktiv, zusatz, symbole)).join('')}
       </svg>`;
   }
 
@@ -318,6 +384,9 @@
     battery2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="16" height="10" rx="1.5"/><path d="M21 11v4"/><path d="M8 13h3l-1 2h3l-4 4v-3H7z" fill="currentColor" stroke="none"/></svg>',
     // Ladesaeule mit Blitz und Stecker. Ein Auto allein waere zu fein fuer 34 Pixel -- ein
     // Kasten mit Blitz liest sich auch klein noch als "hier wird geladen".
+    // Das Blatt in der Nabe: Zeichen fuer den Eigenanteil. Ein Prozentzeichen allein waere
+    // "Prozent von was"; ein Blatt sagt, in welche Richtung gut ist.
+    leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5.5 13.5-12 13.5C6 17.5 4 15 4 12 4 7 9 4 20 4z"/><path d="M4 20c3-6 8-9 13-10"/></svg>',
     wallbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="11" height="16" rx="2"/><path d="M4 21.5h11"/><path d="M10.6 6.5 8 11h2.4l-1 4 3.2-4.8h-2.3z" fill="currentColor" stroke="none"/><path d="M18 8v4a2.5 2.5 0 0 0 2.5 2.5h0V18"/><path d="M18 6.5v3M21 6.5v3"/></svg>',
     mediaPlayer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M9 8.5v5l4.5-2.5z" fill="currentColor" stroke="none"/><path d="M4 20h16"/></svg>',
     lockClosed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
@@ -1426,7 +1495,7 @@
     const x = (i) => LINKS + (i / (w.length - 1)) * (B - LINKS - RECHTS);
     const y = (v) => OBEN + (1 - (v - min) / spanne) * (H - OBEN - UNTEN);
     const punkte = w.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
-    // Das fuehrende M ist SVG-Kommando, keine Variable -- siehe edBahn().
+    // Das fuehrende M ist SVG-Kommando, keine Variable -- siehe edStrecke().
     const linie = 'M' + punkte.join(' L');
     const flaeche = `${linie} L${x(w.length - 1).toFixed(1)},${H - UNTEN} L${x(0).toFixed(1)},${H - UNTEN} Z`;
     return `
@@ -2560,14 +2629,20 @@
       // Die Rechnung kennt nur die Zaehler, die eingetragen sind. Ein Strang, der an keinem
       // davon haengt, fehlt ihr -- dem Sensor nicht. Deshalb gewinnt eine ausdrueckliche
       // Angabe, und der Unterschied ist dann sichtbar statt versteckt.
-      // Die Wallbox ist TEIL des Hausverbrauchs, kein fuenfter Zweig: Ihre Leitung geht vom
-      // Haus nach unten weg, und der Hauswert bleibt die Summe. So gelesen stimmt die Grafik --
-      // "von den 7,9 kW, die das Haus zieht, gehen 7,4 ins Auto".
       const wallboxW = nachW(zahl(en.wallbox), einheit(en.wallbox));
       const hausGemessen = nachW(zahl(en.home), einheit(en.home));
       const hausW = hausGemessen !== null ? Math.abs(hausGemessen)
         : (solarW || 0) + (netzBezugW || 0) - (netzEinspeisungW || 0)
           + (battLaedt ? -(battW || 0) : (battW || 0));
+
+      // Die Wallbox haengt seit 1.0.27 als EIGENER Knoten an der Nabe, nicht mehr unter dem
+      // Haus. Damit muss ihr Strom aus dem Hauswert heraus, sonst zaehlt die Grafik ihn zweimal
+      // und die Summe der abgehenden Leitungen ist groesser als die der zufliessenden --
+      // sichtbar als "Haus 7,9 kW" neben "Auto 7,4 kW" bei 8 kW Bezug.
+      // `Math.max(0, …)` ist kein Schoenheitsmittel: Der Wallbox-Sensor und der Hauszaehler
+      // messen an verschiedenen Stellen und nicht in derselben Sekunde, und eine negative
+      // Restleistung waere ein Wert, den es nicht gibt.
+      const hausRestW = wallboxW !== null ? Math.max(0, hausW - wallboxW) : hausW;
 
       // Ab wann eine Leitung als "fliesst" gilt. 5 W passten zu einem Zaehler mit ruhigem
       // Nullpunkt; ein Wechselrichter, der nachts 30 W Eigenverbrauch meldet, liesse die
@@ -2581,7 +2656,7 @@
         netzBezugW, netzEinspeisungW,
         batterieW: en.battery !== undefined ? battW : null,
         batterieLaedt: battLaedt, batterieSoc: battSoc,
-        hausW, wallboxW, schwelleW,
+        hausW: hausRestW, verbrauchW: hausW, wallboxW, schwelleW,
         namen: {
           solar: settings.energyLabelSolar || 'Solar',
           netz: settings.energyLabelGrid || 'Netz',
@@ -2590,7 +2665,7 @@
           wallbox: settings.energyLabelWallbox || 'Wallbox'
         },
         symbole: { solar: ICONS.sun2, netz: ICONS.grid, haus: ICONS.home2,
-          batterie: ICONS.battery2, wallbox: ICONS.wallbox }
+          batterie: ICONS.battery2, wallbox: ICONS.wallbox, nabe: ICONS.leaf }
       });
     } else if (type === 'media_player') {
       const st = state ? state.state : 'off';

@@ -545,40 +545,44 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
    rechnet, passt bei einer Kartengroesse und bei allen anderen nicht. */
 .ed { width: 100%; height: 100%; display: block; overflow: visible; }
 
-.ed-scheibe { fill: rgba(255,255,255,0.05); }
-.ed-ring { fill: none; stroke-width: 3; opacity: 0.3; }
-.ed-knoten.ed-aktiv .ed-ring { opacity: 1; }
-/* Der Schein nur am aktiven Knoten: Leuchtet alles, leuchtet nichts. */
-.ed-knoten.ed-aktiv .ed-scheibe { fill: rgba(255,255,255,0.09); }
+/* Die Knoten sind RINGE, keine Scheiben (1.0.27, nach der Vorlage einer App-Ansicht). Das ist
+   nicht nur Geschmack: Eine gefuellte Scheibe konkurriert mit dem Symbol darin, und bei fuenf
+   Knoten auf einer Karte ist das viel Flaeche fuer wenig Aussage. Ein Ring gibt die Farbe an
+   den Rand und laesst die Mitte dem Zeichen. */
+.ed-ring { fill: none; stroke-width: 2.6; opacity: 0.45; }
+.ed-knoten.ed-aktiv .ed-ring, .ed-nabe.ed-aktiv .ed-ring { opacity: 1; stroke-width: 3.2; }
 
 .ed-symbol { fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
-  opacity: 0.55; }
-.ed-knoten.ed-aktiv .ed-symbol { opacity: 1; }
+  opacity: 0.5; color: var(--muted, #8a8b91); }
+.ed-knoten.ed-aktiv .ed-symbol, .ed-nabe .ed-symbol { opacity: 1; }
 
-.ed-wert { fill: var(--text, #f2f2f0); font-size: 30px; font-weight: 700; text-anchor: middle;
+/* Der Wert traegt die Farbe SEINES Knotens (am Element gesetzt). Aus fuenf Metern ordnet man
+   die Zahl damit dem Ring zu, ohne der Linie zu folgen -- bei fuenf Knoten ist das der
+   Unterschied zwischen lesen und suchen. */
+.ed-wert { fill: var(--text, #f2f2f0); font-size: 26px; font-weight: 700; text-anchor: middle;
   letter-spacing: -0.4px; }
-.ed-name { fill: var(--muted, #8a8b91); font-size: 15px; text-anchor: middle;
+.ed-name { fill: var(--muted, #8a8b91); font-size: 14px; text-anchor: middle;
   text-transform: uppercase; letter-spacing: 0.08em; }
+/* Die eine Zahl, die auf keiner Leitung steht: Wie viel von dem, was das Haus zieht, kommt
+   nicht aus dem Netz. */
+.ed-anteil { fill: var(--text, #f2f2f0); font-size: 24px; font-weight: 700; text-anchor: middle; }
 
-.ed-leitung { fill: none; stroke-width: 5; stroke-linecap: round; }
-/* Die Bewegung laeuft ueber den Strichversatz, nicht ueber eine Positionsanimation: Das
-   rechnet der Browser auf der Grafikeinheit, und auf einem Surface Go ist das der Unterschied
-   zwischen ruhiger Anzeige und Ruckeln. */
-/* Groessere Punkte mit mehr Luft: Aus fuenf Metern muss man einzelne Punkte wandern SEHEN.
-   Mit 2/14 war es eine gepunktete Linie, bei der die Bewegung erst auffiel, wenn man davor
-   stand -- und genau darum geht es hier nicht. */
-/* Strichmuster, Staerke und Dauer setzt das Diagramm am Element -- sie haengen an der
-   Leistung. Hier steht nur, DASS animiert wird. Eine Dauer im CSS waere eine zweite Zahl neben
-   der gerechneten und beim naechsten Aendern eine andere. */
-.ed-leitung.ed-fliesst { animation: ed-fluss 1.2s linear infinite; }
-/* Der Versatz muss zum Muster passen, sonst ruckelt der Uebergang. Er wird deshalb relativ
-   gerechnet: ein voller Musterdurchlauf, unabhaengig von der gesetzten Punktlaenge. */
-@keyframes ed-fluss { to { stroke-dashoffset: -100; } }
+.ed-leitung { fill: none; stroke-width: 2.6; stroke-linecap: round; }
+/* GERADE Leitungen mit einem Richtungsdreieck darauf, statt wandernder Punkte. Eine leuchtende
+   Leitung zwischen Netz und Nabe kann Bezug ODER Einspeisung heissen, und das ist der
+   Unterschied zwischen Geld ausgeben und Geld verdienen -- die Punkte konnten das nur ueber
+   ihre Laufrichtung sagen, und die sieht man im Vorbeigehen nicht. */
+.ed-pfeil { opacity: 0.95; }
+/* Die Bewegung laeuft ueber die Deckkraft des Pfeils, nicht ueber eine Position: Das rechnet
+   der Browser auf der Grafikeinheit, und auf einem Surface Go ist das der Unterschied zwischen
+   ruhiger Anzeige und Ruckeln. */
+.ed-leitung.ed-fliesst + .ed-pfeil { animation: ed-puls 1.6s ease-in-out infinite; }
+@keyframes ed-puls { 0%, 100% { opacity: 0.45 } 50% { opacity: 1 } }
 
-/* Wer Bewegung abgeschaltet hat, bekommt eine durchgezogene Leitung statt einer, die still
-   blinkt -- dieselbe Ruecksicht wie bei der Tor- und der Klima-Karte. */
+/* Wer Bewegung abgeschaltet hat, bekommt einen ruhigen Pfeil statt eines, der still blinkt --
+   dieselbe Ruecksicht wie bei der Tor- und der Klima-Karte. */
 @media (prefers-reduced-motion: reduce) {
-  .ed-leitung.ed-fliesst { stroke-dasharray: none; animation: none; }
+  .ed-leitung.ed-fliesst + .ed-pfeil { animation: none; opacity: 1; }
 }
 
 /* Wenn die konfigurierten Sensoren keine Leistung messen, steht hier ein Satz statt einer Zahl,

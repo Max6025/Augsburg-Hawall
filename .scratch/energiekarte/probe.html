@@ -25,6 +25,9 @@
   .feld { flex:1; min-height:0; }
   .feld .ed { width:100%; height:100%; }
   .breit { grid-column: span 2; aspect-ratio: 2/1; }
+  /* ?gross zeigt zwei statt vier Spalten. Die Namen unter den Knoten sind das erste, was
+     verschwindet, wenn die Karte klein wird -- ob sie lesbar SIND, sieht man nur gross. */
+  body.gross .reihe { grid-template-columns:repeat(2,1fr); }
 </style>
 </head>
 <body>
@@ -35,7 +38,8 @@
   const I = DashboardRender.ICONS || {};
   // Dieselben Symbole, die buildCard der Karte mitgibt -- nicht eine eigene Auswahl.
   const SYMBOLE = { solar: I.sun2, netz: I.grid, haus: I.home2, batterie: I.battery2,
-    wallbox: I.wallbox };
+    wallbox: I.wallbox, nabe: I.leaf };
+  const NAMEN = { solar:'Solar', netz:'Netz', haus:'Haus', batterie:'Batterie', wallbox:'Wallbox' };
 
   const faelle = [
     ['Eurasburg jetzt', { solarW:5198, netzBezugW:12, netzEinspeisungW:0, hausW:5210 }],
@@ -61,14 +65,27 @@
       wallboxW:1400 }]
   ];
 
+  if (location.search.includes('gross')) document.body.classList.add('gross');
+  // ?suche=batterie zeigt nur die Faelle, deren Titel passt. Der Browserfensterausschnitt ist
+  // endlich, und der Fall, den man gerade baut, steht immer ganz unten.
+  const suche = (/suche=([^&]+)/.exec(location.search) || [])[1];
+  const gezeigt = suche ? faelle.filter(f => f[0].toLowerCase().includes(decodeURIComponent(suche).toLowerCase())) : faelle;
   const reihe = document.getElementById('reihe');
-  for (const [titel, werte, klasse] of faelle) {
+  for (const [titel, werte, klasse] of gezeigt) {
     const k = document.createElement('div');
     k.className = 'karte' + (klasse ? ' ' + klasse : '');
     const f = document.createElement('div');
     f.className = 'feld';
-    f.innerHTML = DashboardRender.energieDiagramm(
-      Object.assign({ schwelleW: 5, symbole: SYMBOLE }, werte));
+    // Dasselbe Herausrechnen wie im Kartenzweig: `hausW` in den Faellen oben ist der GESAMTE
+    // Verbrauch (so meldet es ein Hauszaehler), am Knoten steht aber nur der Rest ohne das
+    // Auto. Wer das hier anders macht als buildCard, sieht in der Probe etwas, das es auf der
+    // Wand nicht gibt -- genau die Sorte Probe, die nichts beweist.
+    const gesamt = werte.hausW;
+    const rest = werte.wallboxW !== undefined && werte.wallboxW !== null
+      ? Math.max(0, gesamt - werte.wallboxW) : gesamt;
+    f.innerHTML = DashboardRender.energieDiagramm(Object.assign(
+      { schwelleW: 5, symbole: SYMBOLE, namen: NAMEN }, werte,
+      { hausW: rest, verbrauchW: gesamt }));
     k.innerHTML = '<h2>' + titel + '</h2>';
     k.appendChild(f);
     reihe.appendChild(k);

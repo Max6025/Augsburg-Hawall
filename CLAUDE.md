@@ -434,29 +434,55 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   **15 Sekunden keine einzige** Änderung (143 Live-Meldungen von anderen Entitäten kamen durch),
   und `sensor.netzbezug` wechselte im Abstand von **120 Sekunden**. Wer hier „die Karte ist
   langsam" hört, misst zuerst, wie oft die Quelle überhaupt etwas sagt.
-- **Die Wallbox hängt UNTER dem Haus, nicht am Kreuz — und das ist die Aussage der Grafik.**
-  Das Auto zieht seinen Strom nicht aus einer fünften Richtung; es ist ein Teil des
-  Hausverbrauchs. Deshalb geht ihre Leitung mit `edStrecke()` **direkt** vom Haus nach unten und
-  nicht mit `edBahn()` durch die Mitte: Eine Bahn durch den Verteilpunkt würde behaupten, die
-  Wallbox bekäme ihren Strom direkt von Netz und Solar. Der **Hauswert bleibt die Summe** —
-  so gelesen stimmt es: „Von den 7,9 kW, die das Haus zieht, gehen 7,4 ins Auto."
-  Drei Dinge hängen daran:
-  1. **Der Hauswert wandert nach oben**, sobald eine Wallbox darunter hängt (`textOben`). Er
-     stand bei y+76, die Wallbox-Scheibe beginnt bei y+92 — Text und Scheibe wären ineinander
-     gelaufen, und zwar nur bei dem, der eine Wallbox eingetragen hat.
-  2. **Violett**, nicht blau oder grün: Die Farbe muss sich von Haus *und* Batterie
-     unterscheiden, sonst hält man die Wallbox-Leitung aus fünf Metern für die des Hauses.
-  3. **0 W ist ein Wert, kein fehlender Knoten.** Eine Wallbox, die gerade nicht lädt, bleibt
-     zu sehen — sonst verschwindet sie jedes Mal, wenn das Auto weg ist. `Number(null)` ist 0,
-     also entscheidet `!== undefined`, nicht die Zahl (dieselbe Falle wie in `akkuStufe()`).
+- **Die Energiekarte ist ein NABENSTERN, und die Nabe ist keine Zierde.** Seit 1.0.27 steht in
+  der Mitte ein Ring mit einem Blatt und einer Prozentzahl, darum herum Haus oben, Netz rechts,
+  Solar unten, Wallbox links, Batterie auf der Diagonale links unten. Vorlage war die Ansicht
+  einer Wallbox-App, die der Nutzer ausdrücklich so haben wollte. Was daran Entscheidung ist und
+  nicht Geschmack:
+  1. **Die Prozentzahl ist der Eigenanteil** (`edEigenanteil()`): wie viel von dem, was
+     verbraucht wird, **nicht** aus dem Netz kommt. Sie rechnet auf den **gesamten** Verbrauch,
+     Haus *und* Auto — deshalb reicht die Karte `verbrauchW` neben `hausW` herein. Wer sie aus
+     dem Hausrest rechnete, bekäme ausgerechnet beim Laden einen Wert, der gut aussieht und
+     falsch ist. Drei Fälle, die leicht untergehen: Haus 0 W ergibt **keinen** Anteil (`null`,
+     nicht 0 % — 0 % behauptet „alles gekauft", und gekauft wurde gar nichts), mehr Netzbezug als
+     Verbrauch wird auf 0 begrenzt (kommt vor, sobald die Batterie lädt), und ohne Netzsensor ist
+     er unbekannt, nicht 100 %.
+  2. **Die Wallbox hängt an der NABE, nicht mehr unter dem Haus** — und damit muss ihr Strom aus
+     dem Hauswert **heraus** (`hausRestW`). Sonst zählt die Grafik ihn zweimal, und die Summe der
+     abgehenden Leitungen ist größer als die der zufließenden: „Haus 7,9 kW" neben „Auto 7,4 kW"
+     bei 8 kW Solar. `Math.max(0, …)` ist dabei kein Schönheitsmittel — die beiden Zähler messen
+     an verschiedenen Stellen und nicht in derselben Sekunde.
+  3. **Gerade Leitungen mit einem Richtungsdreieck**, keine wandernden Punkte. Eine leuchtende
+     Leitung zwischen Netz und Nabe kann Bezug **oder** Einspeisung heißen, und das ist der
+     Unterschied zwischen Geld ausgeben und Geld verdienen; die Punkte sagten das nur über ihre
+     Laufrichtung, und die sieht man im Vorbeigehen nicht. Die Bewegung läuft über die
+     **Deckkraft** des Dreiecks (Grafikeinheit, kein JavaScript), die **Dauer** hängt an der
+     Leistung, und bei `prefers-reduced-motion` steht es still.
+  4. **Eine Zahl steht nur an einem Knoten, an dem etwas fließt.** Der graue Ring sagt schon,
+     dass hier gerade nichts passiert; „0 W" an fünf Knoten gleichzeitig ist Zahlensalat. Der
+     Wert trägt die **Farbe seines Knotens** — bei fünf Knoten der Unterschied zwischen Lesen
+     und Suchen.
+  5. **Höchstens ZWEI Zeilen unter einem Knoten**, und die Richtung hängt mit im Namen
+     („Netz · Bezug"). Als dritte Zeile stand sie zuerst auf derselben Grundlinie wie der Name —
+     gedruckt las man „BEEZTUZG", und ein Test hätte das nie bemerkt, denn beide Texte waren da.
+     Mit drei Zeilen reicht der Wallbox-Knoten außerdem in den Batteriering hinein, und zwar nur
+     bei dem, der beides hat.
+  6. **Die Batterie sitzt weiter außen als die anderen** (Faktor 1,35, 130°). Auf derselben Bahn
+     lag ihr Ring genau in dem Streifen, in dem der Wallbox-Wert steht. In der Probe gesehen,
+     nicht ausgerechnet.
+  7. **Die Höhe wird gerechnet** (`edAusschnitt()`), nicht gesetzt. Vorher standen dort zwei
+     feste Zahlen: Wer keinen Solarsensor hatte, bekam unten ein leeres Drittel geschenkt — und
+     weil die Zeichnung auf die Höhe eingepasst wird, wurde alles andere dafür kleiner.
+  8. **0 W ist ein Wert, kein fehlender Knoten.** Eine Wallbox, die gerade nicht lädt, bleibt zu
+     sehen; `Number(null)` ist 0, also entscheidet `!== undefined` (dieselbe Falle wie in
+     `akkuStufe()`).
 
-  Dabei zwei Dinge gefunden, die schon vorher falsch waren: Der Ausschnitt hatte **seitlich
-  keine Luft** — „Netz · Einspeisung" lief von x=−16 bis 144 bei einem viewBox von 0 bis 400 und
-  wurde also links abgeschnitten, lange bevor es eine Wallbox gab. Jetzt `-RAND … ED_B+RAND`;
-  `xMidYMid meet` macht die Zeichnung dadurch nur etwas kleiner. Und `.scratch/energiekarte/`
-  enthielt **Kopien** von Modul und CSS (`diagramm.js`, `diagramm.css`, `symbole.js`) — eine
-  Probe, die eine Kopie ansieht, beweist nichts über das, was ausgeliefert wird. Die Kopien sind
-  gelöscht, die Probe lädt jetzt `renderer/shared/dashboard-render.js` und `dashboard.css`.
+  Ansehen: `.scratch/energiekarte/probe.html` — `?gross` zeigt zwei statt vier Spalten (die
+  Beschriftungen sind das erste, was bei kleinen Karten unlesbar wird), `?suche=batterie` nur die
+  passenden Fälle. Die Probe lädt das **echte** Modul und das **echte** CSS: Bis 1.0.21 lagen
+  dort Kopien, und eine Probe, die eine Kopie ansieht, beweist nichts über das, was ausgeliefert
+  wird. Seitlich hat der Ausschnitt Luft (`-ED_RAND … ED_B+ED_RAND`) — „Netz · Einspeisung" lief
+  vorher von x=−16 bis 144 bei einem viewBox von 0 bis 400 und wurde links abgeschnitten.
 - **Der Hausverbrauch wird gerechnet — außer man trägt einen Sensor ein.** Die Vorgabe bleibt die
   Rechnung (Solar + Netzbezug − Einspeisung ± Batterie): Nur so summieren sich die Leitungen auf
   den Knoten in der Mitte, und zwei Wahrheiten nebeneinander sind sich nie einig. Wer aber einen
@@ -1226,7 +1252,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-559 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+570 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 
