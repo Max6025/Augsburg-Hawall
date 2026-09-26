@@ -1480,29 +1480,243 @@
   }
 
   /**
-   * Der Verlauf MIT Achsen.
+   * Ein Zeitstempel als Millisekunden -- egal, in welcher Gestalt er ankommt.
+   *
+   * Vom Server kommt er als ISO-Zeichenkette ("2026-09-26T10:00:00+00:00"), aus Proben und
+   * Tests als Zahl. `a - b` auf zwei Zeichenketten ergibt NaN, und NaN laeuft hier lautlos
+   * durch bis in die Anzeige: Auf dem Geraet stand "letzte NaN Min." im Detailfenster, waehrend
+   * der Test gruen war -- er hatte Zahlen eingesetzt.
+   */
+  function detailMs(t) {
+    if (t === null || t === undefined) return NaN;
+    const n = typeof t === 'number' ? t : Date.parse(t);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  /**
+   * Die Punkte eines Verlaufs, auf eine Gestalt gebracht: { ms, v }.
+   *
+   * `ms` kann NaN sein -- eine Probe ohne Zeitstempel ist keine kaputte Probe. Wer sie
+   * braucht, prueft es (siehe verlaufZeitlich()).
+   */
+  function verlaufPunkte(history) {
+    return (history || [])
+      .map(h => (h && typeof h === 'object')
+        ? { ms: detailMs(h.t), v: Number(h.v) }
+        : { ms: NaN, v: Number(h) })
+      .filter(h => Number.isFinite(h.v));
+  }
+
+  /**
+   * Darf die x-Achse die ZEIT sein, oder nur die laufende Nummer?
+   *
+   * Das ist keine Formsache. Die Punkte aus Home Assistant sind ereignisgetrieben: Ein Sensor,
+   * der sich nachts nicht ruehrt und morgens im Minutentakt meldet, liefert Punkte in voellig
+   * ungleichen Abstaenden. Ueber die laufende Nummer aufgetragen ist die Nacht dann ein
+   * Streifen von drei Pixeln und der Morgen die halbe Breite -- solange darunter keine
+   * Zeitachse steht, sieht das nur etwas eckig aus. MIT Zeitachse waere es eine Luege.
+   */
+  function verlaufZeitlich(punkte) {
+    if (punkte.length < 2) return false;
+    if (!punkte.every(p => Number.isFinite(p.ms))) return false;
+    return punkte[punkte.length - 1].ms > punkte[0].ms;
+  }
+
+  /**
+   * Welcher Punkt ist gemeint, wenn jemand bei `anteil` (0..1) auf die Kurve tippt?
+   *
+   * Gearbeitet wird auf der REIHE, die auch ausgeliefert wird (`data-punkte`) -- nicht auf
+   * einer zweiten Rechnung aus den Zeitstempeln. Zwei Rechnungen, die dasselbe meinen, laufen
+   * beim naechsten Umbau auseinander, und dann steht der Strich neben dem Punkt, den er zeigt.
+   *
+   * Gesucht wird der KLEINSTE ABSTAND, nicht der naechste Punkt links davon: Wer knapp rechts
+   * neben einer Spitze tippt, meint die Spitze.
+   */
+  function verlaufTreffer(reihe, anteil) {
+    if (!reihe || !reihe.length) return -1;
+    const a = Math.min(1, Math.max(0, Number(anteil) || 0)) * 1000;
+    let beste = 0, abstand = Infinity;
+    for (let i = 0; i < reihe.length; i++) {
+      const d = Math.abs(reihe[i][0] - a);
+      if (d < abstand) { abstand = d; beste = i; }
+    }
+    return beste;
+  }
+
+  /**
+   * Was am Tippstrich steht: der Wert mit seiner Einheit, und wann er gemessen wurde.
+   *
+   * Hier und nicht in der Anzeige, weil beides schon einmal woanders steht -- die
+   * Nachkommastellen in `zahlFormatieren()`, die Uhrzeit in `detailUhr()`. Eine zweite
+   * Formatierung daneben sieht beim ersten Hinsehen gleich aus und weicht beim zweiten ab.
+   */
+  function verlaufTipp(eintrag, einheit, stellen) {
+    if (!eintrag) return null;
+    // Ohne eingestellte Nachkommastellen HOECHSTENS zwei -- und deutsch. `zahlFormatieren()`
+    // reicht den Rohwert unveraendert durch, und der ist hier eine Zahl aus einer Rechnung:
+    // Im Fenster stand "484.802 W/m²", mit englischem Punkt und drei Stellen, die niemanden
+    // interessieren. Auf der Karte faellt das nicht auf, weil dort der Zustand steht, so wie
+    // Home Assistant ihn schickt.
+    const frei = stellen === undefined || stellen === null || stellen === '';
+    const wert = frei
+      ? Number(eintrag[1]).toLocaleString('de-DE', { maximumFractionDigits: 2 })
+      : zahlFormatieren(eintrag[1], stellen);
+    const ms = eintrag[2];
+    return {
+      wert: String(wert) + (einheit ? ' ' + einheit : ''),
+      zeit: Number.isFinite(ms) ? detailUhr(ms) + ' Uhr' : ''
+    };
+  }
+
+  // Wo ein Punkt waagerecht liegt, als Anteil 0..1. EINE Funktion fuer Kurve, Zeitachse und
+  // Tippstrich: Drei Rechnungen, die dasselbe meinen, laufen beim naechsten Umbau auseinander,
+  // und dann steht der Strich neben dem Punkt, den er zeigt.
+  function verlaufAnteil(punkte, i) {
+    if (punkte.length < 2) return 0;
+    if (!verlaufZeitlich(punkte)) return i / (punkte.length - 1);
+    const t0 = punkte[0].ms, t1 = punkte[punkte.length - 1].ms;
+    return (punkte[i].ms - t0) / (t1 - t0);
+  }
+
+  /**
+   * Wo auf dem Verlauf wurde getippt? Als Anteil 0..1.
+   *
+   * Im Modul und nicht bei den Aufrufern, weil es zwei davon gibt -- die Anzeige und die
+   * Probe. Eine Probe, die ihre eigene Rechnung mitbringt, prueft ihre eigene Rechnung.
+   */
+  function verlaufStrichAnteil(box, clientX) {
+    const r = box.getBoundingClientRect();
+    if (!r.width) return null;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  }
+
+  /**
+   * Den Tippstrich zeichnen -- oder mit `null` wieder wegnehmen.
+   *
+   * Alle Masse kommen aus dem DOM und aus der ausgelieferten Reihe, keines steht hier als
+   * Zahl: Die Hoehe des Diagramms steht in `dashboard.css` (26vh), die Lage des Punktes in
+   * `data-punkte`. Eine Kopie davon hier waere derselbe Fehler wie bei `TOR_TAKT` und den
+   * HVAC-Animationen -- kein Fehler, nur etwas, das nicht mehr zusammenpasst.
+   */
+  function verlaufStrichZeichnen(box, anteil) {
+    if (!box) return;
+    const svg = box.querySelector('.dt-verlauf');
+    const strich = box.querySelector('.dt-strich');
+    const marke = box.querySelector('.dt-marke');
+    const tipp = box.querySelector('.dt-tipp');
+    if (!svg || !strich || !marke || !tipp) return;
+
+    let reihe = [];
+    try { reihe = JSON.parse(box.dataset.punkte || '[]'); } catch (e) { reihe = []; }
+    const i = anteil === null || anteil === undefined ? -1 : verlaufTreffer(reihe, anteil);
+    if (i < 0) { strich.hidden = marke.hidden = tipp.hidden = true; return; }
+
+    const eintrag = reihe[i];
+    const x = eintrag[0] / 1000;
+    const yPx = (eintrag[3] / 1000) * svg.clientHeight;
+    const text = verlaufTipp(eintrag, box.dataset.einheit,
+      box.dataset.stellen === '' ? undefined : box.dataset.stellen);
+
+    strich.hidden = marke.hidden = tipp.hidden = false;
+    strich.style.left = (x * 100).toFixed(2) + '%';
+    strich.style.height = svg.clientHeight + 'px';
+    marke.style.left = (x * 100).toFixed(2) + '%';
+    marke.style.top = yPx.toFixed(1) + 'px';
+
+    tipp.textContent = '';
+    const b = document.createElement('b'); b.textContent = text.wert;
+    const s = document.createElement('span'); s.textContent = text.zeit;
+    tipp.appendChild(b); tipp.appendChild(s);
+    tipp.style.left = (x * 100).toFixed(2) + '%';
+    // Am Rand wuerde der Kasten sonst aus dem Fenster laufen -- links abgeschnitten, rechts
+    // ueber die Kante. Er haengt dann an der Kante statt mittig ueber dem Punkt.
+    tipp.classList.toggle('dt-tipp-a', x < 0.12);
+    tipp.classList.toggle('dt-tipp-e', x > 0.88);
+    // Ueber dem Punkt -- und wenn dort kein Platz ist, darunter: Bei einem Hoechstwert sitzt
+    // der Punkt ganz oben, und der Kasten waere zur Haelfte ausserhalb.
+    const hoehe = tipp.offsetHeight;
+    tipp.style.top = (yPx - hoehe - 12 < 0 ? yPx + 14 : yPx - hoehe - 12).toFixed(1) + 'px';
+  }
+
+  /**
+   * Der Verlauf MIT Zeitachse und Tippstrich.
    *
    * Der Verlauf auf der Karte ist eine ruhige Flaeche im Hintergrund -- ohne Achsen, ohne
    * Zahlen, absichtlich: Er soll die Zahl nicht ueberdecken. Im Fenster ist er der Inhalt,
-   * und ohne Beschriftung ist eine Kurve eine Verzierung.
+   * und ohne Beschriftung ist eine Kurve eine Verzierung: "geht rauf" beantwortet nicht, seit
+   * wann.
+   *
+   * Drei Dinge, die leicht danebengehen:
+   *   1. Die Kurve wird ueber die ZEIT aufgetragen, nicht ueber die laufende Nummer -- sonst
+   *      stimmt die Achse darunter nicht (siehe verlaufZeitlich()).
+   *   2. Das SVG hat `preserveAspectRatio="none"`, wird also ungleich gedehnt. Alles, was
+   *      dadurch verzerrt wuerde -- Schrift, der runde Punkt, die Staerke des senkrechten
+   *      Strichs -- liegt deshalb als HTML DARUEBER, nicht darin.
+   *   3. Die Punkte reisen als `data-punkte` mit. Das Fenster baut seinen Inhalt bei jedem
+   *      Abruf neu; haette die Anzeige die Reihe nur im Speicher, waere der Strich nach fuenf
+   *      Sekunden weg -- mitten im Hinsehen.
    */
-  function detailVerlaufSvg(werte) {
-    const w = (werte || []).map(Number).filter(Number.isFinite);
-    if (w.length < 2) return '';
-    const B = 1000, H = 300, LINKS = 8, RECHTS = 8, OBEN = 18, UNTEN = 26;
-    const min = Math.min(...w), max = Math.max(...w);
+  function detailVerlaufSvg(history, einheit, stellen) {
+    const punkte = verlaufPunkte(history);
+    if (punkte.length < 2) return '';
+    const B = 1000, H = 300, OBEN = 18, UNTEN = 26;
+    const werte = punkte.map(p => p.v);
+    const min = Math.min(...werte), max = Math.max(...werte);
     const spanne = (max - min) || 1;
-    const x = (i) => LINKS + (i / (w.length - 1)) * (B - LINKS - RECHTS);
+    const x = (i) => verlaufAnteil(punkte, i) * B;
     const y = (v) => OBEN + (1 - (v - min) / spanne) * (H - OBEN - UNTEN);
-    const punkte = w.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    const zeichen = punkte.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`);
     // Das fuehrende M ist SVG-Kommando, keine Variable -- siehe edStrecke().
-    const linie = 'M' + punkte.join(' L');
-    const flaeche = `${linie} L${x(w.length - 1).toFixed(1)},${H - UNTEN} L${x(0).toFixed(1)},${H - UNTEN} Z`;
+    const linie = 'M' + zeichen.join(' L');
+    const flaeche = `${linie} L${B},${H - UNTEN} L0,${H - UNTEN} Z`;
+
+    // Die Reihe fuer den Tippstrich: [x in Promille, Wert, Zeit in ms, y in Promille]. Die
+    // LAGE steht mit drin und wird nicht drueben nachgerechnet: Die Anzeige muesste dafuer
+    // Kleinst-, Groesstwert und die Raender des Ausschnitts kennen -- vier Zahlen, die hier
+    // stehen und dort noch einmal, und beim naechsten Umbau sitzt der Punkt neben der Kurve.
+    const reihe = punkte.map((p, i) => [
+      Math.round(verlaufAnteil(punkte, i) * 1000),
+      Number(p.v.toFixed(3)),
+      Number.isFinite(p.ms) ? p.ms : null,
+      Math.round((y(p.v) / H) * 1000)
+    ]);
+
     return `
-      <svg class="dt-verlauf" viewBox="0 0 ${B} ${H}" preserveAspectRatio="none" role="img">
-        <path d="${flaeche}" class="dt-flaeche"/>
-        <path d="${linie}" class="dt-linie"/>
-      </svg>`;
+      <div class="dt-verlauf-box" data-punkte='${esc(JSON.stringify(reihe))}'
+        data-einheit="${esc(einheit || '')}" data-stellen="${esc(stellen === undefined || stellen === null ? '' : String(stellen))}">
+        <svg class="dt-verlauf" viewBox="0 0 ${B} ${H}" preserveAspectRatio="none" role="img">
+          <path d="${flaeche}" class="dt-flaeche"/>
+          <path d="${linie}" class="dt-linie"/>
+        </svg>
+        <div class="dt-strich" hidden></div>
+        <div class="dt-marke" hidden></div>
+        <div class="dt-tipp" hidden></div>
+        ${detailZeitachse(punkte)}
+      </div>`;
+  }
+
+  /**
+   * Die Zeitachse unter der Kurve.
+   *
+   * Fuenf Marken, gleichmaessig ueber die ZEIT verteilt -- nicht ueber die Punkte. Die erste
+   * haengt links an der Kante, die letzte rechts, die drei dazwischen mittig: Sonst stehen die
+   * aeusseren zur Haelfte ausserhalb, und ausgerechnet "wann faengt das an" faellt weg.
+   *
+   * Ohne brauchbare Zeitstempel gibt es KEINE Achse. Eine Achse, die die laufende Nummer als
+   * Uhrzeit ausgibt, ist schlimmer als keine.
+   */
+  function detailZeitachse(punkte) {
+    if (!verlaufZeitlich(punkte)) return '';
+    const t0 = punkte[0].ms, t1 = punkte[punkte.length - 1].ms;
+    const N = 5;
+    const marken = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / (N - 1);
+      const lage = i === 0 ? 'dt-achse-a' : (i === N - 1 ? 'dt-achse-e' : '');
+      marken.push(`<span class="${lage}" style="left:${(a * 100).toFixed(1)}%">`
+        + `${esc(detailUhr(t0 + a * (t1 - t0)))}</span>`);
+    }
+    return `<div class="dt-achse">${marken.join('')}</div>`;
   }
 
   function detailKennzahlen(werte, history) {
@@ -1515,10 +1729,15 @@
     // beantwortet ausserdem die Frage, die man hat: Worueber sind diese Zahlen gerechnet?
     let zeit = '';
     if (Array.isArray(history) && history.length > 1) {
-      const minuten = Math.round((history[history.length - 1].t - history[0].t) / 60000);
-      zeit = minuten >= 90
-        ? `letzte ${Math.round(minuten / 60)} Std.`
-        : `letzte ${Math.max(1, minuten)} Min.`;
+      const minuten = Math.round(
+        (detailMs(history[history.length - 1].t) - detailMs(history[0].t)) / 60000);
+      // Ohne brauchbare Zeitstempel bleibt die Zeile WEG. "letzte NaN Min." ist keine Auskunft,
+      // sondern ein Fehler, der sich als Auskunft ausgibt -- und genau so stand er auf der Wand.
+      if (Number.isFinite(minuten)) {
+        zeit = minuten >= 90
+          ? `letzte ${Math.round(minuten / 60)} Std.`
+          : `letzte ${Math.max(1, minuten)} Min.`;
+      }
     }
     const zahl = (v) => v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
     return `
@@ -1718,14 +1937,16 @@
     const leer = roh === null || roh === undefined
       || NICHTS_ANZUZEIGEN.includes(String(roh).trim().toLowerCase());
     const wert = leer ? '–' : zahlFormatieren(roh, settings.decimals);
-    const verlauf = Array.isArray(opts.history) ? opts.history.map(p => p.v) : [];
+    // Die GANZE Reihe, nicht nur die Werte: Ohne die Zeitstempel gaebe es keine Zeitachse,
+    // und der Tippstrich haette nichts zu sagen ausser einer Zahl ohne Wann.
+    const verlauf = Array.isArray(opts.history) ? opts.history : [];
 
     return kopf + `
       <div class="dt-wert">${esc(String(wert))}${einheit ? `<span class="dt-einheit">${esc(einheit)}</span>` : ''}</div>
       ${state && state.last_changed
         ? `<div class="dt-geaendert">Zuletzt aktualisiert: ${esc(detailZeit(state.last_changed))}</div>` : ''}
-      ${detailVerlaufSvg(verlauf)}
-      ${detailKennzahlen(verlauf, opts.history)}
+      ${detailVerlaufSvg(verlauf, einheit, settings.decimals)}
+      ${detailKennzahlen(verlauf.map(p => (p && typeof p === 'object') ? p.v : p), opts.history)}
       ${debug ? detailRoh(entity_id, state) + detailAttribute(attrs) : ''}`;
   }
 
@@ -3363,6 +3584,11 @@
     DETAIL_TYPEN,
     verlaufStunden,
     detailInhalt,
+    // Der Tippstrich im Verlauf: Welcher Punkt gemeint ist und wo er waagerecht liegt, sind
+    // reine Funktionen. Nur so laesst sich pruefen, dass Strich und Punkt an derselben Stelle
+    // sitzen, ohne einen Finger zu haben.
+    verlaufPunkte, verlaufTreffer, verlaufTipp, verlaufAnteil, verlaufZeitlich, detailMs,
+    verlaufStrichAnteil, verlaufStrichZeichnen,
     torDarstellung, TOR_ZUSTAENDE, TOR_TAKT, torAnimation, TOR_TOLERANZ, TOR_ROT, torDauerauf, canOverlayOnPhoto, applyCustomTheme, esc,
     serviceFuerEntitaet,
     wasteColor, wasteDatum, wasteTage, wasteBald, wasteTagesschluessel, wasteDateLabel, zahlFormatieren, symbolFuer, symbolNamen,

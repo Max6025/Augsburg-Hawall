@@ -8,6 +8,8 @@
   ECHTES CSS -- eine Probe, die eine Kopie ansieht, beweist nichts (siehe .scratch/energiekarte).
 
   ?fall=energie|temperatur|sensor|leer   waehlt den Inhalt
+  ?hell                                  das helle Design -- weisse Auflagen sind dort
+                                         unsichtbar, und beides wird ausgeliefert
   Bei 1280x854 ansehen, das ist die echte Panelgroesse.
 -->
 <link rel="stylesheet" href="../../renderer/shared/dashboard.css">
@@ -26,6 +28,7 @@
     <a href="?fall=sensor">Sensor</a><a href="?fall=leer">ohne Wert</a>
     <a href="?fall=abfall">Abfall (Kalender)</a><a href="?fall=abfalldebug">Abfall (Debug)</a>
     <a href="?fall=temperatur&debug=1">Temperatur (Debug)</a>
+    <a href="?fall=temperatur&hell=1">hell</a>
   </div>
   <!-- Echte Karten, echte Rueckrufe: Hier wird geprueft, ob ein TIPP das Fenster ueberhaupt
        oeffnet. Das ist der Teil, den eine reine Inhaltsprobe nicht beweist -- die Kette
@@ -46,6 +49,8 @@
 <script>
   const P = new URLSearchParams(location.search);
   const fall = P.get('fall') || 'temperatur';
+  // ?hell schaltet das helle Design an -- genau wie die Sonnenstand-Entitaet es im Betrieb tut.
+  if (P.has('hell')) document.body.classList.add('light-theme');
   const debug = P.has('debug') || fall === 'abfalldebug';
   const Z = (id, state, attrs) => ({ entity_id: id, state, attributes: attrs || {} });
   const verlauf = (basis, schwankung, n) => Array.from({ length: n || 60 }, (_, i) =>
@@ -105,6 +110,23 @@
         namen: { 'sensor.ecowitt_outdoor_temp_11dc2': 'Outdoor Temperature' } });
   }
   document.getElementById('inhalt').innerHTML = html;
+
+  // --- Der Tippstrich im Verlauf ----------------------------------------------------------
+  // Dieselben Funktionen, die die Wand benutzt -- eine Probe mit eigener Rechnung prueft ihre
+  // eigene Rechnung. Hier hat sie nur keinen Abruf-Takt, also auch keinen Neubau.
+  (function strich() {
+    const ziel = document.getElementById('inhalt');
+    const fassen = (e) => {
+      const box = e.target.closest && e.target.closest('.dt-verlauf-box');
+      if (!box) return;
+      const a = DashboardRender.verlaufStrichAnteil(box, e.clientX);
+      if (a === null) return;
+      DashboardRender.verlaufStrichZeichnen(box, a);
+      window.probeStrich = a;
+    };
+    ziel.addEventListener('pointerdown', fassen);
+    ziel.addEventListener('pointermove', (e) => { if (e.buttons) fassen(e); });
+  })();
 
   // --- Die Kette buildCard -> onDetail ---------------------------------------------------
   const protokoll = [];

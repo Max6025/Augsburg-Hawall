@@ -446,3 +446,168 @@ test('das Detailfenster nennt die DAUER, nicht zwei Uhrzeiten', () => {
   // Und keine Uhrzeit mit Bindestrich mehr, die man als Zeitspanne lesen koennte.
   assert.ok(!/\d\d:\d\d\s*–\s*\d\d:\d\d/.test(lang), 'keine zwei Uhrzeiten');
 });
+
+// --- Zeitachse und Tippstrich ----------------------------------------------------------------
+//
+// Beides zusammen beantwortet die Frage, wegen der man ein Fenster ueberhaupt oeffnet: nicht
+// "wie hoch", sondern "wann war es so hoch". Eine Kurve ohne Achse ist eine Verzierung.
+
+const jetzt = () => Date.parse('2026-09-26T12:00:00Z');
+// So kommen die Punkte WIRKLICH an: `t` ist eine ISO-Zeichenkette vom Server.
+const echt = (n, stunden) => Array.from({ length: n }, (_, i) =>
+  ({ t: new Date(jetzt() - (n - 1 - i) * (stunden * 3600000 / (n - 1))).toISOString(),
+    v: 10 + i }));
+const kasten = (h) => (/<div class="dt-verlauf-box"[\s\S]*?<\/div>\s*<\/div>/.exec(h) || [])[0] || '';
+const reiheAus = (h) => JSON.parse((/data-punkte='([^']*)'/.exec(h) || [])[1] || '[]');
+
+test('ISO-Zeitstempel ergeben eine Dauer, keine NaN', () => {
+  // Der Fehler, der auf dem Geraet stand und im Test nicht: Der Server schickt `t` als
+  // ISO-Zeichenkette, der Test setzte Zahlen ein. `"a" - "b"` ist NaN, und NaN laeuft hier
+  // lautlos durch bis in die Anzeige -- dort stand "letzte NaN Min.".
+  const h = de('s.x', 'temperature', { state: '20', attributes: {} }, { history: echt(40, 24) });
+  assert.match(h, /Zeitraum<\/span><strong>letzte 24 Std\.</);
+  assert.ok(!/NaN/.test(h), 'nirgendwo darf NaN stehen');
+});
+
+test('Ohne brauchbare Zeitstempel gibt es weder Zeitraum noch Zeitachse', () => {
+  // Eine Achse, die die laufende Nummer als Uhrzeit ausgibt, ist schlimmer als keine: Sie
+  // sieht aus wie eine Auskunft.
+  const h = de('s.x', 'temperature', { state: '20', attributes: {} },
+    { history: [{ v: 1 }, { v: 2 }, { v: 3 }] });
+  assert.ok(!/dt-achse/.test(h), 'keine Achse ohne Zeit');
+  assert.ok(!/Zeitraum/.test(h), 'und keine Dauer');
+  assert.ok(/dt-verlauf-box/.test(h), 'die Kurve selbst bleibt');
+  assert.ok(!/NaN/.test(h));
+});
+
+test('Die Zeitachse trägt fünf Marken, die äußeren hängen an der Kante', () => {
+  // Mittig ueber ihrem Punkt stuende die Haelfte von "12:00" ausserhalb -- und ausgerechnet
+  // "wann faengt das an" faellt weg.
+  const h = de('s.x', 'temperature', { state: '20', attributes: {} }, { history: echt(40, 24) });
+  const marken = [...h.matchAll(/<span class="([^"]*)" style="left:([\d.]+)%">([^<]*)</g)];
+  assert.strictEqual(marken.length, 5);
+  assert.deepStrictEqual(marken.map(m => Number(m[2])), [0, 25, 50, 75, 100]);
+  assert.strictEqual(marken[0][1], 'dt-achse-a');
+  assert.strictEqual(marken[4][1], 'dt-achse-e');
+  assert.strictEqual(marken[4][3], '14:00', 'die letzte Marke ist das Ende des Verlaufs');
+  for (const m of marken) assert.match(m[3], /^\d\d:\d\d$/);
+});
+
+test('Die Kurve wird über die ZEIT aufgetragen, nicht über die laufende Nummer', () => {
+  // Die Punkte aus Home Assistant kommen in voellig ungleichen Abstaenden: Ein Sensor, der
+  // sich nachts nicht ruehrt und morgens im Minutentakt meldet, haette ueber die laufende
+  // Nummer aufgetragen eine Nacht von drei Pixeln. Ohne Achse darunter sieht das nur eckig
+  // aus -- mit Achse ist es eine Luege.
+  const t0 = jetzt();
+  const schief = [
+    { t: new Date(t0).toISOString(), v: 1 },
+    { t: new Date(t0 + 1000).toISOString(), v: 2 },
+    { t: new Date(t0 + 2000).toISOString(), v: 3 },
+    { t: new Date(t0 + 100000).toISOString(), v: 4 }
+  ];
+  const r = reiheAus(de('s.x', 'temperature', { state: '4', attributes: {} }, { history: schief }));
+  assert.deepStrictEqual(r.map(p => p[0]), [0, 10, 20, 1000],
+    'die drei dichten Punkte muessen links zusammenliegen');
+});
+
+test('Jeder Punkt der Reihe trägt Lage, Wert und Zeit', () => {
+  // Die LAGE steht mit drin und wird nicht drueben nachgerechnet: Die Anzeige muesste dafuer
+  // Kleinst-, Groesstwert und die Raender des Ausschnitts kennen -- vier Zahlen, die hier
+  // stehen und dort noch einmal.
+  const r = reiheAus(de('s.x', 'temperature', { state: '20',
+    attributes: { unit_of_measurement: '°C' } }, { history: echt(20, 24) }));
+  assert.strictEqual(r.length, 20);
+  assert.strictEqual(r[0][0], 0);
+  assert.strictEqual(r[r.length - 1][0], 1000);
+  for (const [x, v, ms, y] of r) {
+    assert.ok(x >= 0 && x <= 1000, 'x ausserhalb: ' + x);
+    assert.ok(Number.isFinite(v), 'Wert fehlt');
+    assert.ok(Number.isFinite(ms), 'Zeit fehlt');
+    assert.ok(y >= 0 && y <= 1000, 'y ausserhalb: ' + y);
+  }
+  // Der hoechste Wert liegt am weitesten OBEN -- kleineres y.
+  assert.ok(r[r.length - 1][3] < r[0][3], 'die Reihe steigt, also muss y fallen');
+});
+
+test('Die Einheit reist mit der Kurve, damit am Strich nicht nur eine nackte Zahl steht', () => {
+  const h = de('s.x', 'temperature', { state: '20',
+    attributes: { unit_of_measurement: '°C' } }, { history: echt(10, 24) });
+  assert.match(kasten(h), /data-einheit="°C"/);
+  const mitStellen = de('s.x', 'temperature', { state: '20', attributes: {} },
+    { history: echt(10, 24), settings: { decimals: 1 } });
+  assert.match(kasten(mitStellen), /data-stellen="1"/);
+});
+
+test('Der Tippstrich trifft den NÄCHSTEN Punkt, auch den rechts davon', () => {
+  // Wer knapp rechts neben einer Spitze tippt, meint die Spitze -- nicht den Punkt links
+  // davon. Auf einem Beruehrungsbildschirm ist "knapp daneben" der Normalfall.
+  const r = [[0, 1, 1000, 500], [400, 2, 2000, 400], [1000, 3, 3000, 300]];
+  assert.strictEqual(R.verlaufTreffer(r, 0), 0);
+  assert.strictEqual(R.verlaufTreffer(r, 0.42), 1, 'knapp rechts von der Spitze');
+  assert.strictEqual(R.verlaufTreffer(r, 0.38), 1, 'knapp links davon auch');
+  assert.strictEqual(R.verlaufTreffer(r, 1), 2);
+  // Ausserhalb wird nicht geraten, sondern begrenzt.
+  assert.strictEqual(R.verlaufTreffer(r, -3), 0);
+  assert.strictEqual(R.verlaufTreffer(r, 9), 2);
+  assert.strictEqual(R.verlaufTreffer([], 0.5), -1);
+});
+
+test('Am Strich stehen Wert MIT Einheit und die Uhrzeit', () => {
+  const t = R.verlaufTipp([500, 11.24, Date.parse('2026-09-26T12:34:00'), 400], '°C', 1);
+  assert.strictEqual(t.wert, '11,2 °C');
+  assert.match(t.zeit, /^\d\d:\d\d Uhr$/);
+  // Ohne eingestellte Stellen hoechstens zwei, und deutsch: Im Fenster stand "484.802 W/m²",
+  // mit englischem Punkt und drei Stellen, die niemanden interessieren.
+  assert.strictEqual(R.verlaufTipp([0, 484.802, 1, 0], 'W/m²').wert, '484,8 W/m²');
+  assert.strictEqual(R.verlaufTipp([0, 1234.5, 1, 0], 'W').wert, '1.234,5 W');
+  // Ohne Zeitstempel bleibt die Zeile leer statt "Invalid Date".
+  assert.strictEqual(R.verlaufTipp([0, 5, null, 0], '°C').zeit, '');
+});
+
+test('Jede Klasse des Verlaufs hat eine Regel im CSS', () => {
+  // Dieselbe Falle wie beim Energiediagramm: Ein Element ohne Regel ist da und unsichtbar,
+  // und es gibt keine Fehlermeldung.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shared', 'dashboard.css'), 'utf8');
+  for (const k of ['dt-verlauf-box', 'dt-strich', 'dt-marke', 'dt-tipp', 'dt-tipp-a',
+    'dt-tipp-e', 'dt-achse', 'dt-achse-a', 'dt-achse-e']) {
+    assert.ok(css.includes('.' + k), 'keine CSS-Regel fuer .' + k);
+  }
+});
+
+test('Der Strich überlebt den Neuaufbau des Fensterinhalts', () => {
+  // Das Fenster baut seinen Inhalt bei JEDEM Abruf neu -- alle fuenf Sekunden. Stuende die
+  // Markierung nur im DOM, waere sie mitten im Hinsehen weg, und zwar genau dann, wenn man
+  // die Zahl ablesen will.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const dash = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'dashboard.html'), 'utf8');
+  assert.match(dash, /let detailStrichAnteil = null;/,
+    'die Lage muss ausserhalb des Inhalts leben');
+  const i = dash.indexOf('async function detailAktualisieren');
+  const block = dash.slice(i, dash.indexOf('\n}\n', i));
+  assert.ok(block.includes('detailStrichZeichnen()'),
+    'nach dem Neubau muss der Strich wieder gezeichnet werden');
+  // Und das Schliessen nimmt ihn weg -- sonst steht er beim naechsten Oeffnen einer ganz
+  // anderen Karte noch da.
+  const s = dash.indexOf('function detailSchliessen');
+  assert.ok(dash.slice(s, s + 400).includes('detailStrichAnteil = null'),
+    'beim Schliessen muss er weg');
+});
+
+test('Gezeichnet wird im Render-Modul, nicht zweimal', () => {
+  // Zwei Flaechen zeigen dieses Diagramm: die Wand und `.scratch/detailfenster/probe.html`.
+  // Eine Probe mit eigener Rechnung prueft ihre eigene Rechnung.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const wurzel = path.join(__dirname, '..');
+  const dash = fs.readFileSync(path.join(wurzel, 'renderer', 'dashboard.html'), 'utf8');
+  const probe = fs.readFileSync(path.join(wurzel, '.scratch', 'detailfenster', 'probe.html'), 'utf8');
+  for (const [name, inhalt] of [['dashboard.html', dash], ['probe.html', probe]]) {
+    assert.ok(inhalt.includes('DashboardRender.verlaufStrichZeichnen'),
+      name + ' zeichnet den Strich nicht ueber das Modul');
+    assert.ok(inhalt.includes('DashboardRender.verlaufStrichAnteil'),
+      name + ' rechnet den Anteil selbst aus');
+  }
+});

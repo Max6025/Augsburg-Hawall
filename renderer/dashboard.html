@@ -1691,9 +1691,50 @@ function detailSchliessen() {
   if (detailUhr) { clearTimeout(detailUhr); detailUhr = null; }
   if (!detailLaeuft) return;
   detailLaeuft = null;
+  detailStrichAnteil = null;
   const h = $('detailHuelle');
   if (h) h.hidden = true;
 }
+
+/**
+ * Der Tippstrich im Verlauf.
+ *
+ * Wo er steht, ist ZUSTAND und lebt ausserhalb des Fensterinhalts -- der wird bei jedem Abruf
+ * neu gebaut (alle fuenf Sekunden). Haette die Markierung nur im DOM gestanden, waere sie
+ * mitten im Hinsehen verschwunden, und zwar in dem Moment, in dem man die Zahl ablesen will.
+ * `null` heisst: nichts markiert.
+ */
+let detailStrichAnteil = null;
+
+/**
+ * Das Antippen selbst.
+ *
+ * Verdrahtet auf `#detailInhalt` und nicht auf der Box: Der Inhalt wird bei jedem Abruf neu
+ * gebaut, ein Zuhoerer an der Box waere danach am alten Element -- und das Antippen liefe ins
+ * Leere, ohne dass etwas nach einem Fehler aussieht. Gezeichnet wird im Render-Modul, damit
+ * die Probe dieselbe Rechnung ansieht wie die Wand.
+ */
+function detailStrichZeichnen() {
+  const box = document.querySelector('#detailInhalt .dt-verlauf-box');
+  if (box) DashboardRender.verlaufStrichZeichnen(box, detailStrichAnteil);
+}
+
+(function detailStrichVerdrahten() {
+  const ziel = $('detailInhalt');
+  if (!ziel) return;
+  const fassen = (e) => {
+    const box = e.target.closest ? e.target.closest('.dt-verlauf-box') : null;
+    if (!box) return;
+    const a = DashboardRender.verlaufStrichAnteil(box, e.clientX);
+    if (a === null) return;
+    detailStrichAnteil = a;
+    DashboardRender.verlaufStrichZeichnen(box, a);
+  };
+  ziel.addEventListener('pointerdown', fassen);
+  // Wischen verschiebt den Strich, statt ihn nur zu setzen: Auf einem Beruehrungsbildschirm
+  // trifft man die Spitze, die man sucht, selten beim ersten Tippen.
+  ziel.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure > 0) fassen(e); });
+})();
 
 async function detailOeffnen(entity_id, type, settings) {
   detailLaeuft = { entity_id, type, settings: settings || {} };
@@ -1741,6 +1782,9 @@ async function detailAktualisieren() {
     // unter Einstellungen -> Panel.
     debug: !!(config && config.debugModus)
   });
+  // Nach dem Neubau steht der Strich wieder da, wo er stand -- und auf dem Punkt, der jetzt
+  // dort liegt. Genau deshalb lebt seine Lage ausserhalb des Inhalts.
+  detailStrichZeichnen();
 }
 
 (function detailVerdrahten() {

@@ -925,6 +925,44 @@ sehen ist, gehört dagegen ausdrücklich **nicht** hierher — das ist Sache des
   Dazu: Das Detailfenster nennt beim Zeitraum die **Dauer**, nicht zwei Uhrzeiten. Bei 24
   Stunden stand dort „13:13 – 13:04" — ohne Datum liest sich das wie neun Minuten rückwärts,
   und genau so wurde es gemeldet.
+- **Unter dem Verlauf steht eine ZEITACHSE, und ein Tipp darauf setzt ein Lineal.** Eine Kurve
+  ohne Achse ist eine Verzierung: Sie sagt „geht rauf“, nicht „seit wann“. Angetippt erscheinen
+  ein gestrichelter Strich, ein Punkt auf der Kurve und ein Kasten mit Wert und Uhrzeit. Sechs
+  Dinge hängen daran:
+  1. **Die Kurve wird über die ZEIT aufgetragen, nicht über die laufende Nummer**
+     (`verlaufZeitlich()`). Die Punkte aus Home Assistant sind ereignisgetrieben: Ein Sensor, der
+     sich nachts nicht rührt und morgens im Minutentakt meldet, liefert völlig ungleiche
+     Abstände. Über die Nummer aufgetragen ist die Nacht ein Streifen von drei Pixeln — ohne
+     Achse darunter sieht das nur etwas eckig aus, **mit** Achse ist es eine Lüge. Ohne
+     brauchbare Zeitstempel gibt es deshalb **keine** Achse; eine, die die laufende Nummer als
+     Uhrzeit ausgibt, ist schlimmer als keine.
+  2. **`t` kommt als ISO-Zeichenkette**, nicht als Zahl. `"a" − "b"` ist `NaN`, und NaN läuft
+     hier lautlos durch bis in die Anzeige: Auf dem Gerät stand „letzte NaN Min.“ im Zeitraum,
+     während der Test grün war — er hatte Zahlen eingesetzt. `detailMs()` nimmt beides, und die
+     Tests benutzen jetzt echte ISO-Zeichenketten.
+  3. **Alles Interaktive liegt als HTML ÜBER dem SVG**, nicht darin. Das Diagramm hat
+     `preserveAspectRatio="none"` und wird ungleich gedehnt: Ein Kreis darin wäre ein Ei, die
+     Uhrzeiten wären in die Breite gezogen, und die Stärke des senkrechten Strichs hinge an der
+     Fensterbreite.
+  4. **Die Punkte reisen als `data-punkte` mit** — `[x in Promille, Wert, Zeit in ms, y in
+     Promille]`. Der Fensterinhalt wird bei **jedem** Abruf neu gebaut (alle fünf Sekunden);
+     läge die Reihe nur im Speicher, wäre der Strich mitten im Hinsehen weg. Die **Lage** steht
+     mit drin und wird nicht drüben nachgerechnet: Die Anzeige müsste dafür Kleinst-, Größtwert
+     und die Ränder des Ausschnitts kennen — vier Zahlen, die hier stehen und dort noch einmal.
+  5. **Wo der Strich steht, lebt außerhalb des Inhalts** (`detailStrichAnteil`) und wird nach
+     jedem Neubau wieder gezeichnet. Das Schließen nimmt ihn weg, sonst steht er beim nächsten
+     Öffnen einer ganz anderen Karte noch da.
+  6. **Gezeichnet wird im Render-Modul** (`verlaufStrichZeichnen()`), nicht in der Anzeige: Zwei
+     Flächen zeigen dieses Diagramm, die Wand und `.scratch/detailfenster/probe.html` — und eine
+     Probe mit eigener Rechnung prüft ihre eigene Rechnung. Die Probe kennt jetzt auch `?hell`.
+
+  Getroffen wird der **nächste** Punkt, nicht der links davon (`verlaufTreffer()`): Wer knapp
+  rechts neben einer Spitze tippt, meint die Spitze, und auf einem Berührungsbildschirm ist
+  „knapp daneben“ der Normalfall. Gewischt wird auch — die Spitze trifft man selten beim ersten
+  Tippen. Und im Kasten stehen **höchstens zwei Nachkommastellen, deutsch**: `zahlFormatieren()`
+  reicht ohne eingestellte Stellen den Rohwert durch, und das ist hier eine Zahl aus einer
+  Rechnung — im Fenster stand „484.802 W/m²“, mit englischem Punkt und drei Stellen, die
+  niemanden interessieren.
 - **Das Detailfenster hat ZWEI Gesichter, und der Schalter heißt „Debug-Ansicht".**
   Einstellungen → Panel, ab Werk **aus**. Aus zeigt das Fenster die **Auswertung**: Verlauf über
   24 Stunden, Tiefst-, Mittel- und Höchstwert, wann zuletzt aktualisiert wurde. An zeigt es
@@ -1252,7 +1290,7 @@ das Standbild statt der Wolken.
 npm test
 ```
 
-570 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
+581 Tests über Zustandslogik, Bildschirmschoner, Innen/Außen-Erkennung, Zugangsschutz, Kartenaufbau, Akkumeldung,
 Dashboard-Austausch, die Live-Verbindung und den PowerShell-Vorspann. Electron wird dafür
 nicht gebraucht; sechs Tests werden außerhalb von Windows übersprungen.
 

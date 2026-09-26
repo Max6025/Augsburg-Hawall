@@ -786,10 +786,51 @@ body.light-theme .card .ort-silhouette { opacity: 0.09; }
 .dt-wert { font-size: clamp(4vh, 11vh, 14vh); font-weight: 200; line-height: 1; }
 .dt-einheit { font-size: 0.34em; font-weight: 400; color: var(--muted); margin-left: 0.2em; }
 .dt-geaendert { font-size: 1.5vh; color: var(--muted); margin-top: 0.8vh; }
-.dt-verlauf { width: 100%; height: 26vh; margin-top: 2vh; display: block; }
+/* Der Verlauf im Detailfenster: Kurve, Zeitachse, Tippstrich.
+
+   Das SVG hat `preserveAspectRatio="none"` -- es wird also ungleich gedehnt, damit die Kurve
+   die ganze Breite fuellt. Alles, was dadurch verzerrt wuerde, liegt deshalb als HTML DARUEBER
+   und nicht darin: die Schrift der Achse, der runde Punkt auf der Kurve, der Tippstrich. Ein
+   Kreis im SVG waere hier ein Ei, und die Uhrzeiten waeren in die Breite gezogen. */
+.dt-verlauf-box { position: relative; margin-top: 2vh; touch-action: none; }
+.dt-verlauf { width: 100%; height: 26vh; display: block; }
 .dt-flaeche { fill: color-mix(in srgb, var(--kachel-akzent, #4f7cff) 22%, transparent); stroke: none; }
 .dt-linie { fill: none; stroke: var(--kachel-akzent, #4f7cff); stroke-width: 2.4;
   vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+
+/* Die Zeitachse. Die aeusseren Marken haengen an der Kante statt mittig ueber ihrem Punkt --
+   sonst steht die Haelfte von "12:20" ausserhalb, und ausgerechnet "wann faengt das an" faellt
+   weg. */
+.dt-achse { position: relative; height: 2.4vh; margin-top: 0.4vh;
+  border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent); }
+.dt-achse span { position: absolute; top: 0.4vh; transform: translateX(-50%);
+  font-size: 1.4vh; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dt-achse span.dt-achse-a { transform: none; }
+.dt-achse span.dt-achse-e { transform: translateX(-100%); }
+
+/* Der Tippstrich. Gestrichelt und in der Textfarbe, nicht im Kartenakzent: Er gehoert nicht
+   zur Messung, er ist das Lineal, das man daran haelt. */
+.dt-strich { position: absolute; top: 0; height: 26vh; width: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--text) 45%, transparent);
+  pointer-events: none; }
+/* Der Punkt liegt auf der gefuellten Flaeche, also in derselben Farbe wie sein eigener Ring.
+   Ohne den hellen Saum darum verschwindet er darin -- in der Probe nachgesehen. */
+.dt-marke { position: absolute; width: 1.9vh; height: 1.9vh; border-radius: 50%;
+  background: var(--bg, #0b0a12); border: 2px solid var(--kachel-akzent, #4f7cff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg, #0b0a12) 80%, transparent);
+  transform: translate(-50%, -50%); pointer-events: none; }
+/* Deckend, nicht durchscheinend: Er liegt ueber der Kurve, und eine Zahl mit einer Linie
+   dahinter liest man zweimal. */
+.dt-tipp { position: absolute; transform: translateX(-50%); pointer-events: none;
+  background: var(--bg, #0b0a12); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 10px; padding: 0.6vh 1.1vh; font-size: 1.6vh; line-height: 1.35;
+  white-space: nowrap; text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.dt-tipp b { display: block; font-size: 2.1vh; font-weight: 600; }
+.dt-tipp span { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Am linken und rechten Rand wuerde der Kasten sonst aus dem Fenster laufen. */
+.dt-tipp.dt-tipp-a { transform: none; }
+.dt-tipp.dt-tipp-e { transform: translateX(-100%); }
 /* Vier Zahlen in einer Reihe, jede mit ihrer Beschriftung darueber -- dieselbe Anatomie wie
    auf den Karten: erst was es ist, dann der Wert. */
 .dt-kennzahlen, .dt-attr, .dt-quellen { display: grid; gap: 1.2vh; margin-top: 2vh; }
